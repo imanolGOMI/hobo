@@ -73,9 +73,12 @@ Rapid.define(:input, :attrs => [:no_edit, :name, :type]) do
   reflection = this_reflection
   case reflection&.macro
   when :belongs_to
-    # `select_one` builds its own name from the reflection: `movie[category_id]`,
-    # the foreign key, not `movie[category]`.
-    next param(:default) { call_tag(:select_one, html.except(:name), :as => :select) }
+    # `select_one` builds its own name from the reflection -- `movie[category_id]`,
+    # the foreign key, not `movie[category]` -- so the guessed one is dropped.
+    # A name the *caller* gave is kept, because inside an <input-many> the row
+    # knows something the field cannot: which row it is.
+    given = attributes[:name] ? { :name => attributes[:name] } : {}
+    next param(:default) { call_tag(:select_one, html.except(:name).merge(given), :as => :select) }
   when :has_many, :has_and_belongs_to_many
     next param(:default) { call_tag(:check_many, html.except(:name), :as => :check_many) }
   end

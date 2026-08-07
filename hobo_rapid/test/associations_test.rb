@@ -141,4 +141,123 @@ class AssociationsTest < Minitest::Test
     assert_includes html, ">Tom<"
   end
 
+  # --- <input-many>: la coleccion dentro del formulario de su duenyo -----------
+  #
+  # The tag and `rapid_input_many_controller.js` are two halves of one thing,
+  # and what they agree on is a DOM. So these check the DOM, not the prose:
+  # the targets the controller looks for, the prefix it renumbers from, and the
+  # names Hobo's accessible associations read on the way back.
+
+  Genre = Struct.new(:id, :name) do
+    def viewable_by?(_user) = true
+  end
+
+  class GenreScope
+    def initialize(records) = @records = records
+    def limit(_n) = self
+    def select(&block) = @records.select(&block)
+  end
+
+  ManyReflection = Struct.new(:klass, :foreign_key, :macro, :options, :name)
+
+  class MovieGenre
+    attr_accessor :id, :genre, :movie
+
+    GENRES = [Genre.new(1, "Cine negro"), Genre.new(2, "Ciencia ficcion")].freeze
+
+    def self.field_specs = { :genre_id => nil, :movie_id => nil }
+    def self.name_attribute = nil
+    def self.attr_type(_field) = nil
+    def self.reflections
+      { "genre" => ManyReflection.new(GenreScope.new(GENRES), "genre_id", :belongs_to, {}, :genre),
+        "movie" => ManyReflection.new(Film, "movie_id", :belongs_to, {}, :movie) }
+    end
+    def editable_by?(_user, _field = nil) = true
+    def viewable_by?(_user, _field = nil) = true
+  end
+
+  class Film
+    attr_accessor :id, :movie_genres
+
+    def self.name = "Film"
+    def self.field_specs = { :movie_genres => nil }
+    def self.reflections
+      { "movie_genres" => ManyReflection.new(MovieGenre, "movie_id", :has_many, {}, :movie_genres) }
+    end
+    def self.attr_type(_field) = nil
+    def editable_by?(_user, _field = nil) = true
+    def viewable_by?(_user, _field = nil) = true
+  end
+
+  def film
+    @film ||= Film.new.tap do |f|
+      f.id = 7
+      row = MovieGenre.new
+      row.id = 3
+      row.genre = MovieGenre::GENRES.first
+      f.movie_genres = [row]
+    end
+  end
+
+  def input_many_html
+    outer = Rapid::Tag.new
+    Rapid::Context.capture { outer.with_field(:movie_genres, film) { outer.call_tag(:input_many) } }
+  end
+
+  def test_it_speaks_the_dom_the_stimulus_controller_reads
+    html = input_many_html
+
+    assert_includes html, %(data-controller="rapid-input-many")
+    assert_includes html, %(data-rapid-input-many-prefix-value="film[movie_genres]")
+    assert_includes html, %(data-rapid-input-many-target="template")
+    assert_includes html, %(data-rapid-input-many-target="item")
+    assert_includes html, %(data-action="rapid-input-many#add")
+    assert_includes html, %(data-action="rapid-input-many#remove")
+  end
+
+  # Without a template row an empty collection can never grow: there is nothing
+  # to clone. It is painted from a blank record and hidden.
+  def test_there_is_a_hidden_template_row_even_with_no_records
+    film.movie_genres = []
+    html = input_many_html
+
+    assert_includes html, %(data-rapid-input-many-target="template")
+    assert_includes html, %(name="film[movie_genres][-1][genre_id]")
+  end
+
+  # The names are Hobo's, not Rails': no `_attributes`, and a belongs_to travels
+  # as its foreign key. That is what `:accessible => true` reads.
+  def test_the_names_are_the_ones_accessible_associations_read
+    html = input_many_html
+
+    assert_includes html, %(name="film[movie_genres][0][genre_id]")
+    refute_includes html, "_attributes"
+  end
+
+  # The id of an existing row travels with it, or the server cannot tell
+  # "change this one" from "make another".
+  def test_an_existing_row_carries_its_id
+    assert_includes input_many_html, %(name="film[movie_genres][0][id]")
+  end
+
+  # Asking again which film a row belongs to would be asking the user to repeat
+  # the page they are on.
+  def test_the_way_back_to_the_owner_is_not_a_question
+    refute_includes input_many_html, "movie_id"
+  end
+
+  # Removing every row has to *say* so: parameters that simply lack the key read
+  # as "leave it alone", and the rows come back on the next page.
+  def test_an_emptied_collection_can_say_it_is_empty
+    html = input_many_html
+
+    assert_includes html, %(data-rapid-input-many-target="empty")
+    assert_includes html, %(name="film[movie_genres]")
+  end
+
+  # The param sweep of <input-many> lives in derivation_test, not here: a
+  # scenario only carries `this`, and an <input-many> with no owner has no
+  # prefix, no member class and nothing to paint. Where it is really used is
+  # inside a derived form, and that is where it is swept.
+
 end

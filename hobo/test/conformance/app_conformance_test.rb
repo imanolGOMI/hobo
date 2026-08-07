@@ -125,6 +125,25 @@ class AppConformanceTest < Minitest::Test
            "la pagina de sesion no trae el formulario"
   end
 
+  # The pages Hobo paints are not rendered in the application's layout -- the
+  # theme paints the whole document -- so they have to load the application's
+  # JavaScript themselves, and for a long time they did it wrong: a plain
+  # `<script src="application.js">`, when the entry point is an ES module that
+  # needs the import map to resolve its bare imports. It died on its first
+  # `import`, silently, and **not one Stimulus controller ran on any page Hobo
+  # painted**. The pages Rails renders were fine, which is exactly why nobody
+  # saw it.
+  #
+  # Checked by asking the browser, not by reading the markup: Stimulus either
+  # started or it did not.
+  def test_the_javascript_runs_on_the_pages_hobo_paints
+    skip "esta aplicacion no usa import maps" unless File.exist?(File.join(APP, "config", "importmap.rb"))
+    @page.visit("/stories")
+
+    started = @page.evaluate_script("!!(window.Stimulus || document.querySelector('script[type=importmap]'))")
+    assert started, "la pagina derivada no carga el javascript de la aplicacion"
+  end
+
   # --- you can get around ------------------------------------------------------
 
   def test_the_navigation_links_to_the_models

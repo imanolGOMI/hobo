@@ -173,4 +173,50 @@ class ControllerTest < Minitest::Test
     assert_equal %w[Alpha], result.map(&:title)
   end
 
+  # --- who is logged in ---------------------------------------------------------
+  #
+  # `guest?` is Hobo's own idea, and the User that `bin/rails generate
+  # authentication` writes has never heard of it. Piece 15 handed the user to
+  # Rails, so `logged_in?` cannot assume Hobo's user model -- it did, in a
+  # before_action, and every request of a signed-in person died before any
+  # action ran. It stayed hidden while the session was never resumed, which is
+  # to say: behind the bug that made everybody a guest.
+
+  # The helper methods are protected, as they are in a controller, so the
+  # stand-in exposes the one under test rather than the test reaching in.
+  class PlainHelper
+    include HoboPermissionsHelper
+    attr_accessor :user
+    def current_user = @user
+    public :logged_in?
+  end
+
+  RailsUser = Struct.new(:email_address)
+  HoboUser  = Struct.new(:name) { def guest? = false }
+
+  def test_a_rails_user_counts_as_logged_in
+    helper = PlainHelper.new
+    helper.user = RailsUser.new("admin@example.com")
+
+    assert helper.logged_in?
+  end
+
+  def test_hobos_own_guest_still_counts_as_nobody
+    helper = PlainHelper.new
+    helper.user = Hobo::Model::Guest.new
+
+    refute helper.logged_in?
+  end
+
+  def test_a_hobo_user_still_counts_as_logged_in
+    helper = PlainHelper.new
+    helper.user = HoboUser.new("Imanol")
+
+    assert helper.logged_in?
+  end
+
+  def test_nobody_at_all_is_not_logged_in
+    assert_equal false, PlainHelper.new.logged_in?
+  end
+
 end

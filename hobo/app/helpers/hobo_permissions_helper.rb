@@ -42,8 +42,18 @@ module HoboPermissionsHelper
     end
 
 
+    # `guest?` is Hobo's own idea: its user model answers it and so does
+    # `Hobo::Model::Guest`, which is what stands in for nobody. Piece 15 handed
+    # the user to Rails, and **the User that `bin/rails generate authentication`
+    # writes has never heard of it** -- so the moment a real person logged in,
+    # every request died in a before_action, before any action ran.
+    #
+    # Nobody saw it until the session was actually being resumed, which is to
+    # say: this was hidden behind the bug that made everyone a guest.
     def logged_in?
-      !current_user.guest?
+      user = current_user
+      return false if user.nil?
+      user.respond_to?(:guest?) ? !user.guest? : true
     end
 
 

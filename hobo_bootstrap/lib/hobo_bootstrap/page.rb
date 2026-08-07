@@ -141,9 +141,27 @@ Rapid.define(:stylesheet, :attrs => [:name]) do
   tag("link", { :rel => "stylesheet", :href => href }) if href
 end
 
+# An application built with import maps does not load its JavaScript with a
+# `<script src>`: the entry point is an ES module and it needs the map to
+# resolve its bare imports. A plain tag pulled `application.js` in as a classic
+# script, which dies on its first `import` -- so **on every page Hobo painted,
+# not one line of the application's JavaScript ran**, Stimulus included. The
+# pages Rails renders were fine, which is why it went unseen: they go through
+# the layout, and the layout says `javascript_importmap_tags`.
+#
+# Without importmap-rails there is nothing to resolve and the plain tag is
+# right, so both are kept.
 Rapid.define(:javascript, :attrs => [:name]) do
-  src = asset_path_for(attributes[:name], "js")
-  tag("script", { :src => src, :defer => true }) if src
+  helpers = defined?(ActionController::Base) ? ActionController::Base.helpers : nil
+
+  if helpers.respond_to?(:javascript_importmap_tags)
+    entry = attributes[:name].to_s
+    entry = "application" unless HoboBootstrap.pinned?(entry)
+    raw helpers.javascript_importmap_tags(entry)
+  else
+    src = asset_path_for(attributes[:name], "js")
+    tag("script", { :src => src, :defer => true }) if src
+  end
 end
 # The navigation is not written anywhere either: it is the models that have an
 # index page. A menu somebody has to keep in step with the application is a menu
@@ -168,6 +186,18 @@ Rapid.define(:account_nav) do
 end
 
 module HoboBootstrap
+
+  # Whether the application's import map knows this entry point. A subsite that
+  # has no JavaScript of its own would otherwise ask for a module nobody pinned,
+  # and importmap-rails raises rather than shrug.
+  def self.pinned?(name)
+    return false if name.to_s.empty?
+    return false unless defined?(Rails) && Rails.respond_to?(:application) && Rails.application
+    map = Rails.application.try(:importmap)
+    !!map&.packages&.key?(name.to_s)
+  rescue StandardError
+    false
+  end
 
   # The models a person can actually navigate to: the ones with an index route.
   # Asking the routes rather than keeping a list is what stops the menu drifting

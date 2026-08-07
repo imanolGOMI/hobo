@@ -13,7 +13,9 @@ class DerivationTest < Minitest::Test
 
   class Task
     attr_accessor :id, :title, :done
-    def initialize(id, title, done) = (@id, @title, @done = id, title, done)
+    # Buildable with no arguments, because <input-many> paints its template row
+    # from a blank one -- an empty collection has to be able to grow.
+    def initialize(id = nil, title = nil, done = nil) = (@id, @title, @done = id, title, done)
     def self.field_specs = { :title => nil, :done => nil }
     def self.name_attribute = :title
     def self.attr_type(field) = { "title" => String, "done" => Rapid::Boolean }[field.to_s]
@@ -239,6 +241,22 @@ class DerivationTest < Minitest::Test
     Class.new do
       define_singleton_method(:reflections) { { "owner" => reflection } }
     end
+  end
+
+  # --- the children are part of the form ---------------------------------------
+  #
+  # A collection you can only fill in from another page is not a nested form,
+  # and creating one record from inside another is the thing Hobo was known for.
+  # The children were derived into the card and the record page and left out of
+  # the form, so `movie_genres` had nowhere to be typed.
+
+  def test_the_form_offers_the_children_as_a_list_you_can_grow
+    html = render(:model_form, story)
+
+    assert_includes html, %(data-controller="rapid-input-many")
+    assert_includes html, %(data-rapid-input-many-prefix-value="story[tasks]")
+    assert_includes html, %(data-rapid-input-many-target="template")
+    assert_includes html, %(name="story[tasks][0][done]")
   end
 
 end

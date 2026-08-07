@@ -360,6 +360,13 @@ module HoboRapid
         name_attribute = name_attribute_of(model)
         all = ([name_attribute] + fields).compact
 
+        # The children go in the form too, and they were the piece missing: a
+        # collection you can only fill in from another page is not a nested
+        # form, and creating a genre from inside the film is the thing Hobo was
+        # known for. They come last, after the fields, because a row of rows is
+        # bigger than a field and reads badly in the middle of them.
+        children = children_of(model)
+
         Rapid.define_for(:model_form, model) do
           tag("div", { :class => "form-fields" }, :fields) do
             all.each do |field|
@@ -367,6 +374,15 @@ module HoboRapid
                 tag("div", { :class => "field" }, :"#{field}_field") do
                   tag("label", {}, :"#{field}_label") { text HoboRapid::Derivation.label_for(model, field) }
                   call_tag(:input, {}, :as => :"#{field}_input")
+                end
+              end
+            end
+
+            children.each do |child|
+              with_field(child) do
+                tag("div", { :class => "field children" }, :"#{child}_field") do
+                  tag("label", {}, :"#{child}_label") { text HoboRapid::Derivation.label_for(model, child) }
+                  call_tag(:input_many, {}, :as => :"#{child}_input")
                 end
               end
             end

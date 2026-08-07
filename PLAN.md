@@ -2129,8 +2129,13 @@ Una aplicación Rails 8 generada con `hobo new`:
 - **Asociaciones**: un `belongs_to` se pinta por su nombre y se edita con un
   select de lo que el usuario puede ver; un `has_many`, con casillas.
 
-**Pruebas: 345 en las gemas, todas en verde, + la suite de conformidad en
-navegador (`cd hobo && HOBO_APP=/tmp/hobo_luz rake test`).**
+- **Formularios anidados**: una colección hija se edita dentro del formulario
+  de su dueño, con `+` y `−`, y las filas se renumeran solas.
+
+**Pruebas: 362 en las gemas, todas en verde, + la suite de conformidad en
+navegador (`cd hobo && HOBO_APP=/tmp/hobo_luz rake test`). `/tmp/hobo_luz` se
+regeneró con el `hobo new` de hoy: el banco tiene que ser lo que sale del
+generador, no lo que salía hace tres commits.**
 
 ## La aplicación de pruebas viva
 
@@ -2229,23 +2234,65 @@ cuando `/` es la portada del primer usuario y la capa 5 devolvió el índice a
 **tabla**. Ahora miran la lista y exigen lo que de verdad importa —que el nombre
 del registro lleve a alguna parte— sea tarjeta o sea fila.
 
+### Los formularios anidados — **hechos** (2026-08-07)
+
+`<input-many>`, la mitad del criterio de aceptación. Un `children` llega ahora
+al formulario como una lista que se puede crecer y encoger, con `+` y `−`, y
+**verificado en un navegador de verdad**: añadir una fila, guardar tres,
+quitar una, guardar dos.
+
+El comportamiento ya estaba —`rapid_input_many_controller.js`, portado a
+Stimulus en la capa 5, con sus pruebas de navegador—. Lo que faltaba era el tag
+que pinta el DOM que ese controlador lee, y el DOM es el contrato entre los dos:
+
+```html
+<div class="input-many" data-controller="rapid-input-many"
+     data-rapid-input-many-prefix-value="movie[movie_genres]">
+  <div data-rapid-input-many-target="template" hidden>…índice -1…</div>
+  <div data-rapid-input-many-target="item">…índice 0…</div>
+  <div data-rapid-input-many-target="empty" hidden>…</div>
+</div>
+```
+
+Tres cosas que no se adivinan, y que salen de mirar lo que emite Hobo 2:
+
+1. **La fila plantilla, en el índice −1.** Sin ella una colección vacía no puede
+   crecer nunca: no hay nada que clonar.
+2. **Los nombres son los de Hobo, no los de Rails**: `movie[movie_genres][0][genre_id]`,
+   sin `_attributes`, y un `belongs_to` viaja como su clave ajena. Es lo que lee
+   `:accessible => true`, y es lo que permite que una fila nombre un registro
+   que todavía no existe.
+3. **Vaciar tiene que decirse.** Unos parámetros a los que simplemente les falta
+   la clave significan «déjala como está», así que las filas borradas vuelven en
+   la página siguiente. De ahí el `empty-input`.
+
+### Y por debajo, tres fallos más, cada uno tapando al siguiente
+
+Este es el patrón de la sesión: cada arreglo destapa el de abajo.
+
+| Qué | Era |
+|---|---|
+| Toda petición de alguien con sesión moría en un `before_action` | `logged_in?` hacía `current_user.guest?`, y **el User que escribe `bin/rails generate authentication` no sabe qué es eso**. Estaba tapado por el fallo que hacía invitado a todo el mundo |
+| `:accessible => true` **no hacía absolutamente nada** | Un `end` de más en `accessible_associations.rb` cerraba el módulo ochenta líneas antes de tiempo. Las macros acababan definidas en `Hobo::Model`, así que la opción se aceptaba, se guardaba en la reflexión y no instalaba nada: el hash de filas llegaba tal cual al escritor de ActiveRecord, que quiere registros. Y el `def self.included` huérfano era entonces el de `Hobo::Model`; solo el orden de carga impedía que lo reemplazara |
+| **Ni una línea del JavaScript de la aplicación corría en las páginas que pinta Hobo** | Dos cosas a la vez. El engine no exponía sus controladores Stimulus —el `app/javascript` de un engine no está en el camino de nadie, y sus pins no están en el mapa de nadie— y `<javascript>` emitía un `<script src>` pelado, cuando el punto de entrada es un módulo ES que necesita el import map para resolver sus imports. Las páginas de Rails iban bien, que es justo por qué no se veía |
+
+> Los cuatro controladores portados en la capa 5 tenían prueba de navegador cada
+> uno, y **ninguna aplicación cargaba ninguno**. Es el tema desenchufado otra
+> vez: la pieza existe y el producto no la tiene.
+
 ### Lo que la comparación deja pendiente
 
 Visto en las capturas, ordenado por lo que más se nota:
 
-1. **Formularios anidados.** Hobo 2 pinta las filas de `movie_genres` con sus
-   botones `+` y `−` (`input-many`). Hobo 3 **no los pinta**: `children` se
-   excluye de `summary_fields`, así que la colección no llega al formulario.
-   Es la mitad del criterio de aceptación.
-2. **Filtros** en el listado. No hay nada todavía; la pieza 6 se delegó a
+1. **Filtros** en el listado. No hay nada todavía; la pieza 6 se delegó a
    Ransack y falta enchufarlo.
-3. **Los textos de la interfaz están a medias en castellano**: «Nuevo movie»,
+2. **Los textos de la interfaz están a medias en castellano**: «Nuevo movie»,
    «Crear», «Guardar», «Editar», «Acciones», junto a etiquetas en inglés. Hobo 2
    dice «New Movie», «Create Movie». La regla del repositorio es **código en
    inglés**, y esto es cadena de interfaz: va en inglés, y luego i18n.
-4. **Un `belongs_to` no enlaza**: Hobo 2 pinta «Drama» como enlace a la
+3. **Un `belongs_to` no enlaza**: Hobo 2 pinta «Drama» como enlace a la
    categoría; Hobo 3 pinta el texto.
-5. En la barra de navegación no hay **buscador** ni **menú de usuario** («Logged
+4. En la barra de navegación no hay **buscador** ni **menú de usuario** («Logged
    in as…», «Log out»). Lo de la sesión es de Rails; lo de enseñarlo, de Hobo.
 
 ## Decisiones tomadas en esta sesión
@@ -2261,11 +2308,12 @@ Visto en las capturas, ordenado por lo que más se nota:
 
 ## Lo siguiente, por orden
 
-1. **Los formularios anidados** (punto 1 de la lista de arriba): que `children`
-   llegue al formulario como `input-many`, con `+` y `−`, y que crear un género
-   desde la película funcione. Es lo que más separa a las dos hoy.
-2. **Los filtros** del listado, con Ransack (pieza 6).
-3. **Las cadenas de interfaz a inglés**, y detrás i18n.
+1. **Los filtros** del listado, con Ransack (pieza 6). Es lo único del criterio
+   de aceptación que falta entero.
+2. **Las cadenas de interfaz a inglés**, y detrás i18n.
+3. **`select-one-or-new`**: hoy se elige un género de los que hay; Hobo 2
+   dejaba además crearlo desde ahí. Los formularios anidados ya funcionan, así
+   que esto es el paso corto que queda.
 4. **La fusión en una sola gema** (decisión 11), que sigue pendiente.
 5. **El contrato de plugin** (pieza 17): con los tags en Ruby, definir un tag ya
    es registrarlo, así que el contrato se encoge — falta escribirlo y probarlo.
