@@ -49,6 +49,19 @@ Fecha: 2026-08-07. No volver a discutirlas salvo que aparezca información nueva
    port de cada gema se hace en su capa, no todo de golpe.
 10. **No se vendorizan más repos de la organización por ahora.** Quedan
     inventariados aquí abajo y clonables cuando toque la capa que los necesite.
+11. **El resultado final es UNA SOLA GEMA `hobo`**, no cinco. `hobo_support`,
+    `hobo_fields`, `dryml`, `hobo` y `hobo_rapid` se funden. Los plugins siguen
+    siendo gemas aparte (pieza 17), pero dependerán de una sola.
+    Las capas del plan siguen valiendo como **unidades de trabajo**; lo que
+    cambia es que el resultado se empaqueta junto.
+
+## Reglas absolutas sobre `git push`
+
+- **Nunca se hace push. Nunca, a ningún sitio.** El push lo hace Imanol a mano.
+- **Jamás al repositorio de la organización `Hobo/`.** No hay permiso y no lo
+  habrá. Los repos de la organización solo se **clonan y leen**.
+- El único destino que existiría, y aun así lo hace él, es el repositorio
+  personal de Imanol.
 
 ---
 
@@ -278,6 +291,89 @@ sitios afectados dejan de importar en cuanto se porta cada fichero.
 Se comprobó además que los *overrides* de `HashWithIndifferentAccess` en
 `hash.rb` **siguen activos** en Rails 8.1 (`partition_hash` normaliza `:a` a
 `"a"` correctamente). No hay problema ahí.
+
+## Capa 1 — inventario del azúcar (2026-08-07)
+
+**Son 146 sitios, no 113.** La cuenta anterior era solo `.rb` de cuatro gemas.
+
+| Operador | Sitios | Traducción | Dónde vive |
+|---|---:|---|---|
+| `.*.foo` | 52 | `map(&:foo)` | `enumerable.rb` + `array.rb` |
+| `.try.foo` | 43 | `try(:foo)` | `methodcall.rb` |
+| `._?.foo` | 42 | `&.foo` | `methodcall.rb` |
+| `.where.foo` | 8 | `select(&:foo)` | `enumerable.rb` |
+| `.where_not.foo` | 1 | `reject(&:foo)` | `enumerable.rb` |
+
+Por gema: `hobo` 51, `dryml` 24, `hobo_rapid` 24, `hobo_fields` 19, `hobo_support` 8,
+`hobo_jquery_ui` 8, `hobo_bootstrap` 2, `hobo_bootstrap_ui` 2, `hobo_clean` 1.
+
+### Dos propiedades de seguridad, verificadas
+
+1. **Nada falla en silencio.** Sin `methodcall.rb`, `x.try.foo` lanza
+   `TypeError: nil is not a symbol nor a string`, y `x.*.foo` sin `Enumerable#*`
+   lanza `NoMethodError`. Un sitio que se escape **se ve**.
+2. **`.try.` sí llama a métodos privados** (usa `send`), mientras que
+   `try(:foo)` de ActiveSupport **devuelve nil** con los privados (usa
+   `respond_to?`). Se revisaron los **33 métodos distintos** que se invocan con
+   `.try.` y **ninguno es privado**, así que la traducción es segura. Anotado por
+   si aparece uno nuevo.
+
+### Los 16 casos dudosos
+
+**Grupo 1 — `._?` sin llamada detrás (5).** `&.` exige un método; estos indexan o
+comparan. Se leen mejor como `x && x[k]`.
+
+| Sitio | Código |
+|---|---|
+| `hobo_fields/lib/generators/hobo/migration/migrator.rb:164` | `renames._?[table_name.to_sym]` |
+| `hobo/lib/hobo/model.rb:391` | `attr_type(attr)._? <= String` |
+| `hobo/app/helpers/hobo_route_helper.rb:24` | `params[:controller]._?.match(/…/)._?[1]` |
+| `hobo/app/helpers/hobo_route_helper.rb:156` | `request.fullpath.match(/…/)._?[1]` |
+| `hobo/app/helpers/hobo_permissions_helper.rb:8` | `session._?[:user]` |
+
+**Grupo 2 — `.*.` con argumentos o bloque (4).** No traducen a `map(&:sym)`.
+
+| Sitio | Código |
+|---|---|
+| `dryml/lib/dryml/template.rb:669` | `.*.gsub("-", "_").*.to_sym` |
+| `dryml/lib/dryml/template.rb:846` | `.*.gsub("-", "_").*.to_sym` |
+| `hobo_bootstrap_ui/taglibs/typeahead.dryml:36` | `.*.send(complete_target.name_attribute)` |
+| `hobo_jquery_ui/taglibs/autocomplete.dryml:38` | `.*.send(complete_target.name_attribute)` |
+
+**Grupo 3 — `.*.` encadenado (2).**
+
+| Sitio | Código |
+|---|---|
+| `hobo_support/lib/generators/hobo_support/model.rb:34` | `attributes.*.name.*.length.max` |
+| `hobo_fields/lib/generators/hobo/migration/migrator.rb:124` | `.*.to_s.*.underscore` |
+
+**Grupo 4 — `.where.` / `.where_not.` (7 reales).**
+
+| Sitio | Código |
+|---|---|
+| `hobo/lib/hobo/model/lifecycles/lifecycle.rb:61` | `creators.values.where.publishable?` |
+| `hobo/lib/hobo/model/lifecycles/lifecycle.rb:65` | `transitions.where.publishable?` |
+| `hobo/lib/generators/hobo/routes/router.rb:79` | `.where.routable_for?(@subsite)` ← con argumento |
+| `hobo/lib/generators/hobo/routes/router.rb:87` | idem |
+| `hobo/lib/generators/hobo/routes/router.rb:138` | idem |
+| `hobo/lib/generators/hobo/routes/router.rb:142` | idem |
+| `dryml/lib/dryml/dryml_doc.rb:125` | `.where_not.blank?` |
+
+**Falsos positivos**, aquí `where` es un atributo de `IndexSpec`, no el operador:
+`hobo_fields/lib/hobo_fields/model/index_spec.rb:14` y `:35`. **No tocar.**
+
+> ⚠ **`Enumerable#where` colisiona con `ActiveRecord::Relation#where`.** Hoy no
+> explota porque todos los receptores son Arrays (`Hash#values`, `split`). Pero
+> si alguno pasara a ser una Relation, `.where.publishable?` llamaría al `where`
+> de ActiveRecord y devolvería un `WhereChain`. Es un fallo latente que
+> **desaparece al quitar el operador**.
+
+**Grupo 5 — `Array#*` está sobrecargado.** `array.rb` lo redefine con argumento
+opcional: **con** argumento hace join/repetir (delegando en el original, que
+guarda como `multiply`), **sin** argumento devuelve el `MultiSender`. Al quitar
+el override, Ruby recupera su `Array#*` nativo y los **~23 sitios** de
+`array * ", "` siguen funcionando igual. Es seguro, pero es el borrado que más
+conviene comprobar porque `*` sobre arrays se usa mucho fuera del azúcar.
 
 ### Cómo correr las pruebas
 
