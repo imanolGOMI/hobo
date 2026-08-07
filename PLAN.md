@@ -188,6 +188,68 @@ que evita que ese riesgo se convierta en el desastre del primer intento.
 
 ---
 
+## Capa 0 — lo que se encontró (2026-08-07)
+
+**No hay que construir un banco de pruebas: hay uno heredado, y es mejor de lo
+esperado.** Herramienta disponible: Ruby **3.4.6** y Rails **8.1.3.1** vía rbenv.
+
+### Las pruebas que ya existen
+
+| Gema | Formato | Ficheros | Volumen |
+|---|---|---:|---|
+| `hobo_support` | rubydoctest | 8 | 603 líneas, 75 aserciones |
+| `hobo_fields` | rubydoctest | 8 | 1.473 líneas, 142 aserciones |
+| `hobo` | rubydoctest + **irt** | 4 + 20 | 49 + 31 aserciones |
+| `dryml` | **cucumber** | 26 | 2.366 líneas, 87 escenarios |
+
+**No hay ni un minitest ni un rspec en las gemas del núcleo.**
+
+### Estado de las tres herramientas
+
+| Herramienta | Último release | ¿Vive en Ruby 3.4? |
+|---|---|---|
+| `rubydoctest` | 2014-12-31 | **Sí — probado y funcionando** |
+| `irt` | 2015-09-24 | Sin probar |
+| `cucumber` | 2026-06-25 | Vivo y mantenido |
+
+Los 87 escenarios de cucumber de `dryml` describen contexto implícito, params,
+tags polimórficos y merge de parámetros: son **la especificación de la semántica
+que queremos conservar** en el remix. No tirarlos sin leerlos.
+
+### Lo que rompe hoy
+
+1. **`blankslate`**: la gema no existe ya, y `methodcall.rb:10` la requiere. Con
+   eso `hobo_support` **no carga** en Ruby 3.4. Es justo el fichero que la capa 1
+   borra, así que se arregla solo.
+2. **Ruby 3.4 cambió `Hash#inspect`**: `{:a=>1}` ahora es `{a: 1}` y `{1=>2}` es
+   `{1 => 2}`. Los doctests comparan la salida de `inspect` como cadena, así que
+   **21 líneas** de `hash`, `enumerable`, `rich_types` y `migration_generator`
+   fallan por formato. Mecánico.
+3. El `Gemfile` de `hobo_support` apunta a `git://github.com/tslocke/rubydoctest`
+   — protocolo muerto desde 2022.
+4. El gemspec pinza `rails >= 4.2.7.1, < 5.0`.
+
+### El banco de integración: `agility_bootstrap`
+
+En `integration_tests/` hay dos aplicaciones Hobo completas: `agility`
+(Rails 3.2) y **`agility_bootstrap` (Rails 4.2)**. La segunda es el banco:
+
+- **13 modelos** y 12 controladores
+- **22 ficheros de prueba**, con fixtures y factories
+- **7 pruebas de integración**: `ajax_form`, `create_account`, `dialog`,
+  `editors`, `lifecycle`, `nested_has_many`, `search`
+- Usa `hobo_bootstrap`, que ya está vendorizado
+
+Y ejercita justo las piezas del plan. Su `Story` tiene `fields do` con tipos
+ricos (`:markdown`, `Color`), los cuatro permisos incluido
+`view_permitted?(field)`, `:accessible => true` y `children :tasks`.
+
+**Es el objetivo, no la herramienta del día a día**: no podrá arrancar hasta la
+capa 5 o 6. Para las capas 1 y 2 hace falta que corra el `rake test` de cada
+gema por separado.
+
+---
+
 ## Dónde está cada cosa
 
 | Qué | Dónde |
