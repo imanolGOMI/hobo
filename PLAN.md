@@ -293,10 +293,43 @@ código real.
 — y eso es *exactamente* el fallo del primer intento documentado en
 `HALLAZGOS.md`. Elegir B nos devolvería al problema del que veníamos.
 
-**Recomendación: opción A**, con una condición anotada — antes de comprometerse,
-escribir **un tag real y grande** (`<table-plus>` o `<field-list>`) con ese DSL y
-ver si se sostiene. El catálogo son 111 tags y un DSL de Ruby es denso. Eso es lo
-primero que debe hacer la capa 3. **La decisión final es de Imanol.**
+## DECISIÓN TOMADA: opción A (2026-08-07)
+
+Imanol elige el **DSL en Ruby**, con el spike delante.
+
+### Y el spike C ya avisó de lo que cuesta
+
+Se portó `<table-plus>` (58 líneas, el peor caso del catálogo) a
+`spike/dryml/c_table_plus.rb`. **Funciona**: params con nombre calculado en
+tiempo de ejecución, `attrs_for`, `scope`, `all_parameters`, `merge-params`,
+atributos con guiones. Todo verificado ejecutando.
+
+**Pero un `param` se perdió en silencio**, que es *exactamente* el modo de fallo
+del primer intento. Causa:
+
+> En DRYML, un `param` declarado dentro de un bloque que le pasas a **otro** tag
+> pertenece al tag **que lo escribió**, no al que lo ejecuta.
+
+El runtime ingenuo hacía `instance_exec` en el que ejecuta, así que el `param`
+se buscaba en el sitio equivocado. Se arregla con `override.call` —los bloques de
+Ruby capturan `self` léxicamente— **pero eso obliga a dos cambios de
+arquitectura**:
+
+1. **Los tags devuelven cadenas**, no escriben en un buffer compartido. Si no, el
+   bloque escribiría en el buffer de quien lo definió y el HTML saldría
+   desordenado.
+2. **`this` y `scope` son una pila dinámica**, no estado de instancia. El bloque
+   necesita el contexto de *quien lo ejecuta*.
+
+**Y eso explica `part_context.rb` y la pila de `scoped_variables` de DRYML: no
+eran complejidad gratuita, eran esta necesidad.**
+
+**Consecuencia para el plan:** el runtime no son 50 líneas. Sigue siendo mucho
+menos que las 1.700 del compilador de DRYML, pero hay que entrar sabiéndolo.
+
+**Requisito no negociable de la capa 3:** una prueba que exija que **todo `param`
+declarado sigue siendo alcanzable**. Sin ella, el diseño que sea volverá a perder
+params de uno en uno y en silencio.
 
 ---
 
@@ -309,7 +342,7 @@ Estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho
 | `[x]` | **0** | **Banco de pruebas**: andamiaje minitest y corredor de la raíz | — |
 | `[x]` | **1** | `hobo_support`: quitar ~230 líneas de azúcar, codemod de 113 sitios, `classy_module` → `Concern` | 16 |
 | `[x]` | **2** | `hobo_fields`: `fields do`, tipos ricos, migraciones **+ batería que ejecute `up` y `down`** | 1, 2, 3 |
-| `[ ]` | **3** | **El remix de DRYML** (empieza por el spike) | 8 |
+| `[~]` | **3** | **El remix de DRYML**. Spike hecho y sustrato **decidido: DSL en Ruby**. Falta el runtime de verdad (ver abajo) | 8 |
 | `[ ]` | **4** | `hobo`: permisos, lifecycles, view hints, auto-actions, router | 4, 5, 7, 11, 12, 14 |
 | `[ ]` | **5** | `hobo_rapid` + motor de derivación | 9, 10 |
 | `[ ]` | **6** | Separar `hobo_bootstrap` en tags estructurales (→ RAPID) y tema | 13a, 13b |
@@ -691,6 +724,26 @@ contrato de plugin (pieza 17). Sirven de banco de pruebas de ese contrato —
 cualquier decisión sobre DRYML o sobre assets **los rompe a los ocho a la vez**.
 
 ---
+
+## Por dónde seguir mañana (capa 3)
+
+El sustrato está **decidido** y el spike ya dijo lo que cuesta. Lo siguiente, en
+orden:
+
+1. **Reescribir `spike/dryml/runtime.rb` con la arquitectura correcta**: tags que
+   **devuelven cadenas** y `this`/`scope` en una **pila dinámica**. Con eso, el
+   override de `:title_heading` de `c_table_plus.rb` tiene que aplicarse — hoy se
+   pierde en silencio, y ese es el criterio de que está bien.
+2. **Escribir la prueba de contrato**: por cada `param` declarado en un tag,
+   existe una forma de sobreescribirlo y se nota. Es el seguro contra el fallo
+   del primer intento.
+3. Portar un segundo tag grande —`<form>` (104 líneas) o `<field-list>`— para
+   confirmar antes de comprometerse con los 111.
+4. Sólo entonces, sacar el runtime del directorio `spike/` y convertirlo en la
+   gema.
+
+**No empezar por portar tags en masa.** Primero el runtime correcto y la prueba
+de contrato; si no, se repite el primer intento.
 
 ## Reglas de trabajo
 

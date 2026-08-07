@@ -84,11 +84,85 @@ Es decir: **elegir B nos volvería a meter en el problema del que veníamos.**
 - No cubre Slim ni Haml, porque comparten el problema de B: son lenguajes de
   plantilla sin extensión con nombre ni herencia entre ficheros.
 
-## Recomendación
+## Decisión
 
-**Opción A**, con una condición: que la capa de marcado se pueda leer. Un DSL de
-Ruby que construye HTML a base de llamadas es potente pero denso, y el catálogo
-de RAPID son 111 tags. Antes de comprometerse conviene ver **un tag real y
-grande** escrito así — `<table-plus>` o `<field-list>`— y decidir si se sostiene.
+**Opción A**, tomada por Imanol el 2026-08-07 con este spike delante.
 
-Eso es lo primero que haría la capa 3.
+---
+
+# Spike C — un tag real y grande: `<table-plus>`
+
+`ruby spike/dryml/c_table_plus.rb` · runtime en `runtime.rb`
+
+Se eligió `<table-plus>` (`hobo_rapid/taglibs/plus/table_plus.dryml`, 58 líneas)
+porque es el peor caso del catálogo: usa **nombres de param calculados en
+tiempo de ejecución**, `merge-params`, `all_parameters`, `attrs_for`, variables
+de `scope`, atributos con guiones y atributos de control.
+
+## Lo que funcionó a la primera
+
+- `attrs="sort-field, sort-direction"` → guiones a guiones bajos
+- `param` con nombre estático (`header`) y **con nombre calculado**
+  (`param="#{scope.field_name}-heading"` → `param(:"#{scope.field_name}_heading")`)
+- `attrs_for(:table)` para repartir atributos entre los tags a los que se reenvían
+- `scope.field_name` / `scope.field_path`
+- **`all_parameters[:controls]`** — preguntar si quien llama pasó un param.
+  Verificado: el `<th class="controls">` aparece solo cuando se pasa
+- `call_tag(..., as: :search_filter)` — que el propio sitio de llamada sea un
+  punto de extensión, que es el `<search-filter param/>` pelado
+- La lógica de ordenación, incluido el `?sort=-title` cuando ya está ascendente
+
+## EL HALLAZGO: un `param` se perdió **en silencio**
+
+La segunda salida del script salía **idéntica** a la primera: el override del
+param dinámico `:title_heading` **no se aplicaba, y no fallaba nada**.
+
+Es exactamente la clase de fallo que arruinó el primer intento y que está en
+`HALLAZGOS.md`: *la página se pinta, con el valor por defecto donde iba lo tuyo.*
+
+### Por qué
+
+En DRYML, un `param` declarado dentro de un bloque que le pasas a **otro** tag
+pertenece al tag **que lo escribió**, no al que lo ejecuta:
+
+```dryml
+<def tag="table-plus">
+  <with-field-names>              <!-- otro tag -->
+    <th param="#{scope.field_name}-heading">   <!-- pero este param es de table-plus -->
+```
+
+El spike hacía `instance_exec(&override)` **en el tag que ejecuta**, así que
+`self` pasaba a ser `with-field-names` y el `param` se buscaba en *sus* params,
+donde no está. Nadie protesta: simplemente se renderiza el valor por defecto.
+
+### Cómo se arregla, y qué implica
+
+Los bloques de Ruby **capturan `self` léxicamente**. Un `proc` creado dentro del
+`content` de `table-plus` ya lleva dentro el tag correcto. Basta con
+`override.call` en vez de `instance_exec(&override)`.
+
+**Pero eso arrastra dos cambios de arquitectura**, y son la lección del spike:
+
+1. **El buffer de salida no puede ser del tag.** Si el bloque se ejecuta con el
+   `self` del que lo definió, escribiría en *su* buffer y no en el del que lo
+   llama, y el HTML saldría desordenado. → **Los tags tienen que devolver
+   cadenas**, no escribir en un buffer compartido.
+2. **`this` y `scope` no pueden ser estado de instancia.** El bloque necesita el
+   `this` y el `scope` de **quien lo ejecuta**, no de quien lo escribió. → Tienen
+   que ser una **pila dinámica**, no variables del objeto.
+
+Y ahí está la explicación de algo que dábamos por complejidad gratuita: **para
+esto existen `part_context.rb` y la pila de `scoped_variables` de DRYML.** No
+eran barroquismo, eran esta misma necesidad.
+
+## Conclusión del spike C
+
+La opción A **sí sostiene un tag real y grande** — pero el runtime ingenuo de 50
+líneas **no**. Hace falta el de verdad: valores de retorno en vez de buffer, y
+contexto dinámico. Sigue siendo mucho menos que las 1.700 líneas del compilador
+de DRYML, pero **no son 50 líneas**, y hay que entrar sabiéndolo.
+
+**Lo más importante que deja este spike no es el código: es que el modo de fallo
+del primer intento reaparece solo, en cuanto te descuidas.** Cualquier diseño que
+se elija necesita **una prueba que exija que todo `param` declarado sigue siendo
+alcanzable**, o lo volveremos a perder de uno en uno y en silencio.
