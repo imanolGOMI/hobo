@@ -4,7 +4,8 @@ module Hobo
 
     include Hobo::Controller
 
-    DONT_PAGINATE_FORMATS = [ Mime::CSV, Mime::YAML, Mime::JSON, Mime::XML, Mime::ATOM, Mime::RSS ]
+    # `Mime::CSV` and friends went away in Rails 5; formats are symbols now.
+    DONT_PAGINATE_FORMATS = %i[csv yaml json xml atom rss].freeze
 
     WILL_PAGINATE_OPTIONS = [ :page, :per_page, :total_entries, :count, :finder ]
 
@@ -25,7 +26,7 @@ module Hobo
 
 
           helper_method :model, :current_user
-          before_filter :set_no_cache_headers
+          before_action :set_no_cache_headers
 
           rescue_from ActiveRecord::RecordNotFound, :with => :not_found unless Rails.env.development?
 
@@ -34,7 +35,7 @@ module Hobo
 
           respond_to :html
 
-          alias_method_chain :render, :hobo_model
+          prepend HoboModelRender
 
         end
         register_controller(base)
@@ -349,7 +350,12 @@ module Hobo
           @sort_field = field
           @sort_direction = desc ? "desc" : "asc"
 
-          "#{db_sort_field} #{@sort_direction}"
+          # Marked safe here because this is the one place that holds the
+          # whitelist: a sort field that is not among the ones the caller listed
+          # never gets this far. Rails 6 and 7 required the mark, Rails 8 allows
+          # a raw string again -- saying it explicitly means not depending on
+          # which way Rails leans this year.
+          Arel.sql("#{db_sort_field} #{@sort_direction}")
         end
       end
     end
@@ -443,20 +449,27 @@ module Hobo
 
 
     def request_requires_pagination?
-      request.format.not_in?(DONT_PAGINATE_FORMATS) && model.view_hints.paginate?
+      request.format.symbol.not_in?(DONT_PAGINATE_FORMATS) && model.view_hints.paginate?
     end
 
 
+    # `:order_by` is what the pages pass, straight from parse_sort_param, and it
+    # used to go nowhere: it stayed in the options hash and was handed to
+    # will_paginate, which does not know it. The ordering came from the
+    # automatic `order_by` scope instead, and that scope is gone (piece 6). It
+    # is applied here now, with the relation's own `order`.
     def find_or_paginate(finder, options)
       options = options.reverse_merge(:paginate => request_requires_pagination?)
       do_pagination = options.delete(:paginate) && finder.respond_to?(:paginate)
       finder = Array.wrap(options.delete(:scope)).inject(finder) { |a, v| a.send(*Array.wrap(v).flatten) }
 
-      options[:order] = finder.default_order unless options[:order] || finder.try(:order_values).present?
+      order = options.delete(:order_by) || options.delete(:order)
+      order = finder.default_order if order.blank? && finder.try(:order_values).blank?
+      finder = finder.order(order) if order.present?
 
       if do_pagination
-        options.reverse_merge!(:page => params[:page] || 1)
-        finder.paginate(options)
+        finder.paginate(:page => options[:page] || params[:page] || 1,
+                        :per_page => options[:per_page])
       else
         # Equivalent to the old finder.scoped (http://stackoverflow.com/a/18199294)
         finder.where(nil)
@@ -771,20 +784,18 @@ module Hobo
     # Hobo 1.3's name one uses params[:query], jQuery-UI's autocomplete
     # uses params[:term] and jQuery Tokeninput uses params[:q]
     def hobo_completions(attribute, finder, options={})
-      options = options.reverse_merge(:limit => 10, :query_scope => "#{attribute}_contains")
-      options[:param] ||= [:term, :q, :query].find{|k| !params[k].nil?}
-      finder = finder.limit(options[:limit]) unless finder.try(:limit_value)
+      options = options.reverse_merge(:limit => 10)
+      options[:param] ||= [:term, :q, :query].find { |k| !params[k].nil? }
 
-      begin
-        finder = finder.send(options[:query_scope], params[options[:param]])
-        items = finder.select { |r| r.viewable_by?(current_user) }
-      rescue TypeError  # must be a list of methods instead
-        items = []
-        options[:query_scope].each do |qscope|
-          finder2 = finder.send(qscope, params[options[:param]])
-          items += finder2.all.select { |r| r.viewable_by?(current_user) }
-        end
-      end
+      # Ransack, in place of the automatic `<attribute>_contains` scope that
+      # piece 6 removed. Several attributes at once are `a_or_b_cont`, which is
+      # Ransack's own spelling of the same idea -- so the list of scope names
+      # the option used to take becomes a list of attribute names.
+      attributes = Array.wrap(options[:query_attributes] || attribute)
+      finder = finder.ransack("#{attributes.join('_or_')}_cont" => params[options[:param]]).result
+      finder = finder.limit(options[:limit]) unless finder.try(:limit_value)
+      items = finder.select { |r| r.viewable_by?(current_user) }
+
       if request.xhr?
         if options[:param] == :q
           render :json => items.map {|i| {:id => "@#{i.send(i.class.primary_key)}", :name => i.send(attribute)}}
@@ -858,12 +869,15 @@ module Hobo
     end
 
 
-    def render_with_hobo_model(*args, &block)
-      options = args.extract_options!
-      self.this = options[:object] if options[:object]
-      # this causes more problems than it solves, and Tom says it's not supposed to be here
-      # this.user_view(current_user) if this && this.respond_to?(:user_view)
-      render_without_hobo_model(*args + [options], &block)
+    # `render :object => record` sets the context the templates render against.
+    # It was an alias_method_chain; a prepended module composes with the rest of
+    # Rails' own render chain instead of renaming it.
+    module HoboModelRender
+      def render(*args, &block)
+        options = args.extract_options!
+        self.this = options[:object] if options[:object]
+        super(*args, options, &block)
+      end
     end
 
     # --- filters --- #

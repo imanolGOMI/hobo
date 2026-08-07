@@ -334,6 +334,23 @@ module Hobo
       end
 
 
+      # Ransack 4 refuses to search a model that has not said which of its
+      # attributes may be searched, and rightly so. Hobo already knows: the
+      # columns it has, minus the ones it never shows.
+      #
+      # This is what replaces the automatic scopes of piece 6 -- `<attr>_contains`
+      # and friends -- for the two places that used them.
+      def ransackable_attributes(auth_object = nil)
+        column_names.reject { |name| never_show?(name) }
+      end
+
+      # Associations are not searchable unless a model says so: a search that
+      # walks into another table is a decision, not a default.
+      def ransackable_associations(auth_object = nil)
+        []
+      end
+
+
       # The fields the user may never assign, whatever the permissions say: the
       # lifecycle's state field, the authentication fields. It is the small part
       # of the old protected_attributes gem that Hobo actually used, and it is

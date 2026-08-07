@@ -15,6 +15,10 @@ Gem::Specification.new do |s|
   s.add_runtime_dependency('hobo_fields', ["= #{version}"])
   s.add_runtime_dependency('dryml', ["= #{version}"])
   s.add_runtime_dependency('hobo_will_paginate')
+  # Ransack replaces the automatic scopes of piece 6; responders provides the
+  # class-level `respond_to` and `respond_with` that Rails 5 moved out of core.
+  s.add_runtime_dependency('ransack', ['>= 4.0'])
+  s.add_runtime_dependency('responders', ['>= 3.0'])
 
   s.add_development_dependency('rake', ['>= 13.0'])
   s.add_development_dependency('minitest', ['>= 5.0'])

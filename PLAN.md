@@ -1235,24 +1235,82 @@ cualquiera espera al escribirlo.
 Los ficheros de `lifecycles/` tampoco se requerían entre sí: otra víctima del
 autocargador clásico.
 
+## Pieza 11, primera mitad: la capa de controlador arranca (2026-08-07)
+
+**52 pruebas en verde.** `hobo/controller/model.rb` **carga en Rails 8**, y los
+dos consumidores de los scopes automáticos que la pieza 6 dejó lanzando
+`NoMethodError` ya tienen sustituto.
+
+### Ransack, donde estaba `<attr>_contains`
+
+`hobo_completions` —el autocompletado— hacía
+`finder.send("#{attribute}_contains", query)`. Ahora es
+`finder.ransack("#{attrs}_cont" => query).result`, y la lista de scopes que
+admitía la opción pasa a ser una **lista de atributos**: Ransack los junta con
+`a_or_b_cont`, que es su forma de decir lo mismo.
+
+**Ransack 4 se niega a buscar en un modelo que no ha dicho qué se puede buscar**,
+y con razón. Hobo ya lo sabe, así que contesta él: `ransackable_attributes` son
+sus columnas **menos las que nunca enseña** (`never_show`), y
+`ransackable_associations` es una lista vacía, porque una búsqueda que se mete en
+otra tabla es una decisión y no un valor por defecto.
+
+### `:order_by` no ordenaba nada
+
+El otro consumidor. Las páginas pasan `:order_by => parse_sort_param(...)` a
+`hobo_index`, y esa opción **se quedaba en el hash y se le entregaba a
+will_paginate, que no la conoce**. Quien ordenaba de verdad era el scope
+automático `order_by`, por otro camino. Ahora `find_or_paginate` la aplica con el
+`order` de la propia relación.
+
+De paso, `find_or_paginate` dejaba caer el hash entero de opciones dentro de
+`paginate`; ahora le pasa solo `:page` y `:per_page`, que es lo que entiende.
+
+### Tres cosas más que Rails se llevó
+
+| Qué | Desde | Ahora |
+|---|---|---|
+| `Mime::CSV` y compañía | Rails 5 | Símbolos, `request.format.symbol` |
+| `before_filter` | Rails 5.1 | `before_action`, en 5 ficheros |
+| `respond_to :html` / `respond_with` de clase | Rails 5 los sacó del núcleo | La gema `responders`, ahora declarada |
+
+Y las dos cadenas `alias_method_chain` de los controladores —`render` y
+`redirect_to`— pasan a módulos con `prepend`, que **componen con el resto de la
+cadena de Rails** en vez de renombrarla.
+
+> **Corrección sobre `Arel.sql`:** al escribirlo di por hecho que Rails 8 seguía
+> rechazando una expresión sin marcar en `order`. **No lo hace**: Rails 6 y 7 lo
+> exigían y Rails 8 vuelve a permitirlo. La marca se queda igualmente, y el
+> motivo escrito es el correcto: `parse_sort_param` es **el único sitio que tiene
+> la lista blanca**, así que es donde toca decir que la cadena es deliberada, en
+> vez de depender de hacia dónde se incline Rails cada año.
+
+### Lo que queda de la pieza 11
+
+Lo hecho es la mitad de abajo: la que se puede probar sin levantar una petición.
+Falta la de arriba —las acciones automáticas de verdad (`hobo_index`,
+`hobo_show`, `hobo_create`…), `auto_actions`, y las 4 `alias_method_chain` de
+`user_base.rb`, `find_for.rb` y `relation_with_origin.rb`— y para eso hay que
+**decidir cómo se prueban los controladores**: hoy no hay ni una aplicación de
+Rails en el banco de esta gema. Es la primera pregunta de la próxima sesión.
+
 ### Lo que queda de la capa 4
 
 Por orden, y con lo que ya se sabe:
 
-1. **Pieza 11, auto-actions** (`controller/model.rb`, 889 líneas), donde hay que
-   sustituir los dos scopes automáticos por Ransack.
-3. **Pieza 12, router**, con el agravante de la carga ansiosa por `descendants`.
+1. **Pieza 11, segunda mitad**: las acciones, con la decisión de cómo probarlas.
+2. **Pieza 12, router**, con el agravante de la carga ansiosa por `descendants`.
 3. **Pieza 14, subsites**, que es transversal y va la última.
 
-Quedan **13 `alias_method_chain`**, repartidos así, y cada uno cae con su pieza:
+Quedan **10 `alias_method_chain`** —eran 35 al empezar la capa—, repartidos así,
+y cada uno cae con su pieza:
 
 | Fichero | Cuántos | Pieza |
 |---|---:|---|
 | `controller/user_base.rb` | 3 | 11 |
 | `extensions/active_record/relation_with_origin.rb` | 2 | 11 |
-| `controller.rb`, `controller/model.rb` | 2 | 11 |
-| `extensions/active_model/{name,translation}.rb` | 2 | 7 |
-| `extensions/{enumerable,i18n}.rb` | 2 | 7 |
+| `extensions/active_model/{name,translation}.rb` | 2 | 12 |
+| `extensions/{enumerable,i18n}.rb` | 2 | 12 |
 | `extensions/active_record/associations/reflection.rb` | 1 | 11 |
 | `model/find_for.rb` | 1 | 11 |
 
