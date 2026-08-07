@@ -331,6 +331,63 @@ menos que las 1.700 del compilador de DRYML, pero hay que entrar sabiéndolo.
 declarado sigue siendo alcanzable**. Sin ella, el diseño que sea volverá a perder
 params de uno en uno y en silencio.
 
+### La prueba de contrato (2026-08-07) — **hecha**
+
+Vive en `spike/dryml/test/`, corre con `rake test` desde la raíz y son **17
+pruebas, 137 aserciones, en verde**. Se muda a la gema `dryml` sin tocarla
+cuando el runtime salga de `spike/`.
+
+**Lo importante es cómo está hecha: no hay una lista de params escrita a mano.**
+Esa lista es justo lo que se queda vieja. En vez de eso, `param_contract.rb`
+antepone un grabador a `Rapid::Tag#param`, **renderiza el tag y apunta cada
+`param` que la ejecución alcanza de verdad** —incluidos los de nombre calculado—
+y luego, uno por uno, **vuelve a renderizar pasando un centinela** y exige que
+salga en la salida.
+
+> Un param que nadie puede alcanzar es un param que no existe.
+
+Como hay params detrás de un `if` (las flechas de ordenación), la comprobación
+toma **varios escenarios** y une lo alcanzado en todos.
+
+**Las excepciones se auditan solas.** `except:` documenta por qué un param no se
+puede sobreescribir desde fuera, y la prueba comprueba **las dos direcciones**:
+que sigue siendo inalcanzable, y que sigue existiendo. Una excepción que se
+quedó vieja **falla**.
+
+**La prueba tiene dientes, y se demuestra.** `ParamContractTeethTest` reconstruye
+el runtime ingenuo de spike C (`instance_exec` en vez de `call`) en un par de
+tags y exige que **la comprobación falle**, nombrando el param perdido. Los
+mismos dos tags sobre el runtime bueno pasan. Una comprobación que nunca falla es
+peor que ninguna.
+
+### Y encontró un segundo fallo silencioso: `old` no emitía nada
+
+`<old-x>` —envolver el valor por defecto en vez de sustituirlo— **estaba roto**.
+`Rapid.render(:panel, {}, :heading => Rapid.markup { tag("div") { old } })`
+devolvía `<div class="wrap"></div>`: el envoltorio vacío, sin error.
+
+La causa es **la misma lección de spike C, aplicada a medias**: `@old_stack` era
+estado de instancia del tag que *ejecuta* el `param`, pero `old` se llama desde
+el override, que corre con el `self` del tag que lo *escribió* — otro objeto, con
+su pila vacía.
+
+Arreglado: la pila de defectos pasa a `Rapid::Context`, junto al buffer, `this` y
+`scope`, y se **desapila mientras corre** para que un `old` dentro de un defecto
+no se llame a sí mismo. **Es exactamente el mismo error del que veníamos, y
+reapareció a un metro de donde lo habíamos arreglado.** La prueba lo cazó el
+primer día.
+
+### El hueco que la prueba dejó documentado
+
+`<table-plus>` pasa el barrido con **dos excepciones**, y ninguna es un fallo:
+`:field_heading_row` y `:default` son params de `<table>` y de
+`<with-field-names>`, no de `<table-plus>`, y `<table-plus>` los rellena.
+Alcanzarlos desde fuera necesita la **sintaxis de params anidados** de DRYML
+(`<table:><field-heading-row:>…`), **que el runtime todavía no tiene**.
+
+Está anotado como excepción en vez de descubrirse el día que a alguien no le
+funcione su tema. **Es trabajo pendiente de la capa 3.**
+
 ---
 
 ## El plan por capas
@@ -680,9 +737,10 @@ necesitan generadores de Rails y una app de verdad, así que van a la **capa 7**
 ### Cómo correr las pruebas
 
 ```sh
-rake test              # todas las gemas ya portadas
+rake test              # gemas portadas + la prueba de contrato de la capa 3
 rake test_integration  # agility_bootstrap (no arrancara hasta la capa 5-6)
 cd hobo_support && rake test
+cd spike/dryml   && rake test   # solo el contrato de params
 ```
 
 ---
@@ -739,13 +797,17 @@ orden:
    Verificado ejecutando `ruby spike/dryml/c_table_plus.rb`.
    Se añadió `Rapid.markup { }` para los bloques escritos fuera de un tag
    (una plantilla de página, o una prueba): son un tag anónimo sin params propios.
-2. **Escribir la prueba de contrato**: por cada `param` declarado en un tag,
-   existe una forma de sobreescribirlo y se nota. Es el seguro contra el fallo
-   del primer intento.
-3. Portar un segundo tag grande —`<form>` (104 líneas) o `<field-list>`— para
-   confirmar antes de comprometerse con los 111.
-4. Sólo entonces, sacar el runtime del directorio `spike/` y convertirlo en la
-   gema.
+2. ~~Escribir la prueba de contrato.~~ **HECHA el 2026-08-07.** Ver «La prueba de
+   contrato» más arriba. Descubrió de paso que `old` no emitía nada, y está
+   arreglado.
+3. **Sintaxis de params anidados** (`<table:><field-heading-row:>…`), que es el
+   hueco que dejó documentado el barrido de `<table-plus>`. Sin ella, un tema no
+   puede alcanzar los params de los tags que otro tag llama por él.
+4. Portar un segundo tag grande —`<form>` (104 líneas) o `<field-list>`— para
+   confirmar antes de comprometerse con los 111. **Pasarle el barrido de
+   contrato**, que es gratis: `assert_every_param_overridable`.
+5. Sólo entonces, sacar el runtime del directorio `spike/` y convertirlo en la
+   gema. La prueba de contrato se muda con él sin cambios.
 
 **No empezar por portar tags en masa.** Primero el runtime correcto y la prueba
 de contrato; si no, se repite el primer intento.

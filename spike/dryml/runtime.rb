@@ -24,7 +24,8 @@ module Rapid
     end
   end
 
-  # The output buffer, `this` and `scope` are *dynamic*, not per-tag state.
+  # The output buffer, `this`, `scope` and the stack of defaults behind `old`
+  # are *dynamic*, not per-tag state.
   #
   # This is the whole lesson of spike C. A param block is written inside one tag
   # but executed while another is rendering, and Ruby closures capture `self`
@@ -35,11 +36,15 @@ module Rapid
   # DRYML's part_context.rb and scoped_variables exist for exactly this.
   module Context
     class << self
-      def state = (Thread.current[:rapid_state] ||= { :buffer => nil, :this => nil, :scope => Scope.new })
+      def state
+        Thread.current[:rapid_state] ||=
+          { :buffer => nil, :this => nil, :scope => Scope.new, :old_stack => [] }
+      end
 
-      def buffer = state[:buffer]
-      def this   = state[:this]
-      def scope  = state[:scope]
+      def buffer    = state[:buffer]
+      def this      = state[:this]
+      def scope     = state[:scope]
+      def old_stack = state[:old_stack]
 
       def with(**changes)
         previous = state.dup
@@ -65,7 +70,6 @@ module Rapid
       @attributes = attributes
       @all_attributes = attributes.dup.freeze
       @params = params
-      @old_stack = []
     end
 
     def this  = Context.this
@@ -82,14 +86,15 @@ module Rapid
     def param(name, &default)
       override = @params[name]
       if override
-        @old_stack.push(default)
-        begin
+        # The default goes on the *dynamic* stack, not on this tag's, for the
+        # same reason as the buffer: `old` is called from the override, which
+        # runs with the self of the tag that wrote it -- a different object.
+        # Keeping the stack per-instance made <old-x> render nothing at all.
+        Context.with(:old_stack => Context.old_stack + [default]) do
           # `call`, not `instance_exec`: the block keeps the self of the tag that
           # wrote it, which is who owns the params it declares. Getting this
           # wrong makes overrides vanish without a word.
           override.call
-        ensure
-          @old_stack.pop
         end
       elsif default
         default.call
@@ -97,10 +102,12 @@ module Rapid
       nil
     end
 
-    # <old-x/> -- emit what the param would have rendered.
+    # <old-x/> -- emit what the param would have rendered. The default is popped
+    # while it runs, so an <old-x> inside a default does not call itself.
     def old
-      default = @old_stack.last
-      default&.call
+      stack = Context.old_stack
+      return nil if stack.empty?
+      Context.with(:old_stack => stack[0..-2]) { stack.last&.call }
       nil
     end
 

@@ -9,9 +9,14 @@ PORTED_GEMS = %w[hobo_support hobo_fields]
 # yet runnable on Ruby 3.4. Listed so the gap stays visible.
 PENDING_GEMS = %w[dryml hobo]
 
+# Suites that are not a gem yet. The layer-3 param contract lives in spike/
+# until the runtime becomes the dryml gem; it runs from day one because it is
+# the check that stops params being lost in silence. See PLAN.md, layer 3.
+EXTRA_SUITES = %w[spike/dryml]
+
 desc "Run the test suite of every ported gem"
 task :test do |t|
-  failed = PORTED_GEMS.reject do |gem|
+  failed = (PORTED_GEMS + EXTRA_SUITES).reject do |gem|
     puts "\n=== #{gem} ==="
     system("cd #{gem} && #{RUBY} -S rake test")
   end

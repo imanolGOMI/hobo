@@ -166,3 +166,43 @@ de DRYML, pero **no son 50 líneas**, y hay que entrar sabiéndolo.
 del primer intento reaparece solo, en cuanto te descuidas.** Cualquier diseño que
 se elija necesita **una prueba que exija que todo `param` declarado sigue siendo
 alcanzable**, o lo volveremos a perder de uno en uno y en silencio.
+
+---
+
+# La prueba de contrato
+
+```sh
+cd spike/dryml && rake test     # tambien entra en el `rake test` de la raiz
+```
+
+`test/param_contract.rb` es la comprobación; `test/param_contract_test.rb` la
+usa. **No hay ninguna lista de params escrita a mano**, porque esa lista es lo
+que se queda vieja: renderiza el tag, **apunta cada `param` que la ejecución
+alcanza** —incluidos los de nombre calculado— y vuelve a renderizar uno por uno
+con un centinela, exigiendo que salga.
+
+```ruby
+assert_every_param_overridable(:table_plus, scenarios, :except => EXCEPTIONS)
+```
+
+- **Varios escenarios**, porque hay params detrás de un `if`.
+- **`except:` se audita en las dos direcciones**: una excepción que ya se puede
+  sobreescribir, o que nombra un param que ya nadie declara, **falla**.
+- **`ParamContractTeethTest` demuestra que la comprobación falla** cuando se le
+  pone delante el runtime ingenuo de spike C. Una comprobación que nunca falla es
+  peor que ninguna.
+
+## Lo que cazó el primer día
+
+`old` —el `<old-x>`— **no emitía nada**. `@old_stack` era estado de instancia del
+tag que ejecuta el `param`, pero `old` se llama desde el override, que corre con
+el `self` de quien lo escribió. **El mismo error de spike C, a un metro de donde
+lo habíamos arreglado.** La pila vive ahora en `Rapid::Context`, con el buffer,
+`this` y `scope`.
+
+## Lo que dejó anotado
+
+`<table-plus>` pasa con dos excepciones: `:field_heading_row` y `:default` son
+params de los tags a los que llama, y hacen falta los **params anidados** de
+DRYML (`<table:><field-heading-row:>…`) para alcanzarlos desde fuera. El runtime
+no los tiene todavía.
