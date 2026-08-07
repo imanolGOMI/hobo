@@ -25,6 +25,22 @@ module HoboBootstrap
     def base_url = ""
     def csrf_meta_tag = nil
 
+    # Assets go through Rails' own resolver, which is the only thing that knows
+    # where a file ends up: Propshaft serves digested names, and a hardcoded
+    # `/assets/bootstrap.css` is a 404 waiting to happen. Outside Rails it falls
+    # back to the plain path so the tags can still be tested on their own.
+    def asset_path_for(name, extension)
+      file = "#{name}.#{extension}"
+      if defined?(ActionController::Base)
+        begin
+          return ActionController::Base.helpers.asset_path(file)
+        rescue StandardError
+          nil
+        end
+      end
+      "/assets/#{file}"
+    end
+
   end
 
 end
@@ -47,12 +63,19 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
     end
   end
 
+  raw "<!DOCTYPE html>\n"
   tag("html", { :lang => I18n.locale.to_s }, :none) do
     tag("head", {}, :head) do
       tag("meta", { :charset => "utf-8" }, :charset)
       tag("meta", { :name => "viewport", :content => "width=device-width, initial-scale=1" }, :viewport)
       tag("title", {}, :title) { text full_title }
-      param(:stylesheets) { call_tag(:stylesheet, { :name => subsite || "application" }, :as => :app_stylesheet) }
+      param(:stylesheets) do
+        # Bootstrap first, then what Hobo adds, then the application's own, so
+        # each one can override the one before it.
+        call_tag(:stylesheet, { :name => "bootstrap" }, :as => :bootstrap_stylesheet)
+        call_tag(:stylesheet, { :name => "hobo" }, :as => :hobo_stylesheet)
+        call_tag(:stylesheet, { :name => subsite || "application" }, :as => :app_stylesheet)
+      end
       unless attributes[:bottom_load_javascript]
         param(:scripts) { call_tag(:javascript, { :name => subsite || "application" }, :as => :application_javascript) }
       end
@@ -113,7 +136,14 @@ end
 # The pieces a page leans on, plain enough that an application can replace any
 # of them without the page noticing.
 Rapid.define(:app_name) { text app_name }
-Rapid.define(:stylesheet, :attrs => [:name]) { tag("link", { :rel => "stylesheet", :href => "/assets/#{attributes[:name]}.css" }) }
-Rapid.define(:javascript, :attrs => [:name]) { tag("script", { :src => "/assets/#{attributes[:name]}.js", :defer => true }) }
+Rapid.define(:stylesheet, :attrs => [:name]) do
+  href = asset_path_for(attributes[:name], "css")
+  tag("link", { :rel => "stylesheet", :href => href }) if href
+end
+
+Rapid.define(:javascript, :attrs => [:name]) do
+  src = asset_path_for(attributes[:name], "js")
+  tag("script", { :src => src, :defer => true }) if src
+end
 Rapid.define(:main_nav, :attrs => [:current, :class]) { tag("ul", { :class => attributes[:class] }, :items) }
 Rapid.define(:account_nav) { tag("ul", { :class => "navbar-nav ms-auto" }, :items) }

@@ -21,7 +21,8 @@ end
 # With HOBODEV set, every gem comes from the working tree: `hobo` depends on
 # hobo_support, hobo_fields and dryml, and none of those are published while the
 # port is under way. Once they are one gem (decision 11) this is one line.
-gems = hobo_dev ? %w[hobo_support hobo_fields dryml hobo hobo_rapid] : %w[hobo hobo_rapid]
+gems = hobo_dev ? %w[hobo_support hobo_fields dryml hobo hobo_rapid hobo_bootstrap]
+                : %w[hobo hobo_rapid hobo_bootstrap]
 
 append_to_file "Gemfile", (["", "# Hobo"] + gems.map(&gem_line) + [""]).join("\n")
 

@@ -8,6 +8,7 @@ require File.join(helpers, 'hobo_translations_helper')
 require File.join(helpers, 'hobo_translations_normalizer_helper')
 require File.join(helpers, 'hobo_permissions_helper')
 require 'hobo/model/guest'
+require 'hobo/hidden_actions'
 require 'hobo/controller/authentication_support'
 require 'hobo/controller/cache'
 
@@ -28,7 +29,7 @@ module Hobo
 
       def included_in_class(klass)
         klass.extend(ClassMethods)
-        klass.extend(HiddenActions)
+        klass.extend(::Hobo::HiddenActions)
         klass.class_eval do
           before_action :login_from_cookie
           prepend ObjectUrlRedirect
@@ -50,26 +51,6 @@ module Hobo
       end
 
     end
-
-    # What `hide_action` used to do: keep the helper methods a controller mixes
-    # in from becoming actions anybody can request.
-    module HiddenActions
-
-      def hobo_hidden_action_methods
-        @hobo_hidden_action_methods ||=
-          if superclass.respond_to?(:hobo_hidden_action_methods)
-            superclass.hobo_hidden_action_methods.dup
-          else
-            Set.new
-          end
-      end
-
-      def action_methods
-        super - hobo_hidden_action_methods
-      end
-
-    end
-
 
     module ClassMethods
 

@@ -1,0 +1,35 @@
+/* What Hobo adds on top of Bootstrap: the few classes the derived pages use.
+   Kept small on purpose -- a theme that restyles everything is a theme nobody
+   can live with. */
+
+.card.story, .card { margin-bottom: 1rem; }
+
+.index-page .collection > .card {
+  border: 1px solid var(--bs-border-color);
+  border-radius: var(--bs-border-radius);
+  padding: 1rem;
+}
+
+.index-page .collection > .card > h3 { font-size: 1.25rem; margin-bottom: .5rem; }
+
+/* The field list of a card or a show page: label and value side by side. */
+.card dl, .show-page dl { display: grid; grid-template-columns: minmax(8rem, auto) 1fr; gap: .25rem 1rem; margin: 0; }
+.card dt, .show-page dt { font-weight: 600; color: var(--bs-secondary-color); }
+.card dd, .show-page dd { margin: 0; }
+
+.show-page > h1 { margin-bottom: 1.5rem; }
+.show-page .children { margin-top: 2rem; }
+
+/* A blank field keeps its space, so the page does not jump when a value
+   appears. */
+.view:empty::after { content: "\2014"; color: var(--bs-secondary-color); }
+
+.flash-messages .flash { padding: .75rem 1rem; border-radius: var(--bs-border-radius); margin-bottom: 1rem; }
+.flash-notice { background: var(--bs-success-bg-subtle); }
+.flash-error  { background: var(--bs-danger-bg-subtle); }
+
+.error-messages { padding: 1rem; border-radius: var(--bs-border-radius); background: var(--bs-danger-bg-subtle); margin-bottom: 1rem; }
+
+.form-fields .field { margin-bottom: 1rem; }
+.form-fields label { display: block; font-weight: 600; margin-bottom: .25rem; }
+.form-fields input, .form-fields textarea, .form-fields select { width: 100%; }

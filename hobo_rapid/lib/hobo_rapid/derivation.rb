@@ -21,6 +21,26 @@ require "hobo_rapid/tags/inputs"
 require "hobo_rapid/tags/associations"
 
 module HoboRapid
+
+  # A derived page goes **inside the theme**, so it comes out with the navbar,
+  # the container and the stylesheets. Without this the pages painted fine and
+  # looked like nothing at all -- which is what happens when you build the theme
+  # and never connect it to anything.
+  #
+  # If no theme is loaded the content is painted on its own, so the engine never
+  # depends on there being one.
+  module InPage
+
+    def in_page(title, &content)
+      if Rapid.tags.key?(:page)
+        call_tag(:page, { :title => title }, :as => :page, :content_body => content)
+      else
+        content.call
+      end
+    end
+
+  end
+
   module Derivation
 
     class << self
@@ -103,7 +123,9 @@ module HoboRapid
         children = children_of(model)
 
         Rapid.define_for(:show_page, model) do
-          tag("article", { :class => "show-page #{model.name.demodulize.underscore}" }, :page) do
+          heading = name_attribute ? this.send(name_attribute).to_s : model.name.demodulize
+          in_page(heading) do
+          tag("article", { :class => "show-page #{model.name.demodulize.underscore}" }, :body) do
             tag("h1", {}, :heading) do
               if name_attribute
                 with_field(name_attribute) { call_tag(:view, {}, :as => :name) }
@@ -131,13 +153,15 @@ module HoboRapid
               end
             end
           end
+          end
         end
       end
 
       # The page for the collection: a card each.
       def derive_index_page(model)
         Rapid.define_for(:index_page, model) do
-          tag("div", { :class => "index-page #{model.name.demodulize.underscore.pluralize}" }, :page) do
+          in_page(HoboRapid::Derivation.plural_of(model)) do
+          tag("div", { :class => "index-page #{model.name.demodulize.underscore.pluralize}" }, :body) do
             tag("h1", {}, :heading) { text HoboRapid::Derivation.plural_of(model) }
             tag("div", { :class => "collection" }, :collection) do
               records = Array(this)
@@ -147,6 +171,7 @@ module HoboRapid
                 records.each { |record| with_this(record) { call_tag(:card, {}, :as => :card) } }
               end
             end
+          end
           end
         end
       end
@@ -183,6 +208,8 @@ module HoboRapid
 
   end
 end
+
+Rapid::Tag.include(HoboRapid::InPage)
 
 # The tags the derived ones fall back to when a model has said nothing.
 Rapid.define(:card) { tag("div", { :class => "card" }, :card) { call_tag(:view, :force => true) } }

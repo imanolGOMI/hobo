@@ -892,7 +892,16 @@ module Hobo
     # to be different, you write it, and nothing argues with you.
     def render_derived_or(tag_name)
       return yield if template_exists_for_this_action? || !derived_tag?(tag_name)
-      render :html => Rapid.render(tag_name, {}, :this => this).html_safe, :layout => true
+
+      painted = Rapid.render(tag_name, {}, :this => this)
+
+      # A theme paints the whole document -- `<html>`, `<head>`, the lot -- so
+      # wrapping it in the application layout as well gives a page with two of
+      # everything. Without a theme what comes back is a fragment, and then the
+      # layout is exactly what it needs.
+      whole_document = painted.lstrip.start_with?("<!DOCTYPE", "<html")
+
+      render :html => painted.html_safe, :layout => !whole_document
     end
 
     def template_exists_for_this_action?
