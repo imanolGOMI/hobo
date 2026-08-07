@@ -1856,6 +1856,18 @@ sobre Rails 8.
 plantilla recibe **su** plantilla. En cuanto una página necesita ser distinta, se
 escribe, y nada discute. Hay prueba de las dos cosas.
 
+### Y nadie tiene que pedir la derivación
+
+Declarar el modelo **es** pedirla. Un `Engine` la hace en cada `to_prepare`, o
+sea en el arranque y en **cada recarga** — que es lo que hace falta para que un
+modelo al que le añades un campo en desarrollo gane la columna en sus páginas
+sin reiniciar.
+
+Y de paso resuelve el agravante que este plan arrastraba desde la capa 2:
+`to_prepare` corre **después** de que el autocargador se haya reiniciado, así que
+preguntar por los modelos ahí es lo que hace que Zeitwerk los cargue. La carga
+ansiosa que hacía falta sale sola del sitio correcto.
+
 ### Por dónde va la capa 5
 
 1. ~~**El JS a Stimulus.**~~ **Hecho**, salvo `delete-button`, que se decide al

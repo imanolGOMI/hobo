@@ -174,6 +174,29 @@ class DerivedPagesTest < Minitest::Test
     refute_includes output, %(<div class="index-page stories">)
   end
 
+  # And nobody has to ask for the derivation: declaring the model is the ask.
+  # It happens on every reload, so a model that gains a field in development
+  # gains the column on its pages without a restart.
+  def test_a_model_in_a_file_is_derived_without_anybody_asking
+    output = run_in_app(<<~RUBY, "app/models/note.rb" => NOTE_MODEL)
+      ActiveRecord::Base.connection.create_table(:notes, :force => true) { |t| t.string :title }
+      puts "DERIVADO \#{Rapid.polymorphic?(:show_page, Note.new)}"
+      puts Rapid.render(:show_page, {}, :this => Note.new(:title => "Sin pedirlo"))
+    RUBY
+
+    assert_includes output, "DERIVADO true", output
+    assert_includes output, %(<article class="show-page note">)
+    assert_includes output, "Sin pedirlo"
+  end
+
+  NOTE_MODEL = <<~RUBY
+    class Note < ActiveRecord::Base
+      include Hobo::Model
+      fields { title :string }
+      def view_permitted?(field) = true
+    end
+  RUBY
+
   private
 
   def run_in_app(script, views = {})

@@ -18,8 +18,6 @@ module HoboRapid
   require 'hobo_rapid/previous_uri_filter'
   require 'hobo_rapid/derivation'
   require 'hobo_rapid/helper'
-  require 'hobo_rapid/railtie' if defined?(Rails)
+  require 'hobo_rapid/engine' if defined?(Rails)
 
-  class Engine < ::Rails::Engine
-  end
 end
