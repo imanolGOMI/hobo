@@ -395,7 +395,24 @@ muertas de `drop_while`, `take_while` y `Array.wrap`.
 **Segunda pasada, lo redundante** (commit `22e45f08`): ver el registro de mejoras
 más abajo. ~45 sitios más reescritos.
 
-**Queda pendiente: `classy_module` → `ActiveSupport::Concern`.** Ver más abajo.
+**Tercera pasada, `classy_module`.** Eran 14 usos. Se convirtieron **3** y los
+**11 restantes se reparten por capas**, con criterio, no por pereza:
+
+| Convertido ahora | Cómo |
+|---|---|
+| `hobo/lib/hobo/model/include_in_save.rb` | `Concern` con `included do` para los callbacks |
+| `hobo/lib/hobo/model/lifecycles.rb` (`ModelExtensions`) | `Concern` con `class_methods do`; de paso se quita el `eval %(...)` que envolvía `valid?` para esquivar un fallo de Ruby 1.9.2 que ya no existe |
+| `dryml/lib/dryml/dryml_doc.rb` (`CommentMethods`) | Módulo normal: eran solo métodos de instancia, no hacía falta `Concern` |
+
+| Aplazado | A la capa | Por qué |
+|---|---|---|
+| `hobo_fields/lib/hobo_fields/model.rb` | **2** | Lleva **3 `alias_method_chain`**, que Rails borró en 5.1: hay que reescribirlo entero de todas formas |
+| `hobo/lib/hobo/model/accessible_associations.rb` | **4** | Igual, con **5 `alias_method_chain`** |
+| 6 generadores de Thor (`controller`, `subsite`, `plugin`, `taglib`, `invite_only`, `activation_email`) | **7** | El DSL de Thor (`argument`, `class_option`) se ejecuta a nivel de clase, así que en un `Concern` va dentro de `included do`. No es mecánico y no se puede verificar hasta que se toquen los generadores |
+| `hobo_support/lib/generators/hobo_support/{model,eval_template}.rb` | **7** | Lo mismo, son de Thor |
+| `hobo_support/lib/hobo_support/common_tasks.rb` | **2 y 4** | No es candidato a `Concern`: son tareas de Rake (`namespace :test do`) envueltas para incluirlas en un Rakefile. Solo lo usan los `Rakefile` viejos de `hobo` y `hobo_fields`, así que **muere con ellos** al portar sus pruebas |
+
+`classy_module` sigue en `module.rb` hasta que caiga el último uso, en la capa 7.
 
 ---
 

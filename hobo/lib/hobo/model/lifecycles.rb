@@ -6,65 +6,71 @@ module Hobo
 
       class LifecycleKeyError < LifecycleError; end
 
-      ModelExtensions = classy_module do
+      module ModelExtensions
+        extend ActiveSupport::Concern
 
         attr_writer :lifecycle
 
-        def self.has_lifecycle?
-          defined?(self::Lifecycle)
-        end
+        class_methods do
 
-        def self.lifecycle(*args, &block)
-          options = args.extract_options!
-          options = options.reverse_merge(:state_field => :state,
-                                          :key_timestamp_field => :key_timestamp,
-                                          :key_timeout => 999.years)
-
-          # use const_defined so that subclasses can define lifecycles
-          # TODO: figure out how to merge with parent, if desired
-          if self.const_defined?(:Lifecycle)
-            lifecycle = self::Lifecycle
-            state_field_class = self::LifecycleStateField
-          else
-            # First call
-
-            module_eval "class ::#{name}::Lifecycle < Hobo::Model::Lifecycles::Lifecycle; end"
-            lifecycle = self::Lifecycle
-            lifecycle.init(self, options)
-
-            module_eval "class ::#{name}::LifecycleStateField < HoboFields::Types::LifecycleState; end"
-            state_field_class = self::LifecycleStateField
-            state_field_class.model_name = name
+          def has_lifecycle?
+            defined?(self::Lifecycle)
           end
 
-          dsl = Hobo::Model::Lifecycles::DeclarationDSL.new(lifecycle)
-          dsl.instance_eval(&block)
+          def lifecycle(*args, &block)
+            options = args.extract_options!
+            options = options.reverse_merge(:state_field => :state,
+                                            :key_timestamp_field => :key_timestamp,
+                                            :key_timeout => 999.years)
 
-          default = lifecycle.default_state ? { :default => lifecycle.default_state.name.to_s } : {}
-          declare_field(options[:state_field], state_field_class, default)
-          unless options[:index] == false
-            index_options = { :name => options[:index] } unless options[:index] == true
-            index(options[:state_field], index_options || {})
-          end
-          attr_protected  options[:state_field]
+            # use const_defined so that subclasses can define lifecycles
+            # TODO: figure out how to merge with parent, if desired
+            if self.const_defined?(:Lifecycle)
+              lifecycle = self::Lifecycle
+              state_field_class = self::LifecycleStateField
+            else
+              # First call
 
-          unless options[:key_timestamp_field] == false
-            declare_field(options[:key_timestamp_field], :datetime)
-            never_show      options[:key_timestamp_field]
-            attr_protected  options[:key_timestamp_field]
-          end
+              module_eval "class ::#{name}::Lifecycle < Hobo::Model::Lifecycles::Lifecycle; end"
+              lifecycle = self::Lifecycle
+              lifecycle.init(self, options)
 
-        end
-
-        # eval avoids the ruby 1.9.2 "super from singleton method ..." error
-        eval %(
-          def valid?(context=nil)
-            if context.nil? && self.class.has_lifecycle? && (step = lifecycle.active_step)
-              context = step.name
+              module_eval "class ::#{name}::LifecycleStateField < HoboFields::Types::LifecycleState; end"
+              state_field_class = self::LifecycleStateField
+              state_field_class.model_name = name
             end
-            super(context)
+
+            dsl = Hobo::Model::Lifecycles::DeclarationDSL.new(lifecycle)
+            dsl.instance_eval(&block)
+
+            default = lifecycle.default_state ? { :default => lifecycle.default_state.name.to_s } : {}
+            declare_field(options[:state_field], state_field_class, default)
+            unless options[:index] == false
+              index_options = { :name => options[:index] } unless options[:index] == true
+              index(options[:state_field], index_options || {})
+            end
+            attr_protected  options[:state_field]
+
+            unless options[:key_timestamp_field] == false
+              declare_field(options[:key_timestamp_field], :datetime)
+              never_show      options[:key_timestamp_field]
+              attr_protected  options[:key_timestamp_field]
+            end
+
           end
-        )
+
+        end
+
+        # The module sits between the model and ActiveRecord in the ancestor
+        # chain, so super reaches ActiveRecord's valid? on its own. The original
+        # wrapped this in an eval to dodge a Ruby 1.9.2 bug with super from a
+        # singleton method, which no longer applies.
+        def valid?(context=nil)
+          if context.nil? && self.class.has_lifecycle? && (step = lifecycle.active_step)
+            context = step.name
+          end
+          super(context)
+        end
 
         def lifecycle
           @lifecycle ||=  if self.class.const_defined?(:Lifecycle)

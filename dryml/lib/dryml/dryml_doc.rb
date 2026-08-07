@@ -11,7 +11,7 @@ require 'rexml/xpath'
         dryml_files.map { |f| taglib_class.new(directory, f) }
       end
 
-      CommentMethods = classy_module do
+      module CommentMethods
 
         def comment_intro
           comment && comment =~ /(.*?)^#/m ? $1 : comment
@@ -23,7 +23,7 @@ require 'rexml/xpath'
         end
 
         %w(comment comment_intro comment_rest).each do |m|
-          class_eval "def #{m}_html; Maruku.new(#{m}).to_html.gsub(/&amp;/, '&'); end"
+          module_eval "def #{m}_html; Maruku.new(#{m}).to_html.gsub(/&amp;/, '&'); end"
         end
 
       end

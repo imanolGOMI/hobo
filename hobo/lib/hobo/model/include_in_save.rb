@@ -1,12 +1,15 @@
 module Hobo
   module Model
-    IncludeInSave = classy_module do
+    module IncludeInSave
+      extend ActiveSupport::Concern
 
-      attr_accessor :included_in_save
+      included do
+        attr_accessor :included_in_save
 
-      validate         :validate_included_in_save
-      before_save      :save_included
-      after_save       :clear_included_in_save
+        validate         :validate_included_in_save
+        before_save      :save_included
+        after_save       :clear_included_in_save
+      end
 
       def include_in_save(association, *records)
         self.included_in_save ||= Hash.new {|h, k| h[k] = []}
