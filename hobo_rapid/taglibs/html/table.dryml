@@ -140,10 +140,10 @@ Produces:
   <else>
     <% field_tag ||= "view" %>
     <unless test="&(this.nil? || this.empty?) && !empty">
-      <%= element "table", attributes - attrs_for(:with_fields) do %>
+      <%= element "table", attributes.except(*attrs_for(:with_fields)) do %>
       <thead if="&all_parameters[:thead] || fields" param>
         <tr param="field-heading-row">
-          <with-field-names merge-attrs="&all_attributes & attrs_for(:with_fields)">
+          <with-field-names merge-attrs="&all_attributes.slice(*attrs_for(:with_fields))">
             <th param="#{scope.field_name}-heading"><%= this.member_class ? this.member_class.human_attribute_name(scope.field_name) : scope.field_name.to_s.titleize %></th>
           </with-field-names>
           <th if="&all_parameters[:controls]" class="controls"/>
@@ -154,7 +154,7 @@ Produces:
           <tr param if="&can_view?"
               class="#{scope.even_odd} #{this_type.name.underscore}" data-rapid-context="&typed_id">
             <if test="&fields">
-              <with-fields merge-attrs="&all_attributes & attrs_for(:with_fields)" force-all>
+              <with-fields merge-attrs="&all_attributes.slice(*attrs_for(:with_fields))" force-all>
                 <td param="#{scope.field_name.to_s.sub('?', '').gsub('.', '-')}-view"><call-tag tag="&field_tag"/></td>
               </with-fields>
               <td class="controls" param="controls" if="&all_parameters[:controls]">

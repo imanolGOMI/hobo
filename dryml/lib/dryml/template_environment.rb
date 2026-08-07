@@ -157,7 +157,7 @@ module Dryml
           update(ActiveSupport::JSON.decode(data_rapid)).to_json
       end
 
-      attrs.update(overriding_attrs - [:class, :data_rapid])
+      attrs.update(overriding_attrs.except(:class, :data_rapid))
     end
 
 

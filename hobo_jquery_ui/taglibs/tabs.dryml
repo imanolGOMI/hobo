@@ -54,7 +54,7 @@ Usage of Ruby 1.8 will result in an undefined tab order.   Ruby 1.9 is recommend
       <% } end.join("").html_safe + "</ul>".html_safe + parameters.map do |param_name, param|
          yield_output_buffer { %>
       <% attrs, params = param.call -%>
-      <% merge_attrs = attrs - [:id, :href, :name] -%>
+      <% merge_attrs = attrs.except(:id, :href, :name) -%>
       <div id="#{attrs[:id] || param_name}" merge-attrs="&merge_attrs">
         <%= params[:default]&.call(nil) %>
       </div>

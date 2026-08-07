@@ -42,7 +42,7 @@ module Hobo
 
       query_words = ActiveRecord::Base.connection.quote_string(query).split
 
-      search_targets.build_hash do |search_target|
+      search_targets.filter_map do |search_target|
         conditions = []
         parameters = []
         like_operator = ActiveRecord::Base.connection.adapter_name =~ /postg/i ? 'ILIKE' : 'LIKE'
@@ -55,7 +55,7 @@ module Hobo
 
         results = search_target.where(conditions, *parameters)
         [search_target.name, results] unless results.empty?
-      end
+      end.to_h
     end
 
     def simple_has_many_association?(array_or_reflection)

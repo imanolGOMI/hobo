@@ -46,9 +46,9 @@ is equivalent to:
 <def tag="bootstrap-fields" attrs="size, columns, tag, no-edit, required, no-blanks, input-attrs">
   <% tag ||= scope.in_form ? "input" : "view"; no_edit ||= "skip" -%>
   <% required ||= "" ; required = comma_split(required.gsub('-', '_')) -%>
-  <div merge-attrs="&attributes - attrs_for(:with_fields)">
+  <div merge-attrs="&attributes.except(*attrs_for(:with_fields))">
     <legend param if="&all_parameters[:legend]" />
-    <with-fields-grouped merge-attrs="&attributes & attrs_for(:with_fields)" size="&size" columns="&columns" param>
+    <with-fields-grouped merge-attrs="&attributes.slice(*attrs_for(:with_fields))" size="&size" columns="&columns" param>
 
     <% field_name = this_field_name
        input_attrs ||= {}
@@ -132,7 +132,7 @@ Supports all attributes supported by `<with-fields>` plus:
   <% tag ||= scope.in_form ? "input" : "view"; no_edit ||= "skip" -%>
   <% required ||= "" ; required = comma_split(required.gsub('-', '_')) -%>
   <legend param if="&all_parameters[:legend]" />
-  <with-fields merge-attrs="&attributes & attrs_for(:with_fields)">
+  <with-fields merge-attrs="&attributes.slice(*attrs_for(:with_fields))">
   
   <% field_name = this_field_name
      input_attrs = {:no_edit => no_edit} if tag == "input" && no_edit == "disable"
@@ -167,7 +167,7 @@ Supports all attributes supported by `<with-fields>` plus:
   <% tag ||= scope.in_form ? "input" : "view"; no_edit ||= "skip" -%>
   <% required ||= "" ; required = comma_split(required.gsub('-', '_')) -%>
   <legend param if="&all_parameters[:legend]" />
-  <with-fields merge-attrs="&attributes & attrs_for(:with_fields)">
+  <with-fields merge-attrs="&attributes.slice(*attrs_for(:with_fields))">
   
     <% field_name = this_field_name
        input_attrs = {:no_edit => no_edit} if tag == "input" && no_edit == "disable"

@@ -45,8 +45,8 @@ This tag used to be called `<field-list>` in Hobo versions prior to
 -->
 <def tag="field-list-v1" attrs="tag, no-edit, no-blanks">
   <% tag ||= scope.in_form ? "input" : "view"; no_edit ||= "skip" %>
-  <labelled-item-list merge-attrs="&attributes - attrs_for(:with_fields)">
-    <with-fields merge-attrs="&attributes & attrs_for(:with_fields)">
+  <labelled-item-list merge-attrs="&attributes.except(*attrs_for(:with_fields))">
+    <with-fields merge-attrs="&attributes.slice(*attrs_for(:with_fields))">
     <% field_name = this_field_name
        input_attrs = {:no_edit => no_edit} if tag == "input"
        field_name_as_param = scope.field_name.to_s.sub('?', '').gsub('.', '-')

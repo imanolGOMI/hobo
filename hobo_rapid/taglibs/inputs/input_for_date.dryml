@@ -26,8 +26,8 @@ Examples:
 <def tag="datepicker-rails" attrs="use-month-numbers, use-short-month, add-month-numbers, use-month-names, date-separator, start-year, end-year, discard-day, discard-month, discard-year, order, include-blank, default, disabled, prompt, prefix">
   <% order = order.nil? ? [:year, :month, :day] : comma_split(order).map(&:to_sym) -%>
   <%= date_select(param_name_for_this_parent, this_field,
-                  (all_attributes - attributes.keys).reverse_merge(:object => this_parent, :default => current_time).merge(:order => order),
-                  attributes - [:name]) %>
+                  (all_attributes.except(*attributes.keys)).reverse_merge(:object => this_parent, :default => current_time).merge(:order => order),
+                  attributes.except(:name)) %>
 </def>
 
 
@@ -52,8 +52,8 @@ The menus default to the current time if the current value is nil.
   -->
 <def tag="input" for="time" attrs="include-seconds, time-separator, prompt, prefix">
   <%= time_select( param_name_for_this_parent, this_field,
-                   (all_attributes - attributes.keys).reverse_merge(:object => this_parent, :default => current_time),
-                   attributes - [:name] ) %>
+                   (all_attributes.except(*attributes.keys)).reverse_merge(:object => this_parent, :default => current_time),
+                   attributes.except(:name) ) %>
 </def>
 
 
@@ -76,6 +76,6 @@ The menus default to the current time if the current value is nil.
        attributes.merge!(:order => order)
      end -%>
   <%= datetime_select(param_name_for_this_parent, this_field,
-                      (all_attributes - attributes.keys).reverse_merge(:object => this_parent, :default => current_time).merge(:order => order),
-                      attributes - [:name] ) %>
+                      (all_attributes.except(*attributes.keys)).reverse_merge(:object => this_parent, :default => current_time).merge(:order => order),
+                      attributes.except(:name) ) %>
 </def>

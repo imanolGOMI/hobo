@@ -8,7 +8,7 @@ class ModuleTest < Minitest::Test
   def test_included_in_class_callbacks_reaches_the_nested_module
     shouting = Module.new do
       def self.included_in_class(klass)
-        klass.metaclass_eval do
+        klass.singleton_class.class_eval do
           alias_method :quiet_label, :label
           def label; quiet_label.upcase; end
         end

@@ -93,7 +93,7 @@ module Hobo
         end
 
         def secondary_children
-          children.rest
+          children.drop(1)
         end
 
 

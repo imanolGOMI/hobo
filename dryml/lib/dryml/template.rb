@@ -667,7 +667,7 @@ module Dryml
                          merge_params[1..-1]
                        else
                          merge_param_names = merge_params.split(/\s*,\s*/).map { |name| name.gsub("-", "_").to_sym }
-                         "all_parameters & #{merge_param_names.inspect}"
+                         "all_parameters.slice(*#{merge_param_names.inspect})"
                        end
         "merge_parameter_hashes({#{param_items}}, (#{extra_params}) || {})"
       else
@@ -844,7 +844,7 @@ module Dryml
         "(#{merge_attrs[1..-1]})"
       else
         merge_attr_names = merge_attrs.split(/\s*,\s*/).map { |name| name.gsub("-", "_").to_sym }
-        "(all_attributes & #{merge_attr_names.inspect})"
+        "(all_attributes.slice(*#{merge_attr_names.inspect}))"
       end
     end
 
@@ -908,7 +908,7 @@ module Dryml
 
 
     def apply_control_attributes(expression, el)
-      controls = %w(if unless repeat).map_hash { |x| el.attributes[x] }.compact
+      controls = %w(if unless repeat).index_with { |x| el.attributes[x] }.compact
 
       dryml_exception("You can't have multiple control attributes on the same element", el) if
         controls.length > 1

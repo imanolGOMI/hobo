@@ -65,7 +65,7 @@ The `force` attribute causes the permission check to be skipped.
             attrs = add_classes(attributes, "view", type_and_field&.dasherize, model_id_class)
 
             view_attrs = attrs_for(view_tag)
-            the_view = send(view_tag, attrs & view_attrs)
+            the_view = send(view_tag, attrs.slice(*view_attrs))
 
             the_view = if_blank if if_blank && the_view.blank?
 
@@ -83,7 +83,7 @@ The `force` attribute causes the permission check to be skipped.
                         else
                           :span
                         end
-              element(wrapper, attrs - view_attrs, the_view)
+              element(wrapper, attrs.except(*view_attrs), the_view)
             end
           end
         end

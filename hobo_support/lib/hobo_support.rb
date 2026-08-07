@@ -4,7 +4,6 @@ require 'active_support/dependencies'
 
 require "hobo_support/fixes/pp"
 require "hobo_support/fixes/module"
-require 'hobo_support/metaid'
 require 'hobo_support/implies'
 require 'hobo_support/enumerable'
 require 'hobo_support/array'

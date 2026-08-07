@@ -71,7 +71,7 @@ module Dryml::Helper
 
     def param_name_for(path)
       field_path = field_path.to_s.split(".") if field_path.is_one_of?(String, Symbol)
-      attrs = path.rest.map{|part| "[#{part.to_s.sub /\?$/, ''}]"}.join
+      attrs = path.drop(1).map{|part| "[#{part.to_s.sub /\?$/, ''}]"}.join
       "#{path.first}#{attrs}"
     end
 

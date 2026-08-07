@@ -131,7 +131,7 @@ module Hobo
           alias_method_chain :"#{name}=", :accessible
         end
       end
-      metaclass.alias_method_chain :has_many, :accessible
+      singleton_class.alias_method_chain :has_many, :accessible
 
 
 
@@ -181,7 +181,7 @@ module Hobo
           alias_method_chain :"#{name}=", :finder
         end
       end
-      metaclass.alias_method_chain :belongs_to, :accessible
+      singleton_class.alias_method_chain :belongs_to, :accessible
 
 
       # Add :accessible to the valid options so AR doesn't complain

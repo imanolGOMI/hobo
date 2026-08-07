@@ -380,7 +380,7 @@ module Hobo
       # Add some singleton methods to +record+ to give the effect that +attribute+ is unknown. That is,
       # attempts to access the attribute will result in a Hobo::UndefinedAccessError
       def unknownify_attribute(attr)
-        metaclass.class_eval do
+        singleton_class.class_eval do
           define_method attr do
             raise Hobo::UndefinedAccessError
           end
@@ -393,7 +393,7 @@ module Hobo
         else
           # A regular field -- hack the dirty tracking methods
 
-          metaclass.class_eval do
+          singleton_class.class_eval do
 
             define_method "#{attr}_change" do
               raise Hobo::UndefinedAccessError
@@ -427,7 +427,7 @@ module Hobo
       def deunknownify_attribute(attr, remove_globals = true)
         attr = attr.to_sym
 
-        metaclass.send :remove_method, attr
+        singleton_class.send :remove_method, attr
 
         if (refl = self.class.reflections[attr.to_s]) && refl.macro == :belongs_to
           # A belongs_to -- restore the underlying fields
@@ -438,7 +438,7 @@ module Hobo
           # if remove_globals is false, skip the top-level methods, as we have already removed them
           to_remove = remove_globals ? [:changed?, :changed, :changes] : []
           (["#{attr}_change", "#{attr}_was", "#{attr}_changed?"] + to_remove).each do |m|
-            metaclass.send :remove_method, m.to_sym
+            singleton_class.send :remove_method, m.to_sym
           end
         end
       end

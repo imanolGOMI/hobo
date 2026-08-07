@@ -77,8 +77,8 @@ Example 2: navigation based on a collection of items.  Each item will be transfo
      name ||= body.gsub(/<.*?>/, '').strip
      -%>
   <li class="#{'active' if (c = scope.current_navigation) && c.downcase == name.downcase}"
-      merge-attrs="&attributes - (attrs_for(:a)+['target'])">
-    <a merge-attrs="&attributes & (attrs_for(:a)+['target'])"><%= body %></a>
+      merge-attrs="&attributes.except(*(attrs_for(:a)+['target']))">
+    <a merge-attrs="&attributes.slice(*(attrs_for(:a)+['target']))"><%= body %></a>
   </li>
 </def>
 

@@ -22,7 +22,7 @@ class Module
     (names + names_with_defaults.keys).each do |name|
       ivar_name = "@#{name}"
       block = names_with_defaults[name]
-      self.send(self.class == Module ? :define_method : :meta_def, name) do
+      self.send(self.class == Module ? :define_method : :define_singleton_method, name) do
         if instance_variable_defined? ivar_name
           instance_variable_get(ivar_name)
         else
@@ -79,7 +79,7 @@ end
 module Kernel
 
   def classy_module(mod=Module.new, &b)
-    mod.meta_def :included do |base|
+    mod.define_singleton_method(:included) do |base|
       base.class_eval &b
     end
     mod

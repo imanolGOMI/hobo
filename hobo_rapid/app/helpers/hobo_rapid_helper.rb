@@ -86,14 +86,14 @@ module HoboRapidHelper
     def query_parameters_filtered(options = {})
       query_params = (request.query_parameters | request.request_parameters)
       if options[:only]
-        query_params = query_params & options[:only]
+        query_params = query_params.slice(*options[:only])
       else
-        query_params = query_params - [:render, :render_options, :"_", :page_path, :authenticity_token]
+        query_params = query_params.except(:render, :render_options, :"_", :page_path, :authenticity_token)
         if form_field_path
-          query_params = query_params - [form_field_path[0]]
+          query_params = query_params.except(form_field_path[0])
         end
       end
-      query_params = query_params - options[:skip] if options[:skip]
+      query_params = query_params.except(*options[:skip]) if options[:skip]
       query_params
     end
 
