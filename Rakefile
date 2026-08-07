@@ -8,7 +8,7 @@ PORTED_GEMS = %w[hobo_support hobo_fields dryml]
 # Gems whose port is under way: they load on Ruby 3.4 and have a minitest suite
 # that runs, but the old suites (rubydoctest / irt) are still there and the
 # layer is not finished. Listed apart so "green" is not read as "done".
-PARTIAL_GEMS = %w[hobo]
+PARTIAL_GEMS = %w[hobo hobo_rapid]
 
 # Gems still carrying the pre-2026 suites in full, not yet runnable.
 PENDING_GEMS = %w[]

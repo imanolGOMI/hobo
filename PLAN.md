@@ -1625,10 +1625,61 @@ saca de ella el frame que pidió.**
 viejo, que se conserva a propósito como front-end del actualizador de plantillas
 (decisión 6). Lo que se ha ido es que Hobo dependa de él.
 
+### Las 27 conductas, contadas
+
+De las 1.045 líneas de jQuery, **Turbo se lleva unas 565 sin escribir nada**:
+
+| Se va con Turbo | Líneas | Por qué |
+|---|---:|---|
+| `hjq.js` | 397 | Es la maquinaria de peticiones y partes del protocolo que acaba de irse |
+| `hjq-form`, `hjq-formlet`, `hjq-a` | 146 | Enviar un formulario o seguir un enlace por ajax: `data-turbo-frame` |
+| `hjq-live-search`, `hjq-search-results` | 22 | Un formulario que se envía solo dentro de un frame |
+
+**Lo que sí es un widget y hay que reescribir** (~326 líneas): `input-many`,
+`select-many`, `spinner`, `delete-button`, `hot-input`, `before-unload` y
+`filter-menu`. Los de `hobo_jquery_ui` (acordeón, calendario, diálogo, pestañas,
+autocompletar) y los de `hobo_bootstrap_ui` van con el tema, en la capa 6 — y
+alguno se cae solo: el calendario es `<input type="date">` desde 2014.
+
+### El banco de navegador (2026-08-07)
+
+Un controlador de Stimulus **es** comportamiento en un navegador, así que se
+prueba en uno. En la máquina hay Firefox y `geckodriver`, y el banco los usa:
+
+```sh
+cd hobo && rake test:app      # trae capybara, selenium y el runtime de Stimulus
+cd hobo_rapid && rake test
+```
+
+Sirve una página pequeña con el controlador puesto, **la carga con un import map
+igual que lo hace una aplicación Rails** —importando `@hotwired/stimulus` por su
+nombre pelado—, la conduce con Firefox sin ventana y mira qué le pasó al DOM. Sin
+navegador, salta diciendo cómo montarlo.
+
+### `<input-many>` portado: la primera conducta
+
+Era **185 líneas de jQuery** y es la más característica de Hobo: una lista de
+filas de formulario que el usuario hace crecer y encoger. **8 pruebas en
+navegador, en verde**, sobre lo que de verdad importa:
+
+- la fila plantilla va con los inputs deshabilitados, para que nunca se envíe;
+- añadir clona la plantilla y **habilita** sus inputs;
+- **las filas se renumeran desde cero y sin huecos** tras añadir o quitar —que es
+  el motivo de todo el invento, porque Rails lee el índice del nombre—;
+- los `id` y los `for` de las etiquetas se renumeran con ellos;
+- solo la última fila ofrece «añadir»;
+- la fila vacía aparece solo mientras no hay ninguna;
+- con un mínimo, «quitar» desaparece.
+
+**Y algo que se cae solo:** ya no hace falta llamar a ninguna función de
+inicialización cuando cambia el DOM. Stimulus conecta y desconecta por su cuenta,
+y eso era buena parte de lo que hacía `hjq.js`.
+
 ### Por dónde va la capa 5
 
-1. **El JS a Stimulus**, empezando por el formulario ajax, que es el que arrastra
-   a los demás.
+1. **El JS a Stimulus.** Hecho: el protocolo de partes, `<input-many>` y el
+   banco de navegador. Quedan seis conductas: `select-many`, `spinner`,
+   `delete-button`, `hot-input`, `before-unload` y `filter-menu`.
 2. **El catálogo de vistas por tipo** (pieza 9), con el barrido de contrato de
    params de la capa 3: `require "rapid/param_contract"`.
 3. **El motor de derivación** (pieza 10): `cards.dryml.erb`, `pages.dryml.erb` y

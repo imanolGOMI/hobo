@@ -44,6 +44,12 @@ module TestApp
         f.puts
         f.puts "# The gems under test, straight from the working tree."
         GEMS.each { |gem| f.puts %(gem "#{gem}", :path => "#{File.join(root, gem)}") }
+        f.puts
+        f.puts "# The browser bench for the Stimulus controllers (hobo_rapid/test/browser)."
+        f.puts %(group :test do)
+        f.puts %(  gem "capybara")
+        f.puts %(  gem "selenium-webdriver")
+        f.puts %(end)
       end
 
       # Rails blocks requests whose Host it does not recognise, and a request
@@ -55,7 +61,25 @@ module TestApp
       end
 
       Dir.chdir(PATH) { sh "bundle install" }
+      fetch_stimulus
       puts "aplicacion de pruebas lista en #{PATH}"
+    end
+
+    # The Stimulus runtime, fetched once, so the browser tests load the
+    # controllers through a real import map -- bare `@hotwired/stimulus` and all
+    # -- exactly as an application does.
+    def fetch_stimulus
+      target = File.join(PATH, "public", "vendor", "stimulus.js")
+      return if File.exist?(target)
+
+      FileUtils.mkdir_p(File.dirname(target))
+      Dir.mktmpdir do |tmp|
+        Dir.chdir(tmp) { sh "npm pack @hotwired/stimulus" }
+        archive = Dir[File.join(tmp, "*.tgz")].first
+        sh %(tar xzf #{archive} -C #{tmp})
+        FileUtils.cp(File.join(tmp, "package", "dist", "stimulus.js"), target)
+      end
+      puts "stimulus en #{target}"
     end
 
     private
