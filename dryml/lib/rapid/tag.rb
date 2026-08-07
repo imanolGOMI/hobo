@@ -20,8 +20,22 @@ module Rapid
       @param_path = path
     end
 
-    def this  = Context.this
-    def scope = Context.scope
+    def this        = Context.this
+    def this_parent = Context.this_parent
+    def this_field  = Context.this_field
+    def scope       = Context.scope
+
+    # The declared type of what is being painted. When there is a value, it is
+    # the value's own class -- a rich type is a real class, so `:markdown` holds
+    # a Markdown, not a String. When there is not, the parent model still knows
+    # what the field was declared as, and that is what lets a blank field render
+    # as the kind of thing it is.
+    def this_type
+      return Rapid::Boolean if this == true || this == false
+      return this.class if this
+      return nil unless this_parent && this_field && this_parent.class.respond_to?(:attr_type)
+      this_parent.class.attr_type(this_field)
+    end
 
     def render
       Context.capture { content }
@@ -82,6 +96,11 @@ module Rapid
       end
       nil
     end
+
+    # Run a block and get back what it painted instead of painting it. It is
+    # what a tag needs when it has to *look* at its own output -- to decide
+    # whether it was blank, or to truncate it.
+    def capture(&block) = Context.capture(&block)
 
     def text(string) = (Context.buffer << CGI.escapeHTML(string.to_s); nil)
     def raw(string)  = (Context.buffer << string.to_s; nil)
@@ -159,7 +178,16 @@ module Rapid
     end
 
     def with_this(record, &block)
-      Context.with(:this => record, &block)
+      Context.with(:this => record, :this_parent => nil, :this_field => nil, &block)
+    end
+
+    # Walk into a field of the current record: `<view:body/>`. The three travel
+    # together, because separately they do not mean anything.
+    def with_field(field, record = this, &block)
+      Context.with(:this => record.send(field),
+                   :this_parent => record,
+                   :this_field => field.to_s,
+                   &block)
     end
 
     # --- odds and ends the templates use -------------------------------------

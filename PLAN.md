@@ -1688,12 +1688,43 @@ y eso era buena parte de lo que hacía `hjq.js`.
 | `select-many` (62) | Portado. La versión de jQuery **convertía la opción elegida en un `<optgroup>`** para esconderla, y la volvía a convertir al quitarla; ahora se deshabilita y se oculta, que es para lo que están esos atributos, y nada de lo que lea el `select` ve una lista distinta |
 | `delete-button` (43) | **Pendiente, y probablemente no se porta**: quitar el registro del DOM tras borrarlo es un `<turbo-stream action="remove">` que manda el servidor. Se decide al portar el tag |
 
+### Pieza 9 empezada: `<view>`, y lo que le faltaba al runtime (2026-08-07)
+
+`<view:body/>` no dice **cómo** pintar el cuerpo: dice «pinta este campo», y
+**el tipo decide**. Un `:markdown` sale como html, un `:date` con formato de
+fecha, un booleano como una marca. Es el catálogo de vistas por tipo, y para
+portarlo hicieron falta dos cosas del runtime.
+
+**1. El contexto no es un valor, es un valor y de dónde viene.** DRYML guardaba
+`this`, `this_parent` y `this_field` **juntos**, y los restauraba juntos. Sin el
+padre y el campo, un tag **no puede saber el tipo declarado de un `nil`**, ni
+preguntar si el campo se puede ver, ni nombrar la clase css de lo que pinta. El
+runtime tenía solo `this`; ahora tiene los tres, y `with_field(:body)` los mueve
+a la vez.
+
+Con eso, el despacho polimórfico va sobre **el tipo declarado**, no sobre
+`this.class`: un campo en blanco sigue pintándose como lo que es, y la página no
+da saltos cuando aparece un valor. Y hay `Rapid::Boolean`, porque en Ruby no
+existe una clase Boolean y una vista tiene que poder despachar sobre ella.
+
+**2. Un tag polimórfico no puede llevar conducta compartida.** Este lo aprendí
+equivocándome: `define_for` **sustituye el tag entero**, así que las vistas por
+tipo se saltaban el permiso, el envoltorio y el tratamiento del blanco. Son
+**dos tags**: `<view>` guarda todo eso y delega el pintado en `<view-content>`,
+que es el polimórfico. **DRYML tenía la misma pareja**, y ahora sé por qué.
+
+**11 pruebas**, sobre lo que importa: cada tipo se pinta a su manera y **dentro**
+de su envoltorio, la clase css lleva el modelo y el campo, un campo en blanco
+pinta su envoltorio igual, `if_blank` pone algo en su lugar, y un campo que no se
+puede ver **se niega** salvo `force`.
+
 ### Por dónde va la capa 5
 
 1. ~~**El JS a Stimulus.**~~ **Hecho**, salvo `delete-button`, que se decide al
    portar el tag. De 1.045 líneas de jQuery quedan ~250 de Stimulus.
-2. **El catálogo de vistas por tipo** (pieza 9), con el barrido de contrato de
-   params de la capa 3: `require "rapid/param_contract"`.
+2. **El catálogo de vistas por tipo** (pieza 9). Empezado: `<view>` y las vistas
+   de fecha, hora, número y booleano. Faltan los tipos ricos (markdown, textile,
+   html), las colecciones y el barrido de contrato de params.
 3. **El motor de derivación** (pieza 10): `cards.dryml.erb`, `pages.dryml.erb` y
    `forms.dryml.erb`, 534 líneas de ERB que generan un tag por modelo. Es *el*
    motivo de usar Hobo.

@@ -32,6 +32,10 @@ require_relative "rapid/tag"
 
 module Rapid
 
+  # There is no Boolean class in Ruby, and a view has to be able to dispatch on
+  # one. Hobo has always had this.
+  class Boolean; end
+
   @tags = {}
   @attrs = {}
   @polymorphic = Hash.new { |h, k| h[k] = {} }
@@ -65,15 +69,31 @@ module Rapid
 
     # :this, :path and :from are taken; a param cannot be called any of those.
     def render(name, attributes = {}, this: Context.this, path: [], from: nil, **params)
-      klass = polymorphic_lookup(name, this, from) || @tags.fetch(name)
+      klass = polymorphic_lookup(name, dispatch_type(this), from) || @tags.fetch(name)
       Context.with(:this => this) { klass.new(attributes, params, :path => path).render }
     end
 
     private
 
-    def polymorphic_lookup(name, this, from)
-      return nil unless @polymorphic.key?(name) && this
-      this.class.ancestors.each do |ancestor|
+    # What a polymorphic tag dispatches on.
+    #
+    # Not `this.class`: a rich type is a real class, so a `:markdown` field does
+    # hold a Markdown -- but a **blank** field holds nil, and it still has to
+    # render as the kind of thing it is. The parent model knows what the field
+    # was declared as, and that is the answer. And there is no Boolean class in
+    # Ruby, so `true` and `false` get one.
+    def dispatch_type(this)
+      return Boolean if this == true || this == false
+      return this.class if this
+
+      parent, field = Context.this_parent, Context.this_field
+      return nil unless parent && field && parent.class.respond_to?(:attr_type)
+      parent.class.attr_type(field)
+    end
+
+    def polymorphic_lookup(name, type, from)
+      return nil unless @polymorphic.key?(name) && type.is_a?(Module)
+      type.ancestors.each do |ancestor|
         found = @polymorphic[name][ancestor]
         return found if found && !found.equal?(from)
       end

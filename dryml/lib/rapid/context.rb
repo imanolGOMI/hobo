@@ -14,11 +14,20 @@ module Rapid
     class << self
       def state
         Thread.current[:rapid_state] ||=
-          { :buffer => nil, :this => nil, :scope => Scope.new, :old_stack => [] }
+          { :buffer => nil, :this => nil, :this_parent => nil, :this_field => nil,
+            :scope => Scope.new, :old_stack => [] }
       end
 
-      def buffer    = state[:buffer]
-      def this      = state[:this]
+      def buffer      = state[:buffer]
+      def this        = state[:this]
+
+      # `this` is not just a value: it is a value **and where it came from**.
+      # Without the parent record and the field name, a tag cannot tell the
+      # declared type of a nil, cannot ask whether the field may be viewed, and
+      # cannot name the css class of what it is painting. DRYML kept the same
+      # three together, saved and restored as one.
+      def this_parent = state[:this_parent]
+      def this_field  = state[:this_field]
       def scope     = state[:scope]
       def old_stack = state[:old_stack]
 
