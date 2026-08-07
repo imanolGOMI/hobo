@@ -1,8 +1,8 @@
-# The tag runtime of spike A, grown to whatever <table-plus> actually needs.
+# The tag runtime of spike A, grown to whatever the real tags actually need.
 #
-# Everything here exists because a real tag asked for it. Nothing is speculative.
-# ActiveSupport is used for `try` and a couple of Hash helpers, which is fair:
-# Hobo runs inside Rails anyway.
+# Everything here exists because a real tag, or a real DRYML feature, asked for
+# it. Nothing is speculative. ActiveSupport is used for `try` and a couple of
+# Hash helpers, which is fair: Hobo runs inside Rails anyway.
 
 require "cgi"
 require "active_support/core_ext/object/try"
@@ -63,13 +63,61 @@ module Rapid
     end
   end
 
+  # What a caller supplies for a param: DRYML's parameter tag, `<x: attr="v">`.
+  #
+  # A parameter is not just a block of content. It may also carry attributes for
+  # the element or tag call it customises, parameters *for that tag call* --
+  # which is what makes nesting work -- and the `replace` flag, which takes the
+  # element away instead of filling it in.
+  #
+  #   <heading:>Title</heading:>            Rapid.parameter { text "Title" }
+  #   <heading: class="big">Title</heading: Rapid.parameter(:attributes => { :class => "big" }) { ... }
+  #   <heading: replace><h2/></heading:>    Rapid.parameter(:replace => true) { ... }
+  #   <table:><row:>...</row:></table:>     Rapid.parameter(:params => { :row => ... })
+  class Parameter
+    attr_reader :attributes, :params, :content
+
+    def initialize(attributes: {}, params: {}, replace: false, &content)
+      @attributes = attributes
+      @params = params
+      @replace = replace
+      @content = self.class.normalize(content)
+    end
+
+    def replace? = @replace
+    def content? = !@content.nil?
+
+    # Parameters for the tag being called only mean something at a tag call.
+    def nested? = !@params.empty?
+
+    # A bare block is the common case: content, and nothing else.
+    def self.wrap(value) = value.is_a?(Parameter) ? value : new(&value)
+
+    # A block written inside a tag already carries the right `self` and has to
+    # keep it -- that is who owns the params it declares. A block written
+    # outside any tag (a page template, or a test) has no tag to be, so it gets
+    # an anonymous one.
+    def self.normalize(block)
+      return nil if block.nil?
+      return block if block.binding.receiver.is_a?(Tag)
+      outer = Tag.new
+      proc { outer.instance_exec(&block) }
+    end
+  end
+
   class Tag
     attr_reader :attributes, :all_attributes, :params
 
-    def initialize(attributes = {}, params = {})
+    # `path` is how the outside world addresses the params this tag declares: a
+    # list of param names to nest through, or nil when nothing leads here
+    # because the call site was not itself a param.
+    attr_reader :param_path
+
+    def initialize(attributes = {}, params = {}, path: nil)
       @attributes = attributes
       @all_attributes = attributes.dup.freeze
       @params = params
+      @param_path = path
     end
 
     def this  = Context.this
@@ -81,24 +129,12 @@ module Rapid
 
     # --- extension points ----------------------------------------------------
 
-    # A named extension point. The name may be computed at render time, which is
-    # what `param="#{scope.field_name}-heading"` needs.
+    # A named extension point with no element of its own -- DRYML's
+    # `<do param="x">default</do>`. The name may be computed at render time,
+    # which is what `param="#{scope.field_name}-heading"` needs.
     def param(name, &default)
-      override = @params[name]
-      if override
-        # The default goes on the *dynamic* stack, not on this tag's, for the
-        # same reason as the buffer: `old` is called from the override, which
-        # runs with the self of the tag that wrote it -- a different object.
-        # Keeping the stack per-instance made <old-x> render nothing at all.
-        Context.with(:old_stack => Context.old_stack + [default]) do
-          # `call`, not `instance_exec`: the block keeps the self of the tag that
-          # wrote it, which is who owns the params it declares. Getting this
-          # wrong makes overrides vanish without a word.
-          override.call
-        end
-      elsif default
-        default.call
-      end
+      parameter = parameter_for(name, :bare)
+      parameter ? render_content(parameter, default) : default&.call
       nil
     end
 
@@ -116,17 +152,24 @@ module Rapid
 
     # --- markup --------------------------------------------------------------
 
+    # An element that is itself an extension point -- `<h3 param="heading">`.
     # `param_name` may be nil (no extension point) or :none (explicitly not one).
+    #
+    # Filling it in keeps the element and replaces its content, merging the
+    # parameter's attributes; `replace` takes the element away as well, and then
+    # `old` emits the whole original element -- DRYML's `<x: restore/>`.
     def tag(name, attrs = {}, param_name = nil, &body)
-      emit = proc do
-        Context.buffer << "<#{name}#{format_attrs(attrs)}>"
-        body&.call
-        Context.buffer << "</#{name}>"
-      end
-      if param_name && param_name != :none
-        param(param_name) { emit.call }
+      parameter = param_name && param_name != :none ? parameter_for(param_name, :element) : nil
+      whole_element = proc { emit_element(name, attrs, &body) }
+
+      if parameter.nil?
+        whole_element.call
+      elsif parameter.replace?
+        render_content(parameter, whole_element)
       else
-        emit.call
+        emit_element(name, merge_attributes(attrs, parameter.attributes)) do
+          render_content(parameter, body)
+        end
       end
       nil
     end
@@ -143,8 +186,21 @@ module Rapid
       params = params.merge(:default => block) if block
       params = @params.merge(params) if merge_params
 
-      emit = proc { raw Rapid.render(name, attributes, :this => this, **params) }
-      as ? param(as) { emit.call } : emit.call
+      exposed_as = as && as != :none ? as : nil
+      parameter = exposed_as ? parameter_for(exposed_as, :call) : nil
+      path = exposed_as && @param_path ? @param_path + [exposed_as] : nil
+
+      if parameter && !parameter.replace?
+        attributes = merge_attributes(attributes, parameter.attributes)
+        # The caller's nested params win over the ones this tag fills in. That
+        # is the whole point of exposing the call as a param: without it the
+        # params of the tag being called would be unreachable from outside.
+        params = params.merge(parameter.params)
+        params = params.merge(:default => shadowing_default(parameter, params[:default])) if parameter.content?
+      end
+
+      whole_call = proc { raw Rapid.render(name, attributes, :this => this, :path => path, **params) }
+      parameter&.replace? ? render_content(parameter, whole_call) : whole_call.call
       nil
     end
 
@@ -176,11 +232,62 @@ module Rapid
     def controller_ivar(_name) = nil
 
     def default_row
-      Rapid.attrs_for(:table) # placeholder: the real <table> renders its fields
       tag("td") { text this.to_s }
     end
 
     private
+
+    # The three kinds of param site: a bare `param`, an element carrying one,
+    # and a tag call exposed with `as:`. Only the last can take nested params,
+    # because only it has another tag's params to pass them to.
+    SITES = { :bare => "no tiene elemento", :element => "es un elemento" }.freeze
+
+    def parameter_for(name, kind)
+      value = @params[name]
+      return nil unless value
+
+      parameter = Parameter.wrap(value)
+      if parameter.nested? && kind != :call
+        raise ArgumentError, "el param #{name.inspect} #{SITES[kind]}, no es una llamada a " \
+                             "otro tag, asi que no admite params anidados"
+      end
+      parameter
+    end
+
+    # The parameter's content replaces the default, and the default is what
+    # `old` reaches. A parameter with no content of its own -- one that only
+    # carries attributes or nested params -- leaves the default alone.
+    def render_content(parameter, default)
+      if parameter.content?
+        Context.with(:old_stack => Context.old_stack + [default]) { parameter.content.call }
+      else
+        default&.call
+      end
+      nil
+    end
+
+    # Content given to a tag-call param becomes that call's default content. If
+    # the tag was already supplying some, that is what `old` reaches.
+    def shadowing_default(parameter, shadowed)
+      return parameter.content unless shadowed
+      Parameter.new { render_content(parameter, Parameter.wrap(shadowed).content) }
+    end
+
+    # DRYML merges the class attribute rather than overwriting it, which is how
+    # `<card: class="odd">` on `<div class="card">` ends up as "card odd".
+    def merge_attributes(base, extra)
+      return base if extra.nil? || extra.empty?
+      merged = base.merge(extra)
+      merged[:class] = "#{base[:class]} #{extra[:class]}" if base[:class] && extra[:class]
+      merged
+    end
+
+    def emit_element(name, attrs)
+      Context.buffer << "<#{name}#{format_attrs(attrs)}>"
+      yield if block_given?
+      Context.buffer << "</#{name}>"
+      nil
+    end
 
     def format_attrs(attrs)
       attrs.reject { |_, v| v.nil? || v == false }
@@ -204,12 +311,13 @@ module Rapid
 
     def attrs_for(name) = @attrs.fetch(name, [])
 
-    # A param block written outside any tag -- a page template, or a test.
-    # It becomes an anonymous tag that declares no params of its own.
-    def markup(&block)
-      outer = Tag.new({}, {})
-      proc { outer.instance_exec(&block) }
+    # A parameter tag: `<x: attr="v" replace><nested:>...</nested:></x>`.
+    def parameter(attributes: {}, params: {}, replace: false, &content)
+      Parameter.new(:attributes => attributes, :params => params, :replace => replace, &content)
     end
+
+    # The common case: a parameter that is only content.
+    def markup(&block) = Parameter.new(&block)
 
     # <extend tag="x"> -- prepend, so `super` is <old-x>.
     def extend_tag(name, &body)
@@ -220,9 +328,9 @@ module Rapid
       @polymorphic[name][type] = Class.new(Tag) { define_method(:content, &body) }
     end
 
-    def render(name, attributes = {}, this: Context.this, **params)
+    def render(name, attributes = {}, this: Context.this, path: [], **params)
       klass = polymorphic_lookup(name, this) || @tags.fetch(name)
-      Context.with(:this => this) { klass.new(attributes, params).render }
+      Context.with(:this => this) { klass.new(attributes, params, :path => path).render }
     end
 
     private

@@ -377,16 +377,88 @@ no se llame a sí mismo. **Es exactamente el mismo error del que veníamos, y
 reapareció a un metro de donde lo habíamos arreglado.** La prueba lo cazó el
 primer día.
 
-### El hueco que la prueba dejó documentado
+### Los params anidados (2026-08-07) — **hechos**
 
-`<table-plus>` pasa el barrido con **dos excepciones**, y ninguna es un fallo:
-`:field_heading_row` y `:default` son params de `<table>` y de
-`<with-field-names>`, no de `<table-plus>`, y `<table-plus>` los rellena.
-Alcanzarlos desde fuera necesita la **sintaxis de params anidados** de DRYML
-(`<table:><field-heading-row:>…`), **que el runtime todavía no tiene**.
+El barrido dejó documentado un hueco: `:field_heading_row` y `:default` son
+params de `<table>` y de `<with-field-names>`, no de `<table-plus>`, y no había
+forma de alcanzarlos desde fuera. Eso es la **sintaxis de params anidados** de
+DRYML, `<table:><field-heading-row:>…</table:>`, y ya está.
 
-Está anotado como excepción en vez de descubrirse el día que a alguien no le
-funcione su tema. **Es trabajo pendiente de la capa 3.**
+**Al implementarla apareció que un param no es un bloque de contenido.** Los
+`.feature` de cucumber de `dryml/` son la especificación, y dicen que una
+etiqueta de parámetro lleva **cuatro cosas**:
+
+| DRYML | Ruby |
+|---|---|
+| `<heading:>Title</heading:>` | `Rapid.parameter { text "Title" }` |
+| `<heading: class="big">` | `Rapid.parameter(:attributes => { :class => "big" })` |
+| `<heading: replace>` | `Rapid.parameter(:replace => true)` |
+| `<table:><row:>…</row:></table:>` | `Rapid.parameter(:params => { :row => … })` |
+
+Y de ahí salen **las reglas que el runtime no tenía**:
+
+1. **Rellenar un param conserva el elemento**: `<h3 param="heading">` con
+   `<heading:>X</heading:>` da `<h3>X</h3>`, no `X`. Antes sustituía el elemento
+   entero. **`replace` es lo que se lo lleva**, y entonces `old` emite el
+   elemento original — que es el `<x: restore/>` de DRYML, y sale gratis.
+2. **Los atributos se fusionan**, y `class` se **concatena**: `class="card"` con
+   `<card: class="odd">` da `class="card odd"`.
+3. **Un param sin contenido propio deja el defecto en paz.** Es lo que permite
+   `<card: class="x">` sin tocar el interior, y lo que hace que un param anidado
+   solo aporte lo suyo.
+4. **Los params anidados solo tienen sentido en una llamada a otro tag.** En un
+   elemento no hay params de nadie a los que pasarlos, así que **se lanza un
+   error en vez de tragárselos**.
+5. **Los params anidados del que llama ganan** a los que el tag rellena por su
+   cuenta. Si no, no serían un punto de extensión.
+
+**Un tag expone la llamada con `as:`**, que es el `<search-filter param/>`
+pelado. Sin eso no hay nada que lleve hasta los params del tag llamado, y **eso
+es lo que la prueba ahora sabe distinguir**: no es lo mismo «se perdió en
+silencio» que «nadie expuso la llamada».
+
+### La prueba de contrato aprendió a navegar
+
+Ya no prueba solo el nivel de arriba. Cada tag conoce **su dirección**
+(`param_path`): la lista de params por los que hay que anidar para llegar a él,
+o `nil` si nada lleva hasta ahí. El grabador la apunta con cada param, y el
+barrido **construye el anidamiento solo**, a la profundidad que haga falta:
+
+```ruby
+# dirección [:table, :field_heading_row]
+:table => Rapid.parameter(:params => { :field_heading_row => centinela })
+```
+
+Y usa **dos sondas**, porque son dos promesas distintas:
+
+- **`replace`** — se le exige a **todos** los params: el que llama puede quitar
+  el punto de extensión y poner lo suyo.
+- **rellenar** — se le exige a los params **de elemento y a los pelados**, no a
+  las llamadas a otro tag: el tag llamado es libre de ignorar el contenido que
+  le den, y `<search-filter>` lo ignora. Exigírselo sería mentir.
+
+El gancho pasó de `param` a `parameter_for`, que es lo único que comparten los
+**tres tipos de sitio** (param pelado, elemento con param, llamada expuesta con
+`as:`). Enganchado a `param` se perdía dos de los tres.
+
+**`<table-plus>` queda con una sola excepción**, y no es un fallo del runtime:
+`<table-plus>` llama a `<with-field-names>` **sin exponer la llamada**, así que
+a sus params no llega nadie. Es una decisión de `<table-plus>`, y está escrita.
+
+### Lo que queda de la sintaxis de parámetros
+
+Sin hacer, y anotado para no confundirlo con lo que sí está:
+
+- **Pseudo-params**: `<append-x:>`, `<prepend-x:>`, `<before-x:>`, `<after-x:>`
+  y `without-x`.
+- **`<x: param>` / `<x: param="otro">`** — que un tag reexponga con otro nombre
+  un param del tag al que llama. Es lo que hace `<linked-card>` en los
+  `.feature`.
+- **`merge-params="bar"`** con lista de nombres; hoy `merge_params` es todo o nada.
+- El **nombre del param como clase CSS** (`<div param="body">` → `class="body"`).
+  Aparece en los `.feature` pero no en `template.rb`: hay que averiguar de dónde
+  sale antes de copiarlo. Es convención de pintado, no del mecanismo, así que
+  puede esperar a la capa 6.
 
 ---
 
@@ -800,9 +872,9 @@ orden:
 2. ~~Escribir la prueba de contrato.~~ **HECHA el 2026-08-07.** Ver «La prueba de
    contrato» más arriba. Descubrió de paso que `old` no emitía nada, y está
    arreglado.
-3. **Sintaxis de params anidados** (`<table:><field-heading-row:>…`), que es el
-   hueco que dejó documentado el barrido de `<table-plus>`. Sin ella, un tema no
-   puede alcanzar los params de los tags que otro tag llama por él.
+3. ~~Sintaxis de params anidados.~~ **HECHA el 2026-08-07.** Ver «Los params
+   anidados» más arriba. Trajo consigo el modelo de parámetro completo:
+   contenido, atributos, `replace` y params anidados.
 4. Portar un segundo tag grande —`<form>` (104 líneas) o `<field-list>`— para
    confirmar antes de comprometerse con los 111. **Pasarle el barrido de
    contrato**, que es gratis: `assert_every_param_overridable`.

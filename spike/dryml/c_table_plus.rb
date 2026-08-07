@@ -143,7 +143,15 @@ if __FILE__ == $PROGRAM_NAME
   puts Rapid.render(:table_plus,
                     { :fields => "title, status", :sort_field => "title", :sort_direction => "asc" },
                     :this => stories,
-                    :title_heading => Rapid.markup { tag("th", { :class => "shouty" }) { text "TITLE!" } })
+                    :title_heading => Rapid.parameter(:attributes => { :class => "shouty" }) { text "TITLE!" })
+
+  puts
+  puts "--- a param of <table>, reached by nesting through the call to it ---"
+  puts Rapid.render(:table_plus,
+                    { :fields => "title", :sort_field => "title", :sort_direction => "asc" },
+                    :this => stories,
+                    :table => Rapid.parameter(
+                      :params => { :row => Rapid.markup { tag("td", { :class => "mine" }) { text this.title } } }))
 
   puts
   puts "--- asking whether the caller supplied :controls (all_parameters) ---"

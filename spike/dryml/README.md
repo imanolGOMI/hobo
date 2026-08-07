@@ -200,9 +200,56 @@ el `self` de quien lo escribió. **El mismo error de spike C, a un metro de dond
 lo habíamos arreglado.** La pila vive ahora en `Rapid::Context`, con el buffer,
 `this` y `scope`.
 
-## Lo que dejó anotado
+## Lo que dejó anotado, y que ya está hecho
 
-`<table-plus>` pasa con dos excepciones: `:field_heading_row` y `:default` son
-params de los tags a los que llama, y hacen falta los **params anidados** de
-DRYML (`<table:><field-heading-row:>…`) para alcanzarlos desde fuera. El runtime
-no los tiene todavía.
+`<table-plus>` pasaba con dos excepciones, porque no había forma de alcanzar los
+params de los tags a los que llama. Eso son los **params anidados**, y ya están.
+
+---
+
+# Params anidados y el modelo de parámetro
+
+Un parámetro **no es un bloque de contenido**. Los `.feature` de `dryml/` son la
+especificación, y dicen que lleva cuatro cosas:
+
+| DRYML | Ruby |
+|---|---|
+| `<heading:>Title</heading:>` | `Rapid.parameter { text "Title" }` |
+| `<heading: class="big">` | `Rapid.parameter(:attributes => { :class => "big" })` |
+| `<heading: replace>` | `Rapid.parameter(:replace => true)` |
+| `<table:><row:>…</row:></table:>` | `Rapid.parameter(:params => { :row => … })` |
+
+Las reglas que salen de ahí:
+
+1. **Rellenar conserva el elemento.** `<h3 param="heading">` con `<heading:>X`
+   da `<h3>X</h3>`. **`replace` es lo que se lleva el elemento**, y entonces
+   `old` emite el original — el `<x: restore/>` de DRYML, gratis.
+2. **Los atributos se fusionan**, y `class` se concatena: `card` + `odd`.
+3. **Un parámetro sin contenido deja el defecto en paz.**
+4. **Anidar solo tiene sentido en una llamada a otro tag.** En un elemento no
+   hay params a los que pasarlos, así que **se lanza un error** en vez de
+   tragárselos.
+5. **Los params anidados del que llama ganan** a los que el tag rellena solo.
+
+Un tag expone una llamada con `as:` (el `<search-filter param/>` pelado). Sin
+eso no hay camino hasta los params del tag llamado.
+
+## La prueba aprendió a navegar
+
+Cada tag conoce **su dirección** (`param_path`), y el barrido **construye el
+anidamiento solo**, a la profundidad que haga falta. Usa **dos sondas**:
+`replace` se le exige a todos los params; **rellenar** solo a los de elemento y
+a los pelados, porque el tag llamado es libre de ignorar el contenido que le den
+—`<search-filter>` lo ignora— y exigírselo sería mentir.
+
+El gancho pasó de `param` a `parameter_for`, lo único que comparten los tres
+tipos de sitio. Enganchado a `param` se perdía dos de los tres.
+
+**Queda una sola excepción en `<table-plus>`**, y no es del runtime:
+`<table-plus>` llama a `<with-field-names>` sin exponer la llamada.
+
+## Lo que falta de la sintaxis de parámetros
+
+Pseudo-params (`append-`, `prepend-`, `before-`, `after-`, `without-`), `<x:
+param>` para reexponer con otro nombre, `merge-params="lista"`, y el nombre del
+param como clase CSS.

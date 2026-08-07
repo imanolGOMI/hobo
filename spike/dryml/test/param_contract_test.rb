@@ -13,8 +13,8 @@ module Canary
   # *wrote* it. That is the whole bug, in four lines.
   module NaiveParamLookup
     def param(name, &default)
-      override = @params[name]
-      override ? instance_exec(&override) : default&.call
+      override = parameter_for(name, :bare)
+      override ? instance_exec(&override.content) : default&.call
       nil
     end
   end
@@ -56,7 +56,7 @@ class ParamContractTeethTest < Minitest::Test
     end
 
     assert_includes failure.message, "inner_heading"
-    assert_includes failure.message, "se perdio en silencio"
+    assert_includes failure.message, "no se puede sobreescribir desde fuera"
   end
 
   def test_the_same_tags_on_the_real_runtime_pass
@@ -109,6 +109,17 @@ module Fixtures
   # mutates the registry for good -- cannot leak into the ones that do not.
   Rapid.define(:extendable_panel, :attrs => [:title], &PANEL)
 
+  # <page> exposes its call to <panel> as a param, which is what makes the
+  # panel's own params reachable from a caller of <page>: nested parameters.
+  Rapid.define(:page, :attrs => [:title]) do
+    tag("body") { call_tag(:panel, { :title => attributes[:title] }, :as => :panel) }
+  end
+
+  # One more level, to show the nesting has no depth limit.
+  Rapid.define(:site, :attrs => [:title]) do
+    call_tag(:page, { :title => attributes[:title] }, :as => :page)
+  end
+
   Rapid.define(:view) { text this.to_s }
   Rapid.define_for(:view, Integer) { text "##{this}" }
   Rapid.define_for(:view, String)  { text this.upcase }
@@ -147,10 +158,35 @@ class RuntimeContractTest < Minitest::Test
 
   def test_old_is_available_at_every_level_of_nesting
     output = Rapid.render(:panel, { :title => "Stories" },
-                          :box => Rapid.markup { tag("section") { old } },
+                          :box => Rapid.parameter(:replace => true) { tag("section") { old } },
                           :heading => Rapid.markup { tag("div", { :class => "wrap" }) { old } })
 
     assert_includes output, %(<section><div class="panel"><div class="wrap"><h1>Stories</h1></div>)
+  end
+
+  # The DRYML semantics of a parameter tag on an element: the element stays, its
+  # attributes are merged -- `class` by concatenation, as DRYML does -- and only
+  # the content is replaced. `replace` is what takes the element away.
+  def test_a_parameter_keeps_the_element_and_merges_its_attributes
+    output = Rapid.render(:panel, { :title => "Stories" },
+                          :box => Rapid.parameter(:attributes => { :class => "wide", :id => "main" }) { text "Mine" })
+
+    assert_includes output, %(<div class="panel wide" id="main">Mine</div>)
+  end
+
+  def test_replace_takes_the_element_away
+    output = Rapid.render(:panel, { :title => "Stories" },
+                          :box => Rapid.parameter(:replace => true) { text "Mine" })
+
+    assert_equal "Mine", output
+  end
+
+  # A parameter that carries no content of its own leaves the default alone.
+  def test_a_parameter_with_only_attributes_leaves_the_default_content
+    output = Rapid.render(:panel, { :title => "Stories" },
+                          :box => Rapid.parameter(:attributes => { :id => "main" }))
+
+    assert_includes output, %(<div class="panel" id="main"><h1>Stories</h1>)
   end
 
   # Property 2, the other half: <extend> from another gem, without knowing which
@@ -192,6 +228,51 @@ class RuntimeContractTest < Minitest::Test
     assert_equal "<li>First</li><li>Second</li>", output
   end
 
+  # --- nested parameters ------------------------------------------------------
+  #
+  # <page><panel:><body:>Mine</body:></panel:></page>
+
+  def test_a_param_of_a_called_tag_is_reached_by_nesting
+    output = Rapid.render(:page, { :title => "Stories" },
+                          :panel => Rapid.parameter(:params => { :body => Rapid.markup { text "Mine" } }))
+
+    assert_includes output, %(<div class="panel"><h1>Stories</h1>Mine</div>)
+  end
+
+  def test_the_nesting_has_no_depth_limit
+    output = Rapid.render(:site, { :title => "Stories" },
+                          :page => Rapid.parameter(
+                            :params => { :panel => Rapid.parameter(
+                              :params => { :heading_text => Rapid.markup { text "Deep" } }) }))
+
+    assert_includes output, "<h1>Deep</h1>"
+  end
+
+  # A nested parameter is a parameter tag like any other, so it merges
+  # attributes at its own level too.
+  def test_a_nested_parameter_merges_attributes_at_its_own_level
+    output = Rapid.render(:page, { :title => "Stories" },
+                          :panel => Rapid.parameter(
+                            :params => { :box => Rapid.parameter(:attributes => { :id => "main" }) }))
+
+    assert_includes output, %(<div class="panel" id="main"><h1>Stories</h1>)
+  end
+
+  # Nesting only means something at a tag call: an element has no other tag's
+  # params to pass them to. Saying so out loud beats dropping them in silence.
+  def test_nested_params_on_something_that_is_not_a_tag_call_are_refused
+    error = assert_raises(ArgumentError) do
+      Rapid.render(:panel, { :title => "Stories" },
+                   :box => Rapid.parameter(:params => { :heading => Rapid.markup { text "x" } }))
+    end
+
+    assert_includes error.message, "no admite params anidados"
+  end
+
+  def test_every_param_reachable_through_two_levels_is_overridable
+    assert_every_param_overridable(:site, { :name => "site", :attributes => { :title => "Stories" } })
+  end
+
   # The spike C rule, stated on its own: a param written inside a body handed to
   # another tag belongs to the tag that *wrote* it.
   def test_a_param_written_inside_another_tags_body_belongs_to_the_writer
@@ -220,14 +301,16 @@ class TablePlusContractTest < Minitest::Test
        :this => RapidTest.stories }]
   end
 
-  # The two exceptions are not params of <table-plus>: they belong to the tags
-  # it calls, and <table-plus> fills them itself. Reaching them from outside
-  # needs DRYML's nested param syntax (<table:><field-heading-row:>...), which
-  # the runtime does not have yet. They are listed so the gap is on the record
-  # instead of being discovered by someone's theme not working.
+  # <table-plus> calls <with-field-names> without exposing the call as a param,
+  # so nothing leads to the params of <with-field-names> and no amount of
+  # nesting reaches them. That is a decision of <table-plus>, not a hole in the
+  # runtime -- and it is written down here instead of being discovered by
+  # someone's theme quietly not working.
+  #
+  # :field_heading_row used to be here too. It is a param of <table>, and now
+  # that nesting exists it is reachable as <table:><field-heading-row:>.
   EXCEPTIONS = {
-    :field_heading_row => "es un param de <table>, y <table-plus> lo rellena",
-    :default => "es un param de <with-field-names>, y <table-plus> lo rellena",
+    :default => "<table-plus> llama a <with-field-names> sin exponer la llamada",
   }.freeze
 
   def test_every_param_of_table_plus_is_overridable
@@ -238,17 +321,38 @@ class TablePlusContractTest < Minitest::Test
   # Named here so a regression says which one broke.
   def test_the_params_with_a_computed_name_are_overridable_one_by_one
     %i[title_heading title_heading_link status_heading status_heading_link].each do |name|
-      output = render_tag(:table_plus, scenarios.first, name => ParamContract.sentinel)
+      output = render_tag(:table_plus, scenarios.first, name => ParamContract.replacement)
       assert_includes output, ParamContract::SENTINEL, "se perdio #{name.inspect}"
     end
   end
 
+  # `<title-heading: class="shouty">TITLE!</title-heading:>`: the <th> stays,
+  # the class is merged onto it and only the content changes.
   def test_overriding_one_computed_param_leaves_its_neighbour_alone
     output = render_tag(:table_plus, scenarios.first,
-                        :title_heading => Rapid.markup { tag("th", { :class => "shouty" }) { text "TITLE!" } })
+                        :title_heading => Rapid.parameter(:attributes => { :class => "shouty" }) { text "TITLE!" })
 
     assert_includes output, %(<th class="shouty">TITLE!</th>)
     assert_includes output, "Status"
+  end
+
+  # The gap this closes: a param of <table>, reached from a caller of
+  # <table-plus> by nesting through the call <table-plus> makes to it.
+  def test_a_param_of_the_table_is_reached_by_nesting_through_it
+    output = render_tag(:table_plus, scenarios.first,
+                        :table => Rapid.parameter(
+                          :params => { :row => Rapid.markup { tag("td", { :class => "mine" }) { text this.title } } }))
+
+    assert_includes output, %(<tr><td class="mine">First</td></tr>)
+    assert_includes output, %(<tr><td class="mine">Second</td></tr>)
+  end
+
+  def test_the_heading_row_of_the_table_is_reached_by_nesting_through_it
+    output = render_tag(:table_plus, scenarios.first,
+                        :table => Rapid.parameter(
+                          :params => { :field_heading_row => Rapid.markup { tag("th") { text "Just one" } } }))
+
+    assert_includes output, "<thead><th>Just one</th></thead>"
   end
 
   # all_parameters: a tag can ask whether the caller supplied a param at all.
