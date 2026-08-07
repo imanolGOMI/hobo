@@ -1881,6 +1881,49 @@ ansiosa que hacía falta sale sola del sitio correcto.
 **Aplazado a la capa 6:** los 11 tags de `editors/`, que son widgets de
 navegador y se deciden con el tema delante.
 
+## Capa 6 — el tema (2026-08-07)
+
+### El inventario, y un aviso grande
+
+`hobo_bootstrap` son **26 tags en 865 líneas**. `<page>` solo, **145 líneas con
+~30 puntos de extensión**: es el contrato de temas, y es justo lo que el barrido
+de la capa 3 existe para vigilar.
+
+> ⚠ **El tema apunta a `bootstrap-sass ~> 2.1`: Bootstrap 2.1, de 2012.** El
+> marcado que escribe —`navbar-inner`, `nav-collapse`, `icon-bar`,
+> `data-toggle="collapse"`— **no existe desde Bootstrap 3** (2013), y hoy va por
+> la 5.3. Portar el marcado tal cual daría una página maquetada para un CSS que
+> lleva trece años sin existir.
+>
+> **Decisión pendiente de confirmar (la tomo yo para no bloquear):** se porta
+> **la estructura y el contrato de params**, que es lo valioso, y el marcado se
+> escribe para **Bootstrap 5**. Si prefieres otra cosa —Bootstrap 4, Tailwind,
+> o CSS propio sin framework— se cambia el marcado, que es lo barato; el
+> contrato no.
+
+> Y una curiosidad que hay que decidir: uno de los params se llama
+> **`navbar-innner`**, con tres enes. Es una errata que se publicó, así que
+> **forma parte del contrato**: un tema que la sobreescriba se rompe si la
+> arreglamos. Propongo arreglarla y anotarlo, porque esta fase es solo para
+> aplicaciones nuevas.
+
+### Pieza 13a hecha: los tags estructurales se van a RAPID
+
+No eran del tema. Un mensaje flash, una lista de errores de validación, las
+transiciones que ofrece un registro: **eso lo tiene una aplicación, se vea como
+se vea**. Un tema decide cómo se ven; no debería decidir si existen.
+
+Moverlos significa que **una aplicación sin tema los tiene igual**, y que un
+segundo tema no tiene que reimplementarlos para no perderlos.
+
+| Tag | Qué hace |
+|---|---|
+| `<flash-message>` / `<flash-messages>` | Los mensajes que dejó la aplicación. **Las clases son las suyas** —`:notice`, `:error`, lo que ponga—, no una lista fija |
+| `<error-messages>` | Por qué no se pudo guardar. **No pinta nada si no hay nada que decir**, para que un formulario no arrastre una caja vacía |
+| `<transition-buttons>` | Las jugadas que el registro ofrece **a este usuario ahora**. No están escritas en ninguna parte: son lo que el lifecycle de la pieza 5 permite |
+
+**11 pruebas**, con el barrido de contrato.
+
 ## Reglas de trabajo
 
 - **Nunca hacer push.** Ni a este repo ni a ninguno. Solo commits locales.
