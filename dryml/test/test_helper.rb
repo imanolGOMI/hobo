@@ -1,15 +1,15 @@
 require "date"
 require "minitest/autorun"
 
-require_relative "../runtime"
-require_relative "param_contract"
+require "rapid"
+require "rapid/param_contract"
 
 # The ported <table-plus> of spike C. It is required, not copied: the contract
 # has to run against the real port, or it proves nothing.
-require_relative "../c_table_plus"
+require_relative "tags/table_plus"
 
 # And the ported <form> of spike D, base tag and generated per-model tag.
-require_relative "../d_form"
+require_relative "tags/form"
 
 module RapidTest
 

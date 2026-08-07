@@ -1,0 +1,42 @@
+module Rapid
+
+  # The output buffer, `this`, `scope` and the stack of defaults behind `old`
+  # are *dynamic*, not per-tag state.
+  #
+  # This is the whole lesson of spike C. A param block is written inside one tag
+  # but executed while another is rendering, and Ruby closures capture `self`
+  # lexically -- so the block must keep the self of the tag that wrote it (that
+  # is who owns its params) while writing into the buffer, `this` and `scope` of
+  # whoever is rendering right now.
+  #
+  # DRYML's part_context.rb and scoped_variables exist for exactly this.
+  module Context
+    class << self
+      def state
+        Thread.current[:rapid_state] ||=
+          { :buffer => nil, :this => nil, :scope => Scope.new, :old_stack => [] }
+      end
+
+      def buffer    = state[:buffer]
+      def this      = state[:this]
+      def scope     = state[:scope]
+      def old_stack = state[:old_stack]
+
+      def with(**changes)
+        previous = state.dup
+        state.merge!(changes)
+        yield
+      ensure
+        Thread.current[:rapid_state] = previous
+      end
+
+      def capture
+        with(:buffer => +"") do
+          yield
+          buffer
+        end
+      end
+    end
+  end
+
+end

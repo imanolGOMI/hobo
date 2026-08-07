@@ -20,8 +20,12 @@
 # Stubbed, because they are Rails and not the tag runtime: routing (object_url),
 # forgery protection, i18n, and the model's permission methods.
 
+# Runnable on its own, so it sets the load path up the way the Rakefile does.
+$LOAD_PATH.unshift File.expand_path("../../../hobo_support/lib", __dir__)
+
 require "cgi"
-require_relative "runtime"
+require_relative "../../lib/rapid"
+require_relative "rapid_helpers"
 
 module FormSpike
 
@@ -60,7 +64,7 @@ module FormSpike
     # `<else>` to take over.
     def form_helper(attributes)
       attrs, other_attrs = attributes.partition_hash(FORM_ATTRS)
-      ajax_attrs, html_attrs = other_attrs.partition_hash(Rapid::AJAX_ATTRS)
+      ajax_attrs, html_attrs = other_attrs.partition_hash(RapidHelpers::AJAX_ATTRS)
 
       new_record = this.try(:new_record?)
       method = attrs[:method]&.downcase ||

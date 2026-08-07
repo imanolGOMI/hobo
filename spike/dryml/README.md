@@ -1,5 +1,11 @@
 # Spike: ¿sobre qué se reconstruye DRYML?
 
+> **El runtime ya no vive aquí.** Es la gema `dryml`: `dryml/lib/rapid.rb` y
+> `dryml/lib/rapid/`, con sus pruebas en `dryml/test/` y los dos tags portados
+> en `dryml/test/tags/`. Este directorio es el **registro de cómo se eligió el
+> sustrato**, no código vivo. Lo único que sigue siendo ejecutable es
+> `a_ruby_dsl.rb`.
+
 Este spike existe para contestar **una** pregunta con código delante, no con
 corazonadas. Es lo que abre la capa 3 del `PLAN.md`.
 
@@ -19,6 +25,14 @@ ya decidimos conservar:
 ```sh
 ruby spike/dryml/a_ruby_dsl.rb     # funciona, sin dependencias
 # spike/dryml/b_view_component.rb  # no arranca sin Rails; es analisis estructural
+```
+
+El runtime de verdad y sus pruebas:
+
+```sh
+cd dryml && rake test
+ruby dryml/test/tags/table_plus.rb
+ruby dryml/test/tags/form.rb
 ```
 
 ## Resultado
@@ -92,7 +106,7 @@ Es decir: **elegir B nos volvería a meter en el problema del que veníamos.**
 
 # Spike C — un tag real y grande: `<table-plus>`
 
-`ruby spike/dryml/c_table_plus.rb` · runtime en `runtime.rb`
+`ruby dryml/test/tags/table_plus.rb` · runtime en `dryml/lib/rapid.rb`
 
 Se eligió `<table-plus>` (`hobo_rapid/taglibs/plus/table_plus.dryml`, 58 líneas)
 porque es el peor caso del catálogo: usa **nombres de param calculados en
@@ -172,11 +186,14 @@ alcanzable**, o lo volveremos a perder de uno en uno y en silencio.
 # La prueba de contrato
 
 ```sh
-cd spike/dryml && rake test     # tambien entra en el `rake test` de la raiz
+cd dryml && rake test     # tambien entra en el `rake test` de la raiz
 ```
 
-`test/param_contract.rb` es la comprobación; `test/param_contract_test.rb` la
-usa. **No hay ninguna lista de params escrita a mano**, porque esa lista es lo
+`dryml/lib/rapid/param_contract.rb` es la comprobación y
+`dryml/test/rapid/param_contract_test.rb` la usa. Va en `lib/`, no en `test/`,
+porque **la van a necesitar las gemas de arriba**: cuando la capa 5 porte el
+catálogo y la capa 6 el tema, sus pruebas hacen
+`require "rapid/param_contract"` y le pasan el barrido a sus propios tags. **No hay ninguna lista de params escrita a mano**, porque esa lista es lo
 que se queda vieja: renderiza el tag, **apunta cada `param` que la ejecución
 alcanza** —incluidos los de nombre calculado— y vuelve a renderizar uno por uno
 con un centinela, exigiendo que salga.
@@ -253,7 +270,7 @@ tipos de sitio. Enganchado a `param` se perdía dos de los tres.
 # Spike D — el segundo tag grande: `<form>`
 
 ```sh
-ruby spike/dryml/d_form.rb
+ruby dryml/test/tags/form.rb
 ```
 
 Elegido porque **no se parece en nada a `<table-plus>`**. `<form>` son dos tags:

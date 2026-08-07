@@ -7,25 +7,23 @@ Gem::Specification.new do |s|
   s.authors = ['Tom Locke']
   s.email = 'tom@tomlocke.com'
   s.homepage = 'http://hobocentral.net'
-  s.rubyforge_project = 'hobo'
   s.summary = "The Don't Repeat Yourself Markup Language"
   s.description = "The Don't Repeat Yourself Markup Language"
 
-  s.add_runtime_dependency('actionpack')
+  s.add_runtime_dependency('rails', ['>= 8.0'])
   s.add_runtime_dependency('hobo_support', ["= #{version}"])
-  # s.add_development_dependency('rubydoctest', [">= 1.1.3"])
-  s.add_development_dependency('cucumber', '~> 1.1.0')
-  s.add_development_dependency('aruba', '~> 0.4.6')
+  s.add_development_dependency('rake', ['>= 13.0'])
+  s.add_development_dependency('minitest', ['>= 5.0'])
 
   s.files = `git ls-files -x #{name}/* -z`.split("\0")
 
-  s.name = File.basename( __FILE__, '.gemspec' )
+  s.name = name
   s.version = version
   s.date = Date.today.to_s
 
+  s.required_ruby_version = ">= 3.2"
   s.required_rubygems_version = ">= 1.3.6"
   s.rdoc_options = ["--charset=UTF-8"]
   s.require_paths = ["lib"]
 
-  s.extensions = 'ext/mkrf_conf.rb'
 end

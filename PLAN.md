@@ -539,6 +539,47 @@ prefiere a perderlo en silencio.
    escribieron**. Es otra vez la ambigüedad nombre/dirección, la misma que se
    comió el `default > default` del grabador.
 
+### El runtime ya es la gema (2026-08-07)
+
+Sale de `spike/` y entra en **`dryml`**, que es la unidad de trabajo de esta capa
+(se fundirá en la gema única en la capa 7, decisión 12).
+
+| Qué | Dónde |
+|---|---|
+| El runtime | `dryml/lib/rapid.rb` + `dryml/lib/rapid/{scope,context,parameter,tag}.rb` |
+| La prueba de contrato | `dryml/lib/rapid/param_contract.rb` |
+| Sus pruebas | `dryml/test/rapid/*_test.rb` |
+| Los dos tags portados | `dryml/test/tags/{table_plus,form}.rb` |
+| Cómo se eligió el sustrato | `spike/dryml/`, ya sin código vivo |
+
+**Las 63 pruebas pasaron sin tocar una línea**, que era la comprobación de que el
+runtime no dependía de dónde vivía.
+
+**La prueba de contrato va en `lib/`, no en `test/`**, y es a propósito: la van a
+necesitar las gemas de arriba. Cuando la capa 5 porte el catálogo y la capa 6 el
+tema, sus pruebas hacen `require "rapid/param_contract"` y le pasan el mismo
+barrido a sus tags. Es la pieza que impide que el catálogo entero se llene de
+params perdidos en silencio.
+
+**Se aprovechó para sacar del runtime lo que no era runtime:** `AJAX_ATTRS`,
+`controller_ivar` y `default_row` son catálogo RAPID, no motor, y se van a
+`dryml/test/tags/rapid_helpers.rb` hasta que la capa 5 los ponga en su sitio.
+`Hash#partition_hash` deja de tener copia propia: **se usa el de `hobo_support`**.
+
+**Del andamiaje viejo de la gema:** el gemspec pasa a `rails >= 8.0`,
+`hobo_support` y `required_ruby_version >= 3.2`, fuera `rubyforge_project` y las
+pinzas de `cucumber ~> 1.1` y `aruba ~> 0.4.6`; el `Gemfile` apunta a
+`../hobo_support`. Fuera también `ext/mkrf_conf.rb`, una extensión de 2011 que
+solo existía para comprobar que openssl estaba instalado.
+
+**Lo que NO se toca:** `dryml/lib/dryml/` entero —el compilador y su parser— se
+queda. No es código muerto: el parser es el front-end del actualizador que
+migrará las plantillas de las aplicaciones que ya existen (decisión 6). Y los 87
+escenarios de `features/` y `test/dryml.rdoctest` **se conservan sin ejecutar**:
+son la especificación de la semántica, y se leen, no se corren.
+
+`dryml` pasa a `PORTED_GEMS` en el `Rakefile` de la raíz. Queda `hobo` sin portar.
+
 ### Lo que queda de la sintaxis de parámetros
 
 Sin hacer, y anotado para no confundirlo con lo que sí está:
@@ -563,7 +604,7 @@ Estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho
 | `[x]` | **0** | **Banco de pruebas**: andamiaje minitest y corredor de la raíz | — |
 | `[x]` | **1** | `hobo_support`: quitar ~230 líneas de azúcar, codemod de 113 sitios, `classy_module` → `Concern` | 16 |
 | `[x]` | **2** | `hobo_fields`: `fields do`, tipos ricos, migraciones **+ batería que ejecute `up` y `down`** | 1, 2, 3 |
-| `[~]` | **3** | **El remix de DRYML**. Spike hecho y sustrato **decidido: DSL en Ruby**. Falta el runtime de verdad (ver abajo) | 8 |
+| `[x]` | **3** | **El remix de DRYML**: runtime, contrato de params, params anidados, pseudo-params y dos tags grandes portados. Ya es la gema `dryml` | 8 |
 | `[ ]` | **4** | `hobo`: permisos, lifecycles, view hints, auto-actions, router | 4, 5, 7, 11, 12, 14 |
 | `[ ]` | **5** | `hobo_rapid` + motor de derivación | 9, 10 |
 | `[ ]` | **6** | Separar `hobo_bootstrap` en tags estructurales (→ RAPID) y tema | 13a, 13b |
@@ -901,10 +942,10 @@ necesitan generadores de Rails y una app de verdad, así que van a la **capa 7**
 ### Cómo correr las pruebas
 
 ```sh
-rake test              # gemas portadas + la prueba de contrato de la capa 3
+rake test              # todas las gemas ya portadas
 rake test_integration  # agility_bootstrap (no arrancara hasta la capa 5-6)
 cd hobo_support && rake test
-cd spike/dryml   && rake test   # solo el contrato de params
+cd dryml         && rake test   # runtime de tags y contrato de params
 ```
 
 ---
@@ -918,6 +959,10 @@ cd spike/dryml   && rake test   # solo el contrato de params
 | El tema Bootstrap (vendorizado) | `hobo_bootstrap/`, con `ORIGEN.md` |
 | Los widgets jQuery del tema | `hobo_bootstrap_ui/`, con `ORIGEN.md` |
 | Contrato de `<page>` (30 params) | `hobo_bootstrap/taglibs/page.dryml` |
+| **El runtime de tags** | `dryml/lib/rapid.rb` y `dryml/lib/rapid/` |
+| **La prueba de contrato de params** | `dryml/lib/rapid/param_contract.rb` |
+| Los dos tags grandes ya portados | `dryml/test/tags/{table_plus,form}.rb` |
+| Cómo se eligió el sustrato de DRYML | `spike/dryml/README.md` |
 | La app real de pruebas (2017) | `../amenti` — Ruby 1.9.3 vía rbenv, receta en `HALLAZGOS.md` |
 
 ### Los 22 repos de la organización Hobo
@@ -947,10 +992,10 @@ cualquier decisión sobre DRYML o sobre assets **los rompe a los ocho a la vez**
 
 ---
 
-## Por dónde seguir mañana (capa 3)
+## La capa 3, paso a paso — **terminada el 2026-08-07**
 
-El sustrato está **decidido** y el spike ya dijo lo que cuesta. Lo siguiente, en
-orden:
+El registro de en qué orden se hizo y qué costó cada cosa. Para lo que viene
+ahora, ver «Por dónde seguir» al final.
 
 1. ~~Reescribir el runtime con la arquitectura correcta.~~ **HECHO el 2026-08-07.**
    `Rapid::Context` guarda **buffer, `this` y `scope` en una pila dinámica**
@@ -972,13 +1017,34 @@ orden:
    tres fallos, uno de ellos en la propia prueba de contrato.
 5. ~~Pseudo-params.~~ **HECHOS el 2026-08-07**, los cinco. Ver «Los pseudo-params»
    más arriba.
-6. Sacar el runtime del directorio `spike/` y convertirlo en la gema. La prueba
-   de contrato se muda con él sin cambios. Lo que queda de la sintaxis de
-   parámetros (lista abajo) ya no bloquea: reexponer con otro nombre es lo único
-   que usan los temas de verdad, y `<table-plus>` y `<form>` pasan sin ello.
+6. ~~Sacar el runtime de `spike/` y convertirlo en la gema.~~ **HECHO el
+   2026-08-07.** Ver «El runtime ya es la gema» más abajo.
 
 **No empezar por portar tags en masa.** Primero el runtime correcto y la prueba
 de contrato; si no, se repite el primer intento.
+
+---
+
+## Por dónde seguir: la capa 4
+
+`hobo`: permisos, lifecycles, view hints, auto-actions, router y subsites
+(piezas 4, 5, 7, 11, 12, 14). Es la capa más grande de las que quedan.
+
+Lo que ya se sabe antes de empezar, y está arriba en este fichero:
+
+- **La Deuda 2 (permisos)** es casi toda autoinfligida: los `alias_method_chain`
+  y las macros de asociación reescritas se sustituyen por ganchos públicos. Lo
+  único genuinamente difícil son los permisos de **lectura por campo**, porque
+  Rails no tiene gancho de lectura.
+- **`accessible_associations.rb` viene aplazado de la capa 1**, con sus 5
+  `alias_method_chain`, y hay que reescribirlo entero.
+- **El router necesita carga ansiosa** por `descendants` con Zeitwerk, el mismo
+  agravante que el generador de migraciones de la capa 2.
+- **`common_tasks.rb` muere aquí**, al portar las pruebas de `hobo`.
+
+Y la capa 3 deja dos cosas usables desde ella: `require "rapid/param_contract"`
+para cualquier tag que se escriba, y `dryml/test/tags/` como ejemplo de cómo se
+porta un tag grande.
 
 ## Reglas de trabajo
 

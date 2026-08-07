@@ -9,8 +9,12 @@
 #
 # The original is hobo_rapid/taglibs/plus/table_plus.dryml.
 
+# Runnable on its own, so it sets the load path up the way the Rakefile does.
+$LOAD_PATH.unshift File.expand_path("../../../hobo_support/lib", __dir__)
+
 require "cgi"
-require_relative "runtime"
+require_relative "../../lib/rapid"
+require_relative "rapid_helpers"
 
 # --- the tags <table-plus> leans on, stubbed just enough to render ------------
 
@@ -44,7 +48,7 @@ Rapid.define(:table, :attrs => [:fields, :empty]) do
     tag("thead") { param(:field_heading_row) }
     tag("tbody") do
       Array(this).each do |record|
-        with_this(record) { tag("tr") { param(:row) { default_row } } }
+        with_this(record) { tag("tr") { param(:row) { tag("td") { text this.to_s } } } }
       end
     end
   end
@@ -63,7 +67,7 @@ Rapid.define(:table_plus, :attrs => [:sort_field, :sort_direction, :sort_columns
   sort_columns["this"] ||= this.try(:member_class).try(:name_attribute)
 
   # <% ajax_attrs, attributes = attributes.partition_hash(AJAX_ATTRS) %>
-  ajax_attrs, other_attrs = attributes.partition_hash(Rapid::AJAX_ATTRS)
+  ajax_attrs, other_attrs = attributes.partition_hash(RapidHelpers::AJAX_ATTRS)
 
   tag("div",
       { :class => "table-plus" }
