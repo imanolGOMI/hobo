@@ -81,7 +81,11 @@ module Rapid
       end
       return nil if without?(param_name)
 
-      parameter = parameter_for(param_name, :element)
+      # A void element is a param you can only *replace*: there is nowhere to put
+      # content. Saying which kind it is lets a caller -- the contract sweep, for
+      # one -- know not to ask for something impossible.
+      kind = VOID_ELEMENTS.include?(element.to_s) ? :void_element : :element
+      parameter = parameter_for(param_name, kind)
 
       around(param_name) do
         if parameter&.replace?
@@ -209,7 +213,8 @@ module Rapid
     # The three kinds of param site: a bare `param`, an element carrying one,
     # and a tag call exposed with `as:`. Only the last can take nested params,
     # because only it has another tag's params to pass them to.
-    SITES = { :bare => "no tiene elemento", :element => "es un elemento" }.freeze
+    SITES = { :bare => "no tiene elemento", :element => "es un elemento",
+              :void_element => "es un elemento vacio" }.freeze
 
     def parameter_for(name, kind)
       value = @params[name]

@@ -1924,6 +1924,40 @@ segundo tema no tiene que reimplementarlos para no perderlos.
 
 **11 pruebas**, con el barrido de contrato.
 
+### Pieza 13b: `<page>`, el contrato de temas — **con prueba**
+
+El plan pedía «contrato de params **con prueba**», y ya existe. `<page>` declara
+**28 puntos de extensión**, y una sola línea los recorre todos, en cuatro formas
+distintas de página (normal, con columna lateral, con la navegación abajo, con el
+javascript al final):
+
+```ruby
+assert_every_param_overridable(:page, SCENARIOS)
+```
+
+Importa más de lo que parece: **un tema vale exactamente lo que se le pueda
+cambiar sin adueñarse de la página entera**, y el primer intento se murió de
+params que desaparecían de uno en uno. Hay prueba también de las dos formas de
+tocar una esquina: **sustituirla** (`replace`) y **añadirle** sin perder lo que
+había (`old`), que es la diferencia entre apilar temas y pelearse con ellos.
+
+**El marcado es Bootstrap 5.** Lo que había apuntaba a Bootstrap 2.1: `spanN`,
+`navbar-inner`, `nav-collapse`, `icon-bar`. Los tamaños siguen siendo **doceavos**
+—`content_size` y `aside_size` significan lo mismo—, solo cambia cómo se
+escriben: `col-9` donde ponía `span9`. Y `<nav>`, `<header>`, `<footer>` y
+`<aside>` son ahora los elementos de verdad, no `<div class="navbar">`.
+
+### Y el barrido encontró un hueco en el propio runtime
+
+Al pasarlo por `<page>` reventó en `<meta charset>`: **un elemento vacío es un
+param que solo se puede sustituir**, no rellenar — no hay dónde poner el
+contenido. El runtime lo sabía (lo lanzaba desde la capa 4) pero **no lo decía**,
+así que el barrido pedía algo imposible.
+
+Ahora `parameter_for` distingue `:void_element` de `:element`, y el barrido no
+exige rellenar lo que no se puede. Es la tercera vez que el barrido mejora el
+runtime en vez de solo vigilarlo.
+
 ## Reglas de trabajo
 
 - **Nunca hacer push.** Ni a este repo ni a ninguno. Solo commits locales.

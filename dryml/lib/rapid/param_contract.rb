@@ -155,7 +155,9 @@ module ParamContract
                       "override en #{address} no llega. Se perdio en silencio.\n" \
                       "Salida obtenida:\n#{output}"
 
-      return if reached.kind == :call
+      # A tag call is free to ignore the content it is handed, and a void
+      # element has nowhere to put any: neither can be asked to be filled in.
+      return if reached.kind == :call || reached.kind == :void_element
 
       filled = render_tag(tag_name, scenario, nested_override(reached.path, ParamContract.filling))
       assert_includes filled, ParamContract::SENTINEL,
