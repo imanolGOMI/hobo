@@ -1096,25 +1096,118 @@ que es el gancho correcto desde Ruby 1.9.
 | `Hobo::Model.register_model` | Guardaba `model.name` sin comprobar: con una clase anónima registraba `nil`. **Otra vez el mismo fallo de la capa 2** |
 | `test_helper` | `DescendantsTracker.clear` ahora recibe las clases |
 
+## Pieza 4 hecha: los permisos (2026-08-07)
+
+**15 pruebas minitest en verde**, en `hobo/test/hobo/permissions_test.rb`. De los
+**35** `alias_method_chain` de la gema quedan **13**, y ninguno en esta pieza.
+
+### Los ganchos: de API privada a callbacks
+
+| Antes | Ahora |
+|---|---|
+| `alias_method_chain :_create_record` | `before_create :hobo_check_create_permission, prepend: true` |
+| `alias_method_chain :_update_record` | `before_update` |
+| `alias_method_chain :destroy` | `before_destroy` |
+
+`_create_record` y `_update_record` son **privados** de ActiveRecord. Los
+callbacks dicen lo mismo, son públicos, y **además cogen caminos que aquellos no
+cogían**: crear a través de una asociación, por ejemplo, que antes se escapaba.
+
+`prepend: true` para que la comprobación corra **antes** que nada más colgado del
+mismo callback, incluido el borrado en cascada de Rails: no tiene sentido borrar
+los hijos de un registro que no tienes permiso para borrar. Hay una prueba de eso.
+
+De regalo, una diferencia real: el gancho viejo estaba en `_update_record`, que
+**solo corre si hay algo que escribir**. `before_update` corre en el guardado
+igualmente, así que **un update sin cambios también se comprueba**.
+
+### Los envoltorios de `has_many` / `has_one` / `belongs_to`: muertos desde Rails 4.1
+
+Los tres redefinían `<macro>_dependent_destroy_for_<nombre>`, un método que
+ActiveRecord generaba para `:dependent => :destroy`. **Rails dejó de generarlo en
+4.1**: desde entonces la cascada va por un `before_destroy` que llama a
+`association.handle_dependency`.
+
+O sea que llevaban **una década redefiniendo métodos que nadie llama, y los hijos
+se borraban sin comprobar ningún permiso.**
+
+Lo que los sustituye no toca las macros de asociación —que era el otro pecado
+señalado en la Deuda 2, hacer que *toda* declaración de *todo* modelo pase por
+Hobo— sino que el padre **le pasa su `acting_user` a los hijos** que va a borrar,
+y cada hijo comprueba su propio permiso por el mismo `before_destroy` que todos.
+Verificado con dos pruebas: el hijo que se niega **para el borrado entero**.
+
+### `extensions/active_record/permissions.rb`, reescrito entero
+
+Tres de sus métodos estaban podridos, y uno **no había funcionado nunca**:
+
+| Método | Qué le pasaba |
+|---|---|
+| `nullify_keys` | Reimplementaba un método que ActiveRecord **ya no tiene**, sobre `quoted_id` (fuera en Rails 5.1) y el `update_all` de dos argumentos (fuera en Rails 4) |
+| `delete_records` | Sustituía entera la versión de ActiveRecord, sobre `scoped`, que desapareció en Rails 4 |
+| `_create_record` (en la asociación `through`) | La cadena llamaba al original `_create_record_without_user_create` y **el cuerpo pedía `create_record_without_user_create`**, sin el guion bajo. Lanzaba `NameError` la primera vez que se ejecutase |
+
+Lo que queda son dos módulos con `prepend` que solo añaden el usuario y llaman a
+`super`.
+
+### El mismo truco roto, copiado en cuatro sitios
+
+Cuatro macros de asociación llevaban el mismo apaño: *adivinar* si el segundo
+argumento es un scope o un hash de opciones y, si parecía opciones, **pasarlo por
+posición**. Desde Rails 5 la firma es `(name, scope = nil, **options)`, así que
+Rails lo tomaba por el scope y le pedía `arity`. **Es el mismo fallo que la capa
+2 encontró en `hobo_fields`.**
+
+Estaban en `accessible_associations.rb` (×2) y en `model.rb` (×2). Los cuatro
+fuera, con la firma correcta.
+
+> **`prepend` y `alias_method_chain` no se llevan.** Al prepender el `belongs_to`
+> de la capa 4 sobre el `alias_method_chain` que aún tenía `hobo_fields`, el
+> alias capturó el método prependido y los dos se llamaron en círculo hasta
+> desbordar la pila. **Es exactamente por lo que Rails lo abandonó en 5.1**, y
+> estaba escrito en este plan sin que nadie lo hubiera visto pasar. Se arregla
+> pasando también el de `hobo_fields` a `prepend`: dos `prepend` sí componen.
+> Era trabajo aplazado de la capa 2, y ha resultado no ser opcional.
+
+### Dos correcciones al plan
+
+- **`metaclass.class_eval` en `unknownify_attribute` ya no existía**: la capa 1
+  lo había pasado a `singleton_class.class_eval`. Un punto de la Deuda 2 que ya
+  estaba resuelto.
+- **`find_by_sql` estaba envuelto para no hacer nada**: recibía y devolvía. Fuera.
+  Y `find(*args)` pasa a `find(...)`, porque desde Ruby 3 un splat convierte los
+  argumentos con nombre de quien llama en un Hash posicional, y los buscadores de
+  ActiveRecord llevan argumentos con nombre.
+
+### Lo que sigue pendiente de la pieza 4
+
+**Los permisos de lectura por campo**, que es lo único genuinamente difícil,
+siguen como estaban: `unknownify_attribute` y `deunknownify_attribute` hacen su
+apaño con métodos singleton porque **Rails no tiene gancho de lectura**. No es
+deuda nueva; es la que ya estaba anotada. Funciona, y se decide qué hacer con
+ello cuando la capa 5 enseñe cuánto se usa de verdad.
+
 ### Lo que queda de la capa 4
 
 Por orden, y con lo que ya se sabe:
 
-1. **Pieza 4, permisos** (`model/permissions.rb`, 449 líneas). Es la Deuda 2 y el
-   trabajo más grande. `alias_method_chain` → `prepend` + `super`, y los ganchos
-   privados `_create_record`/`_update_record` → `before_create`/`before_update`.
-   Lo único genuinamente difícil siguen siendo los permisos de **lectura por
-   campo**, porque Rails no tiene gancho de lectura.
-2. **`accessible_associations.rb`**, aplazado desde la capa 1, con sus **5**
-   `alias_method_chain` y su `classy_module`.
-3. **Piezas 5 y 7**, lifecycles y view hints, que son las más independientes.
-4. **Pieza 11, auto-actions** (`controller/model.rb`, 889 líneas), donde hay que
+1. **Piezas 5 y 7**, lifecycles y view hints, que son las más independientes.
+2. **Pieza 11, auto-actions** (`controller/model.rb`, 889 líneas), donde hay que
    sustituir los dos scopes automáticos por Ransack.
-5. **Pieza 12, router**, con el agravante de la carga ansiosa por `descendants`.
-6. **Pieza 14, subsites**, que es transversal y va la última.
+3. **Pieza 12, router**, con el agravante de la carga ansiosa por `descendants`.
+4. **Pieza 14, subsites**, que es transversal y va la última.
 
-Quedan **35 `alias_method_chain` en 15 ficheros** y **7 `classy_module`**, casi
-todos en generadores de Thor, que la capa 7 se lleva.
+Quedan **13 `alias_method_chain`**, repartidos así, y cada uno cae con su pieza:
+
+| Fichero | Cuántos | Pieza |
+|---|---:|---|
+| `controller/user_base.rb` | 3 | 11 |
+| `extensions/active_record/relation_with_origin.rb` | 2 | 5 y 7 |
+| `controller.rb`, `controller/model.rb` | 2 | 11 |
+| `extensions/active_model/{name,translation}.rb` | 2 | 7 |
+| `extensions/{enumerable,i18n}.rb` | 2 | 7 |
+| `extensions/active_record/associations/reflection.rb` | 1 | 5 |
+| `model/find_for.rb` | 1 | 11 |
 
 ## Lo que ya se sabía antes de empezar la capa 4
 

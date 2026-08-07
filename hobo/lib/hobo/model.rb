@@ -37,13 +37,7 @@ module Hobo
         include IncludeInSave
       end
 
-      class << base
-        alias_method_chain :belongs_to,    :creator_metadata
-        alias_method_chain :belongs_to,    :test_methods
-        alias_method_chain :attr_accessor, :creator_metadata
-
-        alias_method_chain :has_one, :new_method
-      end
+      base.singleton_class.prepend(ClassMethods::AssociationMacros)
 
       base.fields(false) # force hobo_fields to load
 
@@ -147,29 +141,41 @@ module Hobo
         names += public_instance_methods.map(&:to_s)
       end
 
-      def belongs_to_with_creator_metadata(name, *args, &block)
-        if args.size == 0 || (args.size == 1 && args[0].kind_of?(Proc))
-            options = {}
-            args.push(options)
-        elsif args.size == 1
-            options = args[0]
-        else
-            options = args[1]
-        end
-        self.creator_attribute = name.to_sym if options.delete(:creator)
-        belongs_to_without_creator_metadata(name, *args, &block)
-      end
+      # `belongs_to`, `attr_accessor` and `has_one` all grew extras here, and all
+      # of them were alias_method_chain.
+      #
+      # The two belongs_to wrappers also carried the same hack as
+      # accessible_associations: guess whether the second argument is a scope or
+      # an options hash, and when it looks like options, push it on as a
+      # *positional* argument. Since Rails 5 the signature is
+      # `(name, scope = nil, **options)`, so the guess is unnecessary and the
+      # push was an ArgumentError waiting to happen.
+      module AssociationMacros
 
-      def belongs_to_with_test_methods(name, *args, &block)
-        if args.size == 0 || (args.size == 1 && args[0].kind_of?(Proc))
-            options = {}
-            args.push(options)
-        elsif args.size == 1
-            options = args[0]
-        else
-            options = args[1]
+        def belongs_to(name, scope = nil, **options, &block)
+          self.creator_attribute = name.to_sym if options.delete(:creator)
+          super(name, scope, **options, &block)
+          define_belongs_to_test_methods(name, options)
         end
-        belongs_to_without_test_methods(name, *args, &block)
+
+        def attr_accessor(*names, **options)
+          if options.delete(:creator)
+            raise ArgumentError, "trying to set :creator => true on multiple attributes" if names.length != 1
+            self.creator_attribute = names.first.to_sym
+          end
+          super(*names)
+        end
+
+        def has_one(name, scope = nil, **options, &block)
+          super
+          class_eval "def new_#{name}(attributes={}); build_#{name}(attributes, false); end"
+        end
+
+        private
+
+        # `<name>_is?` and `<name>_changed?`, which the views and the permission
+        # code ask for.
+        def define_belongs_to_test_methods(name, options)
         refl = reflections[name.to_s]
         id_method = refl.options[:primary_key] || refl.klass.primary_key
         if options[:polymorphic]
@@ -198,21 +204,10 @@ module Hobo
             end
           }
         end
-      end
-
-
-      def attr_accessor_with_creator_metadata(*args)
-        options = args.extract_options!
-        if options.delete(:creator)
-          if args.length == 1
-            self.creator_attribute = args.first.to_sym
-          else
-            raise ArgumentError, "trying to set :creator => true on multiple attributes"
-          end
         end
-        args << options unless options.empty?
-        attr_accessor_without_creator_metadata(*args)
+
       end
+
 
 
       def has_one_with_new_method(name, options={}, &block)
@@ -249,15 +244,13 @@ module Hobo
       end
 
 
-      def find(*args)
+      # `...` rather than `*args`: since Ruby 3 a splat turns the caller's
+      # keyword arguments into a positional Hash, and ActiveRecord's finders
+      # take keywords. `find_by_sql` used to be wrapped here too, purely to
+      # return what it was given -- it did nothing at all, so it is gone.
+      def find(...)
         result = super
         result.member_class = self if result.is_a?(Array)
-        result
-      end
-
-
-      def find_by_sql(*args)
-        result = super
         result
       end
 

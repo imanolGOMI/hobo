@@ -88,28 +88,38 @@ module HoboFields
     # Since Rails 5 the signature is belongs_to(name, scope = nil, **options):
     # options are keyword arguments, not a positional hash. Passing the hash
     # positionally makes Rails take it for the scope and ask it for its arity.
-    def self.belongs_to_with_field_declarations(name, scope = nil, **options, &block)
-      column_options = {}
-      column_options[:null] = options.delete(:null) if options.has_key?(:null)
-      column_options[:comment] = options.delete(:comment) if options.has_key?(:comment)
+    #
+    # This is a prepended module rather than alias_method_chain because layer 4
+    # prepends its own belongs_to on top. An alias chain and a prepend do not
+    # compose: the alias captures the prepended method, and the two then call
+    # each other until the stack runs out. It is exactly why Rails dropped
+    # alias_method_chain in 5.1.
+    module FieldDeclarationMacros
 
-      index_options = {}
-      index_options[:name] = options.delete(:index) if options.has_key?(:index)
-      bt = belongs_to_without_field_declarations(name, scope, **options, &block)
-      refl = reflections[name.to_s]
-      fkey = refl.foreign_key
-      declare_field(fkey.to_sym, :integer, column_options)
-      if refl.options[:polymorphic]
-        declare_polymorphic_type_field(name, column_options)
-        index(["#{name}_type", fkey], index_options) if index_options[:name]!=false
-      else
-        index(fkey, index_options) if index_options[:name]!=false
+      def belongs_to(name, scope = nil, **options, &block)
+        column_options = {}
+        column_options[:null] = options.delete(:null) if options.has_key?(:null)
+        column_options[:comment] = options.delete(:comment) if options.has_key?(:comment)
+
+        index_options = {}
+        index_options[:name] = options.delete(:index) if options.has_key?(:index)
+
+        bt = super(name, scope, **options, &block)
+
+        refl = reflections[name.to_s]
+        fkey = refl.foreign_key
+        declare_field(fkey.to_sym, :integer, column_options)
+        if refl.options[:polymorphic]
+          declare_polymorphic_type_field(name, column_options)
+          index(["#{name}_type", fkey], index_options) if index_options[:name] != false
+        else
+          index(fkey, index_options) if index_options[:name] != false
+        end
+        bt
       end
-      bt
+
     end
-    class << self
-      alias_method_chain :belongs_to, :field_declarations
-    end
+    singleton_class.prepend(FieldDeclarationMacros)
 
 
     # Declares the "foo_type" field that accompanies the "foo_id"
