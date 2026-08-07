@@ -37,6 +37,19 @@ after_bundle do
   generate "authentication"
   generate "hobo:front_page"
 
+  # Rails renders its own views -- the session form, the password pages -- with
+  # the application layout, and that layout knows nothing about the theme. So
+  # those pages came out unstyled next to the ones Hobo paints. The layout gets
+  # the theme's stylesheets and its container, and everything looks like one
+  # application again.
+  gsub_file "app/views/layouts/application.html.erb",
+            /<%= stylesheet_link_tag :app %>/,
+            "<%= stylesheet_link_tag \"bootstrap\" %>\n    <%= stylesheet_link_tag \"hobo\" %>\n    <%= stylesheet_link_tag :app %>"
+
+  gsub_file "app/views/layouts/application.html.erb",
+            /<%= yield %>/,
+            "<div class=\"container py-4\">\n      <%= yield %>\n    </div>"
+
   route "hobo_routes"
 
   generate "hobo:migration", "-n -m" rescue nil

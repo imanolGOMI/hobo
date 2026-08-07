@@ -77,7 +77,8 @@ class DerivedPagesTest < Minitest::Test
 
     assert_includes output, %(<div class="index-page stories">), output
     assert_includes output, "<h1>Stories</h1>"
-    assert_equal 2, output.scan(%(<div class="card story">)).length
+    assert_includes output, %(<table class="table table-striped table-bordered">)
+    assert_equal 3, output.scan("<tr>").length, "dos filas y una cabecera"
   end
 
   # An ActiveRecord relation knows what it holds, and that is how an index of
@@ -145,7 +146,7 @@ class DerivedPagesTest < Minitest::Test
 
     assert_includes output, "STATUS 200", output
     assert_includes output, %(<div class="index-page stories">), output
-    assert_includes output, %(<div class="card story">)
+    assert_includes output, %(<table class="table)
     assert_includes output, "La luz de Hobo"
   end
 

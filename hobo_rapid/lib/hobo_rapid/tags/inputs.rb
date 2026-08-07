@@ -22,6 +22,19 @@ module HoboRapid
         "#{this_parent.class.name.demodulize.underscore}[#{this_field}]"
       end
 
+      # Whether this record may be changed or removed at all -- what decides
+      # whether an edit or a delete is offered. Asking the record rather than
+      # the markup is the point of piece 4.
+      def editable_here?
+        return true unless this.respond_to?(:editable_by?)
+        this.editable_by?(acting_user)
+      end
+
+      def destroyable_here?
+        return true unless this.respond_to?(:destroyable_by?)
+        this.destroyable_by?(acting_user)
+      end
+
       def can_edit?
         return true unless this_parent && this_field
         return true unless this_parent.respond_to?(:editable_by?)

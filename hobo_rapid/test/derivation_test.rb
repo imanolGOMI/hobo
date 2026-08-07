@@ -121,7 +121,9 @@ class DerivationTest < Minitest::Test
 
   # --- the index page ---------------------------------------------------------
 
-  def test_an_index_paints_a_card_for_each_record
+  # A table, not a list of cards: that is what hobo_bootstrap painted, and cards
+  # were hobo_clean's style. `<card>` is still there for anybody who wants it.
+  def test_an_index_paints_a_row_for_each_record
     other = Story.new
     other.id = 2
     other.title = "Segunda"
@@ -129,9 +131,20 @@ class DerivationTest < Minitest::Test
 
     html = render(:index_page, collection_of([story, other]))
 
+    assert_includes html, %(<table class="table table-striped table-bordered">)
+    assert_includes html, "<th>Body</th>"
+    assert_equal 2, html.scan("<tr>").length - 1, "una fila por registro, mas la de cabeceras"
     assert_includes html, "Primera historia"
     assert_includes html, "Segunda"
-    assert_equal 2, html.scan("card story").length
+  end
+
+  # A list you can look at and not use is not a list. The old theme painted an
+  # actions column on every row and a "New X" above the table.
+  def test_an_index_offers_the_actions
+    html = render(:index_page, collection_of([story]))
+
+    assert_includes html, %(<th class="actions">Acciones</th>)
+    assert_includes html, %(<td class="actions">)
   end
 
   def test_an_empty_index_says_so

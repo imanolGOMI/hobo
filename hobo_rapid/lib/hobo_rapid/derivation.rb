@@ -47,10 +47,33 @@ module HoboRapid
   module Routing
 
     def path_for(record_or_model)
-      return nil unless defined?(Rails) && Rails.respond_to?(:application) && Rails.application
-      Rails.application.routes.url_helpers.polymorphic_path(record_or_model)
+      return nil unless routes
+      routes.polymorphic_path(record_or_model)
     rescue StandardError
       nil
+    end
+
+    # `new` and `edit` have their own helpers, and without them a page has no
+    # way to offer the actions the controller declares. The old theme painted an
+    # edit and a delete on every row and a "New X" above the table; the pages
+    # here had **none of it**, which is a list you can look at and not use.
+    def new_path_for(model)
+      return nil unless routes
+      routes.polymorphic_path(model, :action => :new)
+    rescue StandardError
+      nil
+    end
+
+    def edit_path_for(record)
+      return nil unless routes
+      routes.polymorphic_path(record, :action => :edit)
+    rescue StandardError
+      nil
+    end
+
+    def routes
+      return nil unless defined?(Rails) && Rails.respond_to?(:application) && Rails.application
+      Rails.application.routes.url_helpers
     end
 
   end
@@ -161,12 +184,16 @@ module HoboRapid
           heading = name_attribute ? this.send(name_attribute).to_s : model.name.demodulize
           in_page(heading) do
           tag("article", { :class => "show-page #{model.name.demodulize.underscore}" }, :body) do
-            tag("h1", {}, :heading) do
-              if name_attribute
-                with_field(name_attribute) { call_tag(:view, {}, :as => :name) }
-              else
-                param(:name) { text this.to_s }
+            tag("div", { :class => "page-header d-flex justify-content-between align-items-center" }, :header) do
+              tag("h1", {}, :heading) do
+                if name_attribute
+                  with_field(name_attribute) { call_tag(:view, {}, :as => :name) }
+                else
+                  param(:name) { text this.to_s }
+                end
               end
+              # The old theme put an Edit button here, and the pages had none.
+              call_tag(:record_actions, { :style => "buttons" }, :as => :record_actions)
             end
 
             tag("dl", {}, :fields) do
@@ -192,18 +219,73 @@ module HoboRapid
         end
       end
 
-      # The page for the collection: a card each.
+      # The page for the collection: **a table**.
+      #
+      # It was a list of cards here until Imanol pointed out that hobo_bootstrap
+      # painted a table -- `<table class="table table-striped table-bordered">`
+      # with a column per field and an actions column. Cards were hobo_clean's
+      # style, and the theme even documented how to swap one for the other.
+      # `<card>` is still there for anybody who wants the other shape.
       def derive_index_page(model)
+        fields = summary_fields(model)
+        name_attribute = name_attribute_of(model)
+        columns = ([name_attribute] + fields).compact
+        plural = plural_of(model)
+
         Rapid.define_for(:index_page, model) do
-          in_page(HoboRapid::Derivation.plural_of(model)) do
+          in_page(plural) do
           tag("div", { :class => "index-page #{model.name.demodulize.underscore.pluralize}" }, :body) do
-            tag("h1", {}, :heading) { text HoboRapid::Derivation.plural_of(model) }
-            tag("div", { :class => "collection" }, :collection) do
-              records = Array(this)
-              if records.empty?
-                tag("p", { :class => "empty" }, :empty) { text "Nada por aqui todavia." }
-              else
-                records.each { |record| with_this(record) { call_tag(:card, {}, :as => :card) } }
+            tag("div", { :class => "page-header d-flex justify-content-between align-items-center" }, :header) do
+              tag("h1", {}, :heading) { text plural }
+
+              new_path = new_path_for(model)
+              if new_path
+                tag("a", { :href => new_path, :class => "btn btn-primary" }, :new_link) do
+                  text "Nuevo #{model.name.demodulize.underscore.humanize.downcase}"
+                end
+              end
+            end
+
+            records = Array(this)
+            if records.empty?
+              tag("p", { :class => "empty" }, :empty) { text "Nada por aqui todavia." }
+            else
+              tag("table", { :class => "table table-striped table-bordered" }, :collection) do
+                tag("thead", {}, :headings) do
+                  tag("tr") do
+                    columns.each do |field|
+                      tag("th", {}, :"#{field}_heading") { text HoboRapid::Derivation.label_for(model, field) }
+                    end
+                    tag("th", { :class => "actions" }, :actions_heading) { text "Acciones" }
+                  end
+                end
+
+                tag("tbody", {}, :rows) do
+                  records.each do |record|
+                    with_this(record) do
+                      tag("tr", {}, :row) do
+                        columns.each_with_index do |field, index|
+                          tag("td", {}, :"#{field}_cell") do
+                            # The first column is what the record is called, and
+                            # it is the way in.
+                            if index.zero?
+                              path = path_for(this)
+                              if path
+                                tag("a", { :href => path }, :name_link) { call_tag(:name_view, {}, :as => :name_view) }
+                              else
+                                call_tag(:name_view, {}, :as => :name_view)
+                              end
+                            else
+                              with_field(field) { call_tag(:view, {}, :as => :"#{field}_view") }
+                            end
+                          end
+                        end
+
+                        tag("td", { :class => "actions" }, :actions) { call_tag(:record_actions, {}, :as => :record_actions) }
+                      end
+                    end
+                  end
+                end
               end
             end
           end
@@ -291,3 +373,34 @@ Rapid.define(:index_page) { tag("div", {}, :page) { call_tag(:view, :force => tr
 Rapid.define(:model_form) { tag("div", {}, :fields) { } }
 Rapid.define(:name_view) { text this.to_s }
 Rapid.define(:form_page) { tag("div", {}, :page) { call_tag(:model_form) } }
+
+# What you can do to a record: the edit and delete of the old theme's actions
+# column, and its Edit button on the record page. They appear only when the
+# route exists and the user is allowed -- the permissions of piece 4 decide, not
+# the markup.
+Rapid.define(:record_actions, :attrs => [:style]) do
+  buttons = attributes[:style].to_s == "buttons"
+  edit = edit_path_for(this)
+  destroy = path_for(this)
+
+  tag("div", { :class => "record-actions" }, :actions) do
+    if edit && editable_here?
+      tag("a", { :href => edit, :class => buttons ? "btn btn-secondary" : "action-edit" }, :edit) do
+        text(buttons ? "Editar" : "\u270E")
+      end
+    end
+
+    if destroy && destroyable_here?
+      # A delete is a POST with `_method`, never a link: a crawler that follows
+      # links must not be able to empty the database.
+      tag("form", { :method => "post", :action => destroy, :class => "d-inline" }, :delete_form) do
+        param(:authenticity_token) { authenticity_token_field }
+        tag("input", { :type => "hidden", :name => "_method", :value => "delete" })
+        tag("button", { :type => "submit", :class => buttons ? "btn btn-outline-danger" : "action-delete",
+                        :"data-turbo-confirm" => "Seguro?" }, :delete) do
+          text(buttons ? "Borrar" : "\u2716")
+        end
+      end
+    end
+  end
+end
