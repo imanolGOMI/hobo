@@ -50,7 +50,14 @@ module Hobo
     end
 
     ActiveSupport.on_load(:action_view) do
-      require 'hobo/extensions/action_view/tag_helper'
+      # There used to be a third one here, `action_view/tag_helper`, which
+      # reopened ActionView's `tag` to close elements the XHTML way. It was for
+      # the old DRYML compiler, which is gone, and it kept the 2008 signature:
+      # `tag(name, options, open, escape)`, with the name required. In Rails the
+      # name is optional -- `tag` with no arguments is the tag builder, which is
+      # how `tag.script` and everything written since Rails 5.1 works. So the
+      # patch broke every page that used it, importmap's included, with
+      # "wrong number of arguments (given 0, expected 1..4)".
       require 'hobo/extensions/action_view/translation_helper'
     end
 

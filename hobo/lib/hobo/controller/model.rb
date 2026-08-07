@@ -52,6 +52,17 @@ module Hobo
           # and it is theirs to write.
           allow_unauthenticated_access if respond_to?(:allow_unauthenticated_access)
 
+          # And the other half of that decision, which was missing: Rails 8
+          # resumes the session **inside** `require_authentication`, the very
+          # filter that was just skipped. So nobody ever read the cookie,
+          # `Current.session` stayed nil, and a signed-in person was painted as
+          # a guest -- read-only forms, no actions column, and not one test
+          # failed because every piece was asked what it does for a guest.
+          #
+          # Reading the cookie is not requiring a login: it is finding out who
+          # is asking before asking the record.
+          before_action :resume_session_if_any if respond_to?(:allow_unauthenticated_access)
+
           prepend HoboModelRender
 
         end
@@ -961,6 +972,17 @@ module Hobo
       #headers["Cache-Control"] = "no-cache"
       headers["Cache-Control"] = "no-store"
       headers["Expires"] ='0'
+    end
+
+    # Rails 8's `resume_session` is private and idempotent (`Current.session
+    # ||=`), so calling it costs one query per request at most and never
+    # redirects: that is `require_authentication`'s job, and Hobo does not want
+    # it. An application without the generator's concern simply has no such
+    # method, and this does nothing.
+    def resume_session_if_any
+      send(:resume_session) if respond_to?(:resume_session, true)
+    rescue StandardError
+      nil
     end
 
     # --- end filters --- #

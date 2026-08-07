@@ -22,7 +22,7 @@ class AssociationsTest < Minitest::Test
     def to_a = @records
   end
 
-  Reflection = Struct.new(:klass, :foreign_key)
+  Reflection = Struct.new(:klass, :foreign_key, :macro)
 
   class Story
     attr_accessor :author, :tags
@@ -30,8 +30,8 @@ class AssociationsTest < Minitest::Test
     AUTHORS = [Author.new(1, "Tom", true), Author.new(2, "Imanol", true), Author.new(3, "Oculto", false)].freeze
 
     def self.reflections
-      { "author" => Reflection.new(AuthorScope.new(AUTHORS), "author_id"),
-        "tags" => Reflection.new(AuthorScope.new(AUTHORS), "story_id") }
+      { "author" => Reflection.new(AuthorScope.new(AUTHORS), "author_id", :belongs_to),
+        "tags" => Reflection.new(AuthorScope.new(AUTHORS), "story_id", :has_many) }
     end
 
     def self.attr_type(_field) = nil
@@ -113,6 +113,32 @@ class AssociationsTest < Minitest::Test
 
   def test_every_param_of_check_many_is_overridable
     assert_every_param_overridable(:check_many, { :name => "sin registro", :this => [] })
+  end
+
+  # --- <input> knows an association when it sees one ---------------------------
+  #
+  # Which control an association wants is decided by the *shape* of the
+  # association, not by the class of the value: `movie.category` is a Category,
+  # and that says nothing about there being a Genre to pick as well. So the
+  # decision lives in <input>, and not in <input-content>, which dispatches on
+  # the class. Without it a belongs_to got the fallback control -- a text box
+  # for a record -- and Hobo's oldest promise, a form that builds itself from
+  # the model, quietly stopped being true for every association.
+
+  def test_input_on_a_belongs_to_gives_a_select
+    html = painted(:input, :author)
+
+    assert_includes html, "<select"
+    assert_includes html, %(name="story[author_id]")
+    assert_includes html, ">Tom<"
+  end
+
+  def test_input_on_a_has_many_gives_tick_boxes
+    story.tags = []
+    html = painted(:input, :tags)
+
+    assert_includes html, %(type="checkbox")
+    assert_includes html, ">Tom<"
   end
 
 end

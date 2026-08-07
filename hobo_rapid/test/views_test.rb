@@ -136,4 +136,44 @@ class RichTypeViewsTest < Minitest::Test
     assert_includes painted, "dos"
   end
 
+  # --- who is asking -----------------------------------------------------------
+  #
+  # Every permission question in the catalogue goes through `acting_user`, and
+  # it used to answer nil, always, with a comment saying it would be wired
+  # through later. Nothing failed: the whole application got painted for a
+  # guest -- read-only forms, no actions column -- and every piece test passed,
+  # because each one was asking what the piece does for a guest.
+  #
+  # A tag that asks a question it answers itself is not asking anything.
+
+  class Secret
+    attr_accessor :body
+    def self.attr_type(_field) = String
+    def viewable_by?(user, _field = nil) = !user.nil?
+  end
+
+  def test_the_user_of_the_request_reaches_the_permission_check
+    record = Secret.new
+    record.body = "solo para los que entran"
+
+    painted = HoboRapid.with_request(nil, :someone) do
+      outer = Rapid::Tag.new
+      Rapid::Context.capture { outer.with_field(:body, record) { outer.call_tag(:view) } }
+    end
+
+    assert_includes painted, "solo para los que entran"
+  end
+
+  def test_without_a_user_the_record_still_decides
+    record = Secret.new
+    record.body = "solo para los que entran"
+
+    assert_raises(HoboRapid::PermissionDenied) do
+      HoboRapid.with_request(nil, nil) do
+        outer = Rapid::Tag.new
+        Rapid::Context.capture { outer.with_field(:body, record) { outer.call_tag(:view) } }
+      end
+    end
+  end
+
 end

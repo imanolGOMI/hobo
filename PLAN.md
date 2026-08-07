@@ -2126,8 +2126,11 @@ Una aplicación Rails 8 generada con `hobo new`:
 - **Formulario** derivado en `new`/`edit`, con el control que pide cada tipo.
 - **Tema Bootstrap 5** servido por el engine, más `hobo.css`.
 - **Rutas** con `hobo_routes`, subsites, permisos de la pieza 4 aplicados.
+- **Asociaciones**: un `belongs_to` se pinta por su nombre y se edita con un
+  select de lo que el usuario puede ver; un `has_many`, con casillas.
 
-**Pruebas: 190+ en las gemas + suite de conformidad en navegador.**
+**Pruebas: 345 en las gemas, todas en verde, + la suite de conformidad en
+navegador (`cd hobo && HOBO_APP=/tmp/hobo_luz rake test`).**
 
 ## La aplicación de pruebas viva
 
@@ -2140,48 +2143,46 @@ usuario: admin@example.com   contrasena: test1234
 ⚠ **Los puertos 3000 (`miapp`) y 3001 (`amenti_v3`) son de Imanol. No tocarlos.**
 El 3002 es `amenti_v2` (Hobo 2, Ruby 1.9.3).
 
-## La app de referencia en Hobo 2: dónde se quedó
-
-Para comparar pantalla a pantalla hace falta **la misma aplicación en Hobo 2**.
-Montado hasta aquí:
+## La app de referencia en Hobo 2: **terminada**
 
 ```
 /tmp/hobo2             git worktree de master (Hobo 2.2.6 intacto)
-                       + hobo_bootstrap/_ui y hobo_jquery/_ui traidos con
-                         `git archive 53022e7c ... | tar -x -C /tmp/hobo2`
-                         (no estan en master: se vendorizaron en la rama)
-/tmp/videoteca2_app    `hobo new` de Hobo 2, Ruby 2.5.9, Rails 4.2.11.3, MySQL
+/tmp/videoteca2_app    Hobo 2.2.6, Ruby 2.5.9, Rails 4.2.11.3, sqlite
+http://localhost:3008  admin@example.com / test1234
 ```
 
-**Lo que hizo falta para llegar ahí** (anotado para no repetirlo):
+Arranca, tiene la videoteca dentro y se ve. Capturas en `/tmp/shots_hobo2/`.
+Lo que hizo falta, anotado porque nada de esto se adivina:
 
 | Problema | Solución |
 |---|---|
-| `sqlite3` no compila: no hay `libsqlite3-dev` | **MySQL**, que sí está: `mysql2 0.4.10` instalado para 2.5.9, servidor en 3306, `root` / `ubQuahk2eiGolfi1620` (sacada de `amenti_v2/config/database.yml`) |
-| `ffi` moderno exige Ruby ≥ 3 | Pinchar `gem "ffi", "~> 1.15.5"` |
-| `hobo new` de Hobo 2 escribe un Gemfile de Rails 5 | Reescribir a `rails 4.2.11.3`, `coffee-rails ~> 4.1.0`, `jbuilder ~> 2.0`, sin `puma` ni `therubyracer` |
-| `responders` duplicado | El wizard ya lo pone; quitar el añadido |
-| **`blankslate` no existe** | `gem "blankslate"` — es el primer fallo que documentó la capa 0 |
+| `NAME_STR` no existe en REXML | Es el mismo patrón que hoy se llama **`QNAME_STR`** (nombre con prefijo opcional, dos grupos de captura). Parcheado en `/tmp/hobo2/dryml/lib/dryml/parser/base_parser.rb`, **fuera del repo**: es una copia de trabajo, no `master`. Ninguna versión del gem `rexml` lo trae: la 3.1.7.3 publicada **no** es la que traía Ruby 1.9.3 |
+| El esqueleto era de Rails 5 | El `hobo new` de Hobo 2 llama al `rails` que haya. Regenerado con `rails _4.2.11.3_ new`, que es lo único que evita ir arreglando `EventedFileUpdateChecker`, `perform_caching` y `public_file_server` de uno en uno |
+| **MySQL ya no entra** | La contraseña que documentaba la sesión anterior no vale, y no hay `sudo`. Se pasó a **sqlite** |
+| `sqlite3 1.3.13` no compila: no hay `libsqlite3-dev` | Se baja el `.deb` **sin root** (`apt-get download libsqlite3-dev`) y se extrae con `dpkg-deb -x`; se compila contra esa cabecera. Hay que **quitar el `libsqlite3.a`** del paquete, o el enlazador lo prefiere y falla por `-fPIC`, y **rehacer el symlink** `libsqlite3.so` para que apunte al del sistema. Enlaza contra `libsqlite3.so.0`, que sí está instalada, así que sigue funcionando cuando se borre lo descargado |
+| El asistente pregunta y no hay terminal | `--default` **no existe**. Se le meten las respuestas por la entrada estándar |
+| **`Categoria` se rompe** | El inflector inglés tiene una regla para los plurales latinos (`media`, `criteria`): `categoria` es su propio plural, y el singular le sale `Categorium`. **Los modelos van en inglés** — `Movie`, `Category`, `Genre` — que además es lo que dice la regla del repositorio |
 
-**Donde se quedó, con el error exacto:**
+### Los modelos de la videoteca, iguales en las dos
 
+```ruby
+Movie:      title, year, synopsis · belongs_to :category, :accessible => true
+                                  · has_many :movie_genres, :accessible => true
+                                  · has_many :genres, :through => :movie_genres
+                                  · children :movie_genres
+MovieGenre: belongs_to :movie · belongs_to :genre, :accessible => true
+Category:   name · has_many :movies
+Genre:      name · has_many :movies, :through => :movie_genres
 ```
-rails generate hobo:setup_wizard --default
--> /tmp/hobo2/dryml/lib/dryml/parser/base_parser.rb:9
-   uninitialized constant Dryml::Parser::BaseParser::NAME_STR (NameError)
-```
 
-`NAME_STR` es de **REXML**, y el `rexml` que resuelve el bundle no lo tiene.
-**Siguiente paso: pinchar una versión de `rexml` que sí lo defina** (probar
-`gem "rexml", "3.1.9"`, que es la que traía Ruby 2.5 de serie, o mirar en qué
-versión desapareció la constante). Con eso el asistente debería terminar.
 
 ## La prueba de aceptación: la videoteca
 
 Decidida por Imanol. **La misma aplicación en Hobo 2 y en Hobo 3**, para
 comparar pantalla a pantalla:
 
-- **Modelos**: `Pelicula` (título, año, sinopsis), `Categoria`, `Genero`
+- **Modelos**: `Movie` (title, year, synopsis), `Category`, `Genre` — en inglés,
+  ver arriba por qué
 - **Asociaciones**: película pertenece a categoría; película tiene muchos géneros
 - **Pantallas**: listado con **filtros**, ficha, alta y edición
 - **Formularios anidados**: crear una categoría o un género **desde** la película
@@ -2189,6 +2190,63 @@ comparar pantalla a pantalla:
 
 **Si la videoteca se construye sin escribir vistas, funciona, y se parece a la de
 Hobo 2, la portación está hecha.**
+
+Las dos existen ya, con los mismos modelos y los mismos datos:
+
+```
+http://localhost:3008   /tmp/videoteca2_app   Hobo 2.2.6, Rails 4.2, Ruby 2.5.9
+http://localhost:3009   /tmp/videoteca3       Hobo 3,     Rails 8.1, Ruby 3.4.6
+capturas: /tmp/shots_hobo2/ y /tmp/shots_hobo3/, mismos nombres de fichero
+```
+
+## Comparar las dos pantalla a pantalla: lo que salió (2026-08-07)
+
+Es la primera vez que se mira lo mismo, hecho por las dos. **Encontró cuatro
+fallos de montaje en cuatro pantallas**, y todos con la suite en verde. Cada uno
+va con su prueba, y las cuatro pruebas son de las que fallan **cuando algo
+falta**:
+
+| Qué se veía | Qué era | Prueba |
+|---|---|---|
+| `/session/new` reventaba con «wrong number of arguments (given 0, expected 1..4)» | `hobo/extensions/action_view/tag_helper.rb`, un parche de 2008 que reabría `tag` con el nombre **obligatorio**. En Rails el nombre es opcional: `tag` **sin argumentos es el constructor de etiquetas**, y así emite marcado todo lo escrito desde Rails 5.1, `javascript_importmap_tags` incluido. Era del compilador viejo de DRYML, que ya no está. **Borrado** | `hobo/test/integration/action_view_test.rb` |
+| Las páginas de Rails, sin tema | El `gsub` de `hobo new` buscaba `<%= stylesheet_link_tag :app %>` y Rails 8.1 escribe `stylesheet_link_tag :app, "data-turbo-track": "reload"`. **`gsub_file` anuncia el fichero haya cambiado algo o no**, así que el tema se desenchufó sin decir nada — otra vez | `test_the_layout_wears_the_theme` |
+| **Los formularios salían de solo lectura** y no había columna de acciones | `acting_user` en el runtime de tags devolvía `nil`, siempre, con un comentario que decía que ya se conectaría. Y la otra mitad: **Rails 8 recupera la sesión dentro de `require_authentication`**, el filtro que la decisión 17 salta a propósito, así que nadie leía la cookie. Con las dos cosas, toda la aplicación se pintaba para un invitado | `views_test.rb` (los dos sentidos) |
+| `Category` salía como **`1`** en el índice, en la ficha y como caja de número en el formulario | El motor derivaba `category_id`, que es lo que guarda la base de datos. Ahora deriva **`category`**, que es de lo que va la página: `<view>` la pinta por su nombre y `<input>` da un **select** de las categorías que este usuario puede ver | `derivation_test.rb`, `associations_test.rb` |
+
+> **La lección, otra vez y en su forma más pura:** `acting_user` llevaba semanas
+> devolviendo `nil` y **ninguna prueba falló**, porque cada prueba de pieza
+> preguntaba qué hace la pieza *para un invitado* y obtenía justo eso.
+> **Un tag que hace una pregunta que él mismo contesta no está preguntando
+> nada.** No se vio hasta poner las dos aplicaciones una al lado de la otra.
+
+De paso: el estado de la petición (quién pregunta, el token, el flash) sale de
+`helper.rb` a **`hobo_rapid/lib/hobo_rapid/request.rb`**, porque lo necesitan los
+tags y lo necesita el puente, y los tags no deben tener que cargar la mitad de
+Rails para poder probarse.
+
+Y dos pruebas de conformidad se habían quedado viejas: miraban `.card` en `/`,
+cuando `/` es la portada del primer usuario y la capa 5 devolvió el índice a
+**tabla**. Ahora miran la lista y exigen lo que de verdad importa —que el nombre
+del registro lleve a alguna parte— sea tarjeta o sea fila.
+
+### Lo que la comparación deja pendiente
+
+Visto en las capturas, ordenado por lo que más se nota:
+
+1. **Formularios anidados.** Hobo 2 pinta las filas de `movie_genres` con sus
+   botones `+` y `−` (`input-many`). Hobo 3 **no los pinta**: `children` se
+   excluye de `summary_fields`, así que la colección no llega al formulario.
+   Es la mitad del criterio de aceptación.
+2. **Filtros** en el listado. No hay nada todavía; la pieza 6 se delegó a
+   Ransack y falta enchufarlo.
+3. **Los textos de la interfaz están a medias en castellano**: «Nuevo movie»,
+   «Crear», «Guardar», «Editar», «Acciones», junto a etiquetas en inglés. Hobo 2
+   dice «New Movie», «Create Movie». La regla del repositorio es **código en
+   inglés**, y esto es cadena de interfaz: va en inglés, y luego i18n.
+4. **Un `belongs_to` no enlaza**: Hobo 2 pinta «Drama» como enlace a la
+   categoría; Hobo 3 pinta el texto.
+5. En la barra de navegación no hay **buscador** ni **menú de usuario** («Logged
+   in as…», «Log out»). Lo de la sesión es de Rails; lo de enseñarlo, de Hobo.
 
 ## Decisiones tomadas en esta sesión
 
@@ -2203,11 +2261,13 @@ Hobo 2, la portación está hecha.**
 
 ## Lo siguiente, por orden
 
-1. **Terminar la app de referencia en Hobo 2** (el `rexml` de arriba), generar la
-   videoteca en ella, y **comparar pantalla a pantalla** con capturas.
-2. **La videoteca en Hobo 3**, con lo que falte: filtros y formularios anidados.
-3. **La fusión en una sola gema** (decisión 11), que sigue pendiente.
-4. **El contrato de plugin** (pieza 17): con los tags en Ruby, definir un tag ya
+1. **Los formularios anidados** (punto 1 de la lista de arriba): que `children`
+   llegue al formulario como `input-many`, con `+` y `−`, y que crear un género
+   desde la película funcione. Es lo que más separa a las dos hoy.
+2. **Los filtros** del listado, con Ransack (pieza 6).
+3. **Las cadenas de interfaz a inglés**, y detrás i18n.
+4. **La fusión en una sola gema** (decisión 11), que sigue pendiente.
+5. **El contrato de plugin** (pieza 17): con los tags en Ruby, definir un tag ya
    es registrarlo, así que el contrato se encoge — falta escribirlo y probarlo.
 
 ## Cómo mirar la aplicación con el navegador

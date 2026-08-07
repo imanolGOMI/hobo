@@ -189,4 +189,56 @@ class DerivationTest < Minitest::Test
     assert_every_param_overridable(:model_form, { :name => "una historia", :this => story })
   end
 
+  # --- an association is not a number -------------------------------------------
+  #
+  # `category_id` is what the database keeps; `category` is what the page is
+  # about. The model already said which is which -- `belongs_to :category` names
+  # the foreign key -- and until the engine read that, every belongs_to came out
+  # as the id: on the index, on the record page and in the form, where it got a
+  # number box instead of a select.
+
+  class Category
+    attr_accessor :id, :name
+    def initialize(id, name) = (@id, @name = id, name)
+    def self.name_attribute = :name
+    def viewable_by?(_user, _field = nil) = true
+  end
+
+  Reflection = Struct.new(:macro, :name, :foreign_key, :klass, :options)
+
+  class Film
+    attr_accessor :id, :title, :category
+
+    def self.field_specs = { :title => nil, :category_id => nil }
+    def self.name_attribute = :title
+    def self.attr_type(field) = { "title" => String }[field.to_s]
+    def self.human_attribute_name(field) = field.to_s.humanize
+    def self.reflections
+      { "category" => Reflection.new(:belongs_to, :category, "category_id", nil, {}) }
+    end
+    def viewable_by?(_user, _field = nil) = true
+    def editable_by?(_user, _field = nil) = true
+  end
+
+  def test_a_foreign_key_is_derived_as_its_association
+    fields = HoboRapid::Derivation.summary_fields(Film)
+
+    assert_includes fields, "category"
+    refute_includes fields, "category_id"
+  end
+
+  # A polymorphic belongs_to has no single class to ask for choices, so it is
+  # left as it is rather than blowing up at render time.
+  def test_a_polymorphic_belongs_to_is_left_alone
+    reflection = Reflection.new(:belongs_to, :owner, "owner_id", nil, { :polymorphic => true })
+
+    assert_nil HoboRapid::Derivation.belongs_to_name(polymorphic_model(reflection), "owner_id")
+  end
+
+  def polymorphic_model(reflection)
+    Class.new do
+      define_singleton_method(:reflections) { { "owner" => reflection } }
+    end
+  end
+
 end

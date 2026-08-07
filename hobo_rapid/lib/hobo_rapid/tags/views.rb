@@ -8,6 +8,7 @@
 # **declared** type, so a blank field still paints as the kind of thing it is.
 
 require "rapid"
+require "hobo_rapid/request"
 
 module HoboRapid
 
@@ -33,9 +34,17 @@ module HoboRapid
         this_parent.viewable_by?(acting_user, this_field)
       end
 
-      # Stands in for the controller's current_user until the derivation engine
-      # wires it through.
-      def acting_user = nil
+      # Who is asking. `rapid_tag` takes the controller's `current_user` and
+      # puts it where the tags can reach it (HoboRapid.with_request), and this
+      # is the other end of that wire.
+      #
+      # It used to answer `nil`, always, with a note saying it would be wired
+      # through later. Nothing failed: every permission question got the answer
+      # for a guest, so forms came out read-only, the actions column disappeared
+      # and no page ever complained. **A tag that asks a question it always
+      # answers itself is not asking anything**, which is why the piece tests
+      # passed while the product had no forms.
+      def acting_user = HoboRapid.current_user
 
       # A collection paints as a list of its members, not as itself.
       def collection?

@@ -42,9 +42,17 @@ after_bundle do
   # those pages came out unstyled next to the ones Hobo paints. The layout gets
   # the theme's stylesheets and its container, and everything looks like one
   # application again.
+  #
+  # The match has to survive Rails changing its own layout: 8.1 writes
+  # `stylesheet_link_tag :app, "data-turbo-track": "reload"`, and a pattern
+  # anchored on `:app %>` stopped matching -- silently, because `gsub_file`
+  # reports the file either way. That is how the theme came unplugged again, so
+  # the line is matched by what it is, not by what it carried that year, and
+  # `test_the_layout_wears_the_theme` in the conformance suite fails if it ever
+  # stops matching at all.
   gsub_file "app/views/layouts/application.html.erb",
-            /<%= stylesheet_link_tag :app %>/,
-            "<%= stylesheet_link_tag \"bootstrap\" %>\n    <%= stylesheet_link_tag \"hobo\" %>\n    <%= stylesheet_link_tag :app %>"
+            /^(\s*)<%= stylesheet_link_tag :app.*%>$/,
+            "\\1<%= stylesheet_link_tag \"bootstrap\" %>\n\\1<%= stylesheet_link_tag \"hobo\" %>\n\\0"
 
   gsub_file "app/views/layouts/application.html.erb",
             /<%= yield %>/,

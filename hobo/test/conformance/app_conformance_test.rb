@@ -96,6 +96,35 @@ class AppConformanceTest < Minitest::Test
     assert @page.has_css?(".container", :visible => :all), "falta el contenedor del tema"
   end
 
+  # The pages Rails renders -- the session form, the password pages -- go
+  # through `app/views/layouts/application.html.erb`, and `hobo new` is what
+  # puts the theme into it. It does that by rewriting one line, and Rails keeps
+  # changing that line: 8.1 writes `stylesheet_link_tag :app, "data-turbo-track":
+  # "reload"`, and the pattern anchored on `:app %>` quietly stopped matching.
+  # `gsub_file` reports the file whether or not anything matched, so nothing said
+  # a word and half the application went back to looking unstyled.
+  def test_the_layout_wears_the_theme
+    layout = File.join(APP, "app", "views", "layouts", "application.html.erb")
+    skip "no hay layout de aplicacion en #{APP}" unless File.exist?(layout)
+    erb = File.read(layout)
+
+    assert_includes erb, %(stylesheet_link_tag "bootstrap"), "el layout no carga el tema"
+    assert_includes erb, %(stylesheet_link_tag "hobo"), "el layout no carga hobo.css"
+    assert_includes erb, %(class="container), "el layout no trae el contenedor del tema"
+  end
+
+  # A page Rails renders in its own layout has to render at all. Hobo reopens
+  # ActionView (`hobo/extensions/`), and a patch that is wrong for Rails does
+  # not break Hobo's pages -- it breaks these, which no test of a Hobo tag ever
+  # visits. `/session/new` came from `bin/rails generate authentication`.
+  def test_the_pages_rails_renders_still_render
+    @page.visit("/session/new")
+
+    refute_match(/Error|Exception/i, @page.title.to_s, "la pagina de sesion de Rails revienta")
+    assert @page.has_css?("input[type=password]", :visible => :all),
+           "la pagina de sesion no trae el formulario"
+  end
+
   # --- you can get around ------------------------------------------------------
 
   def test_the_navigation_links_to_the_models
@@ -106,20 +135,28 @@ class AppConformanceTest < Minitest::Test
   end
 
   # A list nobody can click is a list nobody can use.
+  #
+  # It looks at the index, not at `/`: the front page is the first-user page,
+  # and layer 5 turned the index back into a table, so what has to be true is
+  # about the *list*, whatever shape it takes -- the record's name leads
+  # somewhere.
   def test_each_record_links_to_itself
-    @page.visit("/")
+    @page.visit("/stories")
 
-    links = @page.all(".card a", :visible => :all)
-    refute_empty links, "las tarjetas no enlazan a su registro"
+    links = @page.all("a[href*='/stories/']", :visible => :all)
+                 .reject { |link| link[:href].to_s.match?(%r{/stories/new}) }
+    refute_empty links, "la lista no enlaza a ningun registro"
 
     links.first.click
     assert_operator @page.current_path, :match?, %r{/stories/\d+}, "el enlace no lleva a la ficha"
   end
 
   def test_a_record_page_shows_the_record
-    @page.visit("/")
-    name = @page.first(".card h3").text.strip
-    @page.first(".card a").click
+    @page.visit("/stories")
+    link = @page.all("a[href*='/stories/']", :visible => :all)
+                .reject { |l| l[:href].to_s.match?(%r{/stories/new}) }.first
+    name = link.text.strip
+    link.click
 
     assert_includes @page.text, name
   end
@@ -138,7 +175,7 @@ class AppConformanceTest < Minitest::Test
   # --- what a card is about ----------------------------------------------------
 
   def test_a_card_is_about_the_record_and_not_the_database
-    @page.visit("/")
+    @page.visit("/stories")
 
     refute_includes @page.text, "Created at", "los timestamps no son resumen"
     refute_includes @page.text, "Updated at"

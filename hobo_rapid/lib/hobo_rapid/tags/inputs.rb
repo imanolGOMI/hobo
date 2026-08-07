@@ -65,6 +65,21 @@ Rapid.define(:input, :attrs => [:no_edit, :name, :type]) do
   html[:name] ||= param_name_for_this
   html[:disabled] = true if refused && no_edit == :disable
 
+  # An association is not a value with a control: it is a choice among records,
+  # and which control it wants is decided by the *shape* of the association, not
+  # by a type. That is why this is here and not in <input-content>, which
+  # dispatches on the class of the value -- and the class of `movie.category` is
+  # Category, which says nothing about there being a Genre to pick as well.
+  reflection = this_reflection
+  case reflection&.macro
+  when :belongs_to
+    # `select_one` builds its own name from the reflection: `movie[category_id]`,
+    # the foreign key, not `movie[category]`.
+    next param(:default) { call_tag(:select_one, html.except(:name), :as => :select) }
+  when :has_many, :has_and_belongs_to_many
+    next param(:default) { call_tag(:check_many, html.except(:name), :as => :check_many) }
+  end
+
   param(:default) { call_tag(:input_content, html) }
 end
 

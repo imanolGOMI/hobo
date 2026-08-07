@@ -125,7 +125,27 @@ module HoboRapid
       # housekeeping columns -- a card that leads with "Created at" is a card
       # about the database, not about the record.
       def summary_fields(model)
-        fields_of(model) - [name_attribute_of(model)] - children_of(model) - HOUSEKEEPING
+        fields = fields_of(model) - [name_attribute_of(model)] - children_of(model) - HOUSEKEEPING
+        fields.map { |field| belongs_to_name(model, field) || field }
+      end
+
+      # `category_id` is not what a page is about: `category` is. The model
+      # already said so -- `belongs_to :category` names the foreign key -- so
+      # the derived pages walk the association and get the record, which <view>
+      # paints as its name and <input> offers as a select of the categories
+      # this user may see. Before this, every belongs_to came out as the number
+      # in the column, on the index, on the record page and in the form.
+      #
+      # Polymorphic ones are left alone: there is no single class to ask for
+      # choices, and pretending otherwise raises at render time.
+      def belongs_to_name(model, field)
+        return nil unless model.respond_to?(:reflections)
+        reflection = model.reflections.values.find do |r|
+          r.macro == :belongs_to && !r.options[:polymorphic] && r.foreign_key.to_s == field.to_s
+        end
+        reflection&.name&.to_s
+      rescue StandardError
+        nil
       end
 
       # Defines <card>, <show-page>, <index-page> and <form> for one model.

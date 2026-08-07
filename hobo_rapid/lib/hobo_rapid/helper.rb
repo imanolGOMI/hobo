@@ -7,34 +7,9 @@
 # says what it is painting is easier to follow than one that does not.
 
 require "rapid"
+require "hobo_rapid/request"
 
 module HoboRapid
-
-  # The tag runtime does not know about requests, and a form still needs the
-  # forgery token of *this* one. The bridge hands it over for the length of the
-  # render: a tag can ask for it without any tag knowing what a controller is.
-  #
-  # A form without it gets 422 from Rails and nothing says why, which is the
-  # kind of failure that eats an afternoon.
-  class << self
-
-    def with_request(token, user, flash = {})
-      previous = [Thread.current[:hobo_rapid_token], Thread.current[:hobo_rapid_user],
-                  Thread.current[:hobo_rapid_flash]]
-      Thread.current[:hobo_rapid_token] = token
-      Thread.current[:hobo_rapid_user] = user
-      Thread.current[:hobo_rapid_flash] = flash
-      yield
-    ensure
-      Thread.current[:hobo_rapid_token], Thread.current[:hobo_rapid_user],
-        Thread.current[:hobo_rapid_flash] = previous
-    end
-
-    def authenticity_token = Thread.current[:hobo_rapid_token]
-    def current_user = Thread.current[:hobo_rapid_user]
-    def flash_messages = Thread.current[:hobo_rapid_flash] || {}
-
-  end
 
   module Helper
 
