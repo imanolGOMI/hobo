@@ -1747,13 +1747,43 @@ member > default  bare
 > lección de la capa 4: una gema requiere lo que usa. Solo se vio al usarlo
 > desde otra gema, que es la primera vez que ha pasado.
 
+### La otra mitad: `<input>`, y lo que HTML5 se lleva (2026-08-07)
+
+`<input:title/>` no dice qué control pintar: **el tipo lo dice**. Es donde
+`fields do` paga: `contact_address :email_address` da un `<input type="email">`
+sin que nadie lo escriba.
+
+Misma forma que `<view>`, y por el mismo motivo: `<input>` guarda el permiso, el
+nombre del campo y el envoltorio, y `<input-content>` es el polimórfico.
+
+**Lo que se lleva HTML5:**
+
+| Antes | Ahora |
+|---|---|
+| `input_for_date.dryml`, **81 líneas** de selects día/mes/año construidos con `date_select` de Rails | `<input type="date">`, que el navegador tiene desde 2014 y que sabe de idiomas, teclados y calendarios más que nosotros |
+| hora y fecha-hora, con `order`, `date-separator`, `discard-type`, `prompt`, `prefix` | `type="time"` y `type="datetime-local"` |
+| enteros y decimales como campos de texto | `type="number"`, con `step` según el tipo |
+
+**Lo que no se lleva, y hay que conservar:** el truco de la casilla. Un
+`<input type="checkbox">` sin marcar **no envía nada**, así que el modelo nunca
+se entera de que lo desmarcaste. Va acompañado de un campo oculto con `0`, que es
+lo que Rails hace desde siempre. Hay prueba.
+
+Y los cuatro modos de `no_edit`, que son una decisión de producto y no técnica:
+sin permiso, por defecto **se enseña el valor en lugar del control** —un
+formulario que esconde lo que no puedes cambiar te dice menos que uno que te lo
+enseña apagado—, y se puede pedir `:disable`, `:skip` o `:ignore`.
+
+**16 pruebas**, más el barrido de contrato.
+
 ### Por dónde va la capa 5
 
 1. ~~**El JS a Stimulus.**~~ **Hecho**, salvo `delete-button`, que se decide al
    portar el tag. De 1.045 líneas de jQuery quedan ~250 de Stimulus.
 2. **El catálogo de vistas por tipo** (pieza 9). `<view>`, las vistas por tipo,
-   los tipos ricos, las colecciones y el barrido de contrato: **hecho**. Faltan
-   los `inputs` (30 tags), que son la otra mitad del catálogo.
+   los tipos ricos, las colecciones, los `inputs` y el barrido de contrato:
+   **hecho**. Faltan los tags de colección con formulario (`select-one`,
+   `select-many`, `check-many`), que son los que hablan con asociaciones.
 3. **El motor de derivación** (pieza 10): `cards.dryml.erb`, `pages.dryml.erb` y
    `forms.dryml.erb`, 534 líneas de ERB que generan un tag por modelo. Es *el*
    motivo de usar Hobo.
