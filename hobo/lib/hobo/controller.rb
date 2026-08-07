@@ -97,99 +97,27 @@ module Hobo
     end
 
 
-    def hobo_ajax_response(options=nil)
-      r = params[:render]
-      if r
-        ajax_update_response(r.is_a?(String) ? [] : r.values, options&.get(:results) || {}, options || params[:render_options] || {})
-        true
-      else
-        false
-      end
-    end
-
-
-    def ajax_update_response(render_specs, results={}, options={})
-      if render_specs.blank?
-        render :js => ''
-        return
-      end
-      controller, action = controller_action_from_page_path
-      identifier = view_context.view_paths.find( action,
-                                                 controller,
-                                                 false,
-                                                 view_context.lookup_context.instance_variable_get('@details')).identifier
-      renderer = Dryml.page_renderer(view_context, identifier, [], controller)
-      options = options.with_indifferent_access
-
-      headers["Content-Type"] = options['content_type'] if options['content_type']
-
-      page = options[:preamble] || ""
-      for spec in render_specs
-        function = spec[:function] || "hjq.ajax.update"
-        dom_id = spec[:id]
-
-        if spec[:part_context]
-          part_content = renderer.refresh_part(spec[:part_context], session, dom_id)
-          part_content.gsub!('&quot;', '&amp;quot;') if options[:fix_quotes]
-          page << "#{function}(#{dom_id.to_json}, #{part_content.to_json})\n"
-        elsif spec[:result]
-          result = results[spec[:result].to_sym]
-          page << "#{function}(#{dom_id.to_json}, #{result.to_json});\n"
-        else
-          page << "alert('ajax_update_response: render_spec did not provide action');\n"
-        end
-      end
-      if renderer
-        options[:contexts_function] ||= "hjq.ajax.updatePartContexts" unless options[:no_contexts_function]
-        if options[:contexts_function]
-          storage = renderer.part_contexts_storage_uncoded
-          page << "#{options[:contexts_function]}(#{storage.to_json});\n"
-        end
-      end
-      page << options[:postamble] if options[:postamble]
-      render :js => page
-    end
-
-    # dryml does not use layouts
-    def action_has_layout?
-      false
-    end
-
-
-    def dryml_context
-      @this
-    end
-
-
-    def render_tags(objects, tag, options={})
-      for_type = options.delete(:for_type)
-      base_tag = tag
-
-      results = objects.map do |o|
-        tag = tag_renderer.find_polymorphic_tag(base_tag, o.class) if for_type
-        tag_renderer.send(tag, options.merge(:with => o))
-      end.join
-
-      render :plain => results + tag_renderer.part_contexts_storage
-    end
-
-
-    def tag_renderer
-      @tag_renderer ||= Dryml.empty_page_renderer(view_context)
-    end
-
-
-    def call_tag(name, options={})
-      tag_renderer.send(name, options)
-    end
+    # The "parts" protocol used to live here.
+    #
+    # It worked like this, and it dated from about 2008: the browser sent
+    # `render[i][part_context]`, a serialised marker of which fragment of a
+    # template had painted each node; `ajax_update_response` called
+    # `refresh_part`, which **re-ran that fragment** with its saved context; and
+    # the answer came back as **JavaScript** -- `hjq.ajax.update("id", "<html>")`
+    # -- that put the result in place.
+    #
+    # That is what Turbo Frames do in Rails 8, without a marker to serialise,
+    # without a session round trip and without answering in JavaScript. So the
+    # protocol is gone (decision 15) and with it part_context.rb, the global
+    # `hobo_parts` page data and most of hjq.js.
+    #
+    # `refresh_part` lived in the old DRYML compiler, which layer 3 replaced, so
+    # there was no keeping this as it was in any case.
 
     def site_search(query)
       results_hash = Hobo.find_by_search(query)
       all_results = results_hash.values.flatten.select { |r| r.viewable_by?(current_user) }
-      if params["search_version"]
-        @search_results = all_results
-        hobo_ajax_response
-      elsif all_results.empty?
+      if all_results.empty?
         render :plain => "<p>"+ t("hobo.live_search.no_results", :default=>["Your search returned no matches."]) + "</p>"
       else
         # TODO: call one tag that renders all the search results with headings for each model

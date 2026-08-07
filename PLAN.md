@@ -69,6 +69,17 @@ Fecha: 2026-08-07. No volver a discutirlas salvo que aparezca información nueva
     > era sobre el servidor —DSL en Ruby frente a ViewComponent— y está tomada.
     > Ésta es sobre el navegador, y jQuery no competía con ViewComponent sino con
     > Stimulus. No estaba escrita en ningún sitio.
+15. **El protocolo de «partes» se sustituye por Turbo Frames** (decidido el
+    2026-08-07). Hobo traía un protocolo propio de ~2008: el navegador mandaba
+    `render[i][part_context]`, un marcador serializado de qué trozo de plantilla
+    había pintado cada nodo; el servidor llamaba a `refresh_part`, **volvía a
+    ejecutar ese trozo** con su contexto guardado; y contestaba con
+    **JavaScript** (`hjq.ajax.update("id", "<html>")`) que lo sustituía.
+    Es lo que hacen los Turbo Frames de serie, sin marcador que serializar, sin
+    viaje por la sesión y sin contestar en JavaScript.
+    > **No había opción de dejarlo como estaba:** `refresh_part` vive en el
+    > compilador viejo de DRYML, que la capa 3 sustituyó. El runtime nuevo no
+    > tiene partes.
 13. **El tema por defecto va dentro de la gema única.** Una app recién creada
     tiene que verse bien sin instalar nada más. Los temas *alternativos* siguen
     siendo plugins aparte.
@@ -1597,6 +1608,22 @@ globales de la página) y `data-rapid-context` (el id tipado del registro).
 ganancia real que no es cosmética: **`hjq.init()` hay que llamarlo a mano después
 de cada actualización ajax**, y buena parte de `hjq.js` existe para eso. Stimulus
 conecta y desconecta solo cuando cambia el DOM, así que ese trabajo desaparece.
+
+### El protocolo de partes, fuera (2026-08-07)
+
+Del lado del servidor **ya no queda nada**: `hobo_ajax_response` y
+`ajax_update_response` borrados, y con ellos las ramas
+`if request.xhr? && params[:render]` de `show_response`, `index_response`,
+`create_response` y `update_response`, y las respuestas `wants.js` de
+`user_base.rb`. **Las 77 pruebas siguen en verde**, incluidas las de petición
+real: crear, modificar y borrar no dependían de esto.
+
+Un ajax ya no toma un camino distinto: **se pinta la página como siempre y Turbo
+saca de ella el frame que pidió.**
+
+`dryml/lib/dryml/part_context.rb` **se queda donde está**: es del compilador
+viejo, que se conserva a propósito como front-end del actualizador de plantillas
+(decisión 6). Lo que se ha ido es que Hobo dependa de él.
 
 ### Por dónde va la capa 5
 

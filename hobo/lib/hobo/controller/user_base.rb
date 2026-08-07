@@ -49,7 +49,6 @@ module Hobo
       if logged_in?
         respond_to do |wants|
           wants.html { redirect_to home_page }
-          wants.js { hobo_ajax_response }
         end
         return
       end
@@ -61,7 +60,6 @@ module Hobo
         user = model.authenticate(params[:login], params[:password])
         if user.nil?
           flash[:error] = options[:failure_notice]
-          hobo_ajax_response if request.xhr? && !performed?
         else
           self.sign_user_in(user, options, &block)
         end
@@ -85,7 +83,6 @@ module Hobo
                                 self.current_user = this if this.account_active?
                                 respond_to do |wants|
                                   wants.html { redirect_back_or_default(home_page) }
-                                  wants.js { hobo_ajax_response }
                                 end
                               end
       end
@@ -111,7 +108,6 @@ module Hobo
         end
         respond_to do |wants|
           wants.html { render :forgot_password_email_sent }
-          wants.js { hobo_ajax_response}
         end
       end
     end
@@ -124,7 +120,6 @@ module Hobo
                                 flash[:notice] = ht(:"#{model.to_s.underscore}.messages.reset_password", :default=>["Your password has been reset"])
                                 respond_to do |wants|
                                   wants.html { redirect_to(home_page) }
-                                  wants.js { hobo_ajax_response }
                                 end
                               end
       end
@@ -179,7 +174,6 @@ module Hobo
         unless performed?
           respond_to do |wants|
             wants.html {render :action => :account_disabled}
-            wants.js {hobo_ajax_response}
           end
         end
       else
@@ -191,7 +185,6 @@ module Hobo
         unless performed?
           respond_to do |wants|
             wants.html {redirect_back_or_default(options[:redirect_to] || home_page) }
-            wants.js {hobo_ajax_response}
           end
         end
       end

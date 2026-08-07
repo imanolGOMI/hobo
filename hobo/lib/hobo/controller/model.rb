@@ -132,7 +132,7 @@ module Hobo
             @this.send(method)
           end
 
-          hobo_ajax_response unless performed?
+          head(:ok) unless performed?
         end
       end
 
@@ -538,22 +538,15 @@ module Hobo
       response_block(&b) || show_response
     end
 
+    # An ajax request used to take a different road here, into the parts
+    # protocol. With Turbo it does not: the page is rendered as always and Turbo
+    # takes the frame it asked for out of it.
     def show_response
-      if request.xhr? && params[:render]
-        hobo_ajax_response
-        head(:ok) unless performed?
-      else
-        respond_with(self.this)
-      end
+      respond_with(self.this)
     end
 
     def index_response
-      if request.xhr? && params[:render]
-        hobo_ajax_response(:page => :blah)
-        head(:ok) unless performed?
-      else
-        respond_with(self.this)
-      end
+      respond_with(self.this)
     end
 
     def hobo_new_for(owner, record=nil, &b)
@@ -635,9 +628,6 @@ module Hobo
       valid = valid?  # valid? can be expensive
       if params[:render]
         if (params[:render_options] && params[:render_options][:errors_ok]) || valid
-          hobo_ajax_response
-
-          # Maybe no ajax requests were made
           head(:ok) unless performed?
         else
           errors = @this.errors.full_messages.join('\n')
@@ -693,9 +683,6 @@ module Hobo
       valid = valid? if valid.nil?
       if params[:render]
         if (params[:render_options] && params[:render_options][:errors_ok]) || valid
-          hobo_ajax_response
-
-          # Maybe no ajax requests were made
           head(:ok) unless performed?
         else
           errors = @this.errors.full_messages.join('\n')
@@ -729,7 +716,7 @@ module Hobo
 
     def destroy_response(options={})
       if params[:render]
-        hobo_ajax_response || head(:ok)
+        head(:ok)
       else
         redirect_to destination_after_submit(this, true, options)
       end
@@ -756,7 +743,7 @@ module Hobo
     def do_creator_response(name, options)
       if valid?
         if params[:render]
-          hobo_ajax_response || head(:ok)
+          head(:ok)
         else
           location = destination_after_submit(options)
           respond_with(self.this) do |wants|
@@ -766,7 +753,6 @@ module Hobo
       else
         this.exempt_from_edit_checks = true
         if params[:render] && params[:render_options] && params[:render_options][:errors_ok]
-          hobo_ajax_response
           head(:ok) unless performed?
         else
           # errors is used by the translation helper, ht, below.
@@ -840,7 +826,7 @@ module Hobo
           object = model.find(id)
           object.user_update_attributes!(current_user, object.position_column => position+1)
         end
-        hobo_ajax_response || head(:ok)
+        head(:ok)
       else
         head :ok
       end
