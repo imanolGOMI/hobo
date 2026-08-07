@@ -58,6 +58,17 @@ Fecha: 2026-08-07. No volver a discutirlas salvo que aparezca información nueva
     fronteras actuales para que el diff de cada capa sea legible. El precio
     aceptado: el andamiaje (gemspec, Gemfile, Rakefile, `test_helper`) se repite
     en cada gema y luego se tira.
+14. **El JavaScript se migra a Stimulus y Turbo** (decidido el 2026-08-07, en la
+    capa 5). Hobo trae hoy 1.045 líneas de jQuery propio (`hobo_jquery`) que
+    **no son un adorno**: son la mitad interactiva —formularios ajax,
+    `input-many`, editores en línea, búsqueda en vivo, borrado con
+    confirmación—. Rails 8 trae Stimulus y Turbo de serie, y **se migra antes de
+    portar los tags**, para que el contrato con el navegador nazca ya con la
+    forma nueva en vez de portarse dos veces.
+    > Esta decisión es **distinta** de la del sustrato de DRYML (decisión 5). Esa
+    > era sobre el servidor —DSL en Ruby frente a ViewComponent— y está tomada.
+    > Ésta es sobre el navegador, y jQuery no competía con ViewComponent sino con
+    > Stimulus. No estaba escrita en ningún sitio.
 13. **El tema por defecto va dentro de la gema única.** Una app recién creada
     tiene que verse bien sin instalar nada más. Los temas *alternativos* siguen
     siendo plugins aparte.
@@ -606,7 +617,7 @@ Estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho
 | `[x]` | **2** | `hobo_fields`: `fields do`, tipos ricos, migraciones **+ batería que ejecute `up` y `down`** | 1, 2, 3 |
 | `[x]` | **3** | **El remix de DRYML**: runtime, contrato de params, params anidados, pseudo-params y dos tags grandes portados. Ya es la gema `dryml` | 8 |
 | `[x]` | **4** | `hobo`: permisos, lifecycles, view hints, auto-actions, router, subsites | 4, 5, 6, 7, 11, 12, 14 |
-| `[ ]` | **5** | `hobo_rapid` + motor de derivación | 9, 10 |
+| `[~]` | **5** | **El JS a Stimulus** (decisión 14), `hobo_rapid` + motor de derivación | 9, 10 |
 | `[ ]` | **6** | Separar `hobo_bootstrap` en tags estructurales (→ RAPID) y tema | 13a, 13b |
 | `[ ]` | **7** | `hobo new`, generadores, contrato de plugin | 17 |
 
@@ -1550,6 +1561,55 @@ cd hobo && rake test
 ruby -Ilib -I../hobo_support/lib -I../hobo_fields/lib -I../dryml/lib \
      -e 'require "active_record"; require "hobo"'   # el gate de carga
 ```
+
+## Capa 5 — el inventario (2026-08-07)
+
+### El catálogo: 146 tags, 96 ficheros, ~3.900 líneas
+
+Por directorio: `inputs` 30, `html` 24, `views` 22, `pages` 15, `lists` 14,
+`editors` 11, `plus` 8, `buttons` 7, `forms` 4, `i18n` 3, `cards` 2.
+**34 son polimórficos** (`for="string"`, `for="datetime"`, `for="EnumString"`…):
+ese es el catálogo de vistas por tipo, y es el corazón de la pieza 9.
+
+### Lo que no se porta, y por qué
+
+| Qué | Motivo |
+|---|---|
+| **10 tags de elementos vacíos** (`<br>`, `<hr>`, `<img>`, `<meta>`, `<link>`, `<base>`, `<area>`, `<col>`, `<param>`, `<frame>`) | Existían porque **el parser de DRYML** necesitaba saber qué elementos no llevan cierre. El runtime de la capa 3 ya lo sabe: se añadió al portar `<form>` |
+| **`<if-ie>`** | Los comentarios condicionales los quitó **IE10 en 2012**, e IE está fuera de soporte desde 2022 |
+| **`<doctype>` con seis doctypes** | HTML 4.01 Strict/Transitional/Frameset y las variantes XHTML. Hoy solo existe `<!DOCTYPE html>` |
+| **`<header>`, `<footer>`, `<aside>`, `<section>`** | Pintan `<div class="header">` porque se escribieron **antes de HTML5**. Ahora esos elementos existen. Se conserva solo el «no pintes nada si el cuerpo está vacío», que sí es útil |
+| **Los tres tags de caché** (644 líneas, 17% del catálogo) | **Decidido el 2026-08-07: fuera.** No los usaba nadie —ni el tema, ni la app de integración, ni el resto de RAPID—. Eran invalidación por dependencias de contexto, de antes de que Rails tuviera claves de caché decentes (Rails 4, 2013). Quien necesite caché usa la de Rails; recuperarlos del git es un `git show` |
+
+### El contrato con el navegador, mapeado
+
+El servidor emite un atributo `data-rapid` con **JSON**: `{"form": {…opciones…},
+"before-unload": {…}}`, o sea **nombre de comportamiento → opciones**. El JS
+(`hjq.js`) busca `[data-rapid]`, y por cada clave llama al plugin de jQuery
+`hjq_<nombre>` sobre ese elemento. Hay además `data-rapid-page-data` (datos
+globales de la página) y `data-rapid-context` (el id tipado del registro).
+
+**Hay 27 comportamientos** repartidos entre `hobo_jquery` (15), `hobo_jquery_ui`
+(9) y `hobo_bootstrap_ui` (3).
+
+**Eso se traduce a Stimulus casi uno a uno:** `data-rapid='{"form": {…}}'` pasa a
+`data-controller="rapid-form"` con sus `data-rapid-form-*-value`. Y hay una
+ganancia real que no es cosmética: **`hjq.init()` hay que llamarlo a mano después
+de cada actualización ajax**, y buena parte de `hjq.js` existe para eso. Stimulus
+conecta y desconecta solo cuando cambia el DOM, así que ese trabajo desaparece.
+
+### Por dónde va la capa 5
+
+1. **El JS a Stimulus**, empezando por el formulario ajax, que es el que arrastra
+   a los demás.
+2. **El catálogo de vistas por tipo** (pieza 9), con el barrido de contrato de
+   params de la capa 3: `require "rapid/param_contract"`.
+3. **El motor de derivación** (pieza 10): `cards.dryml.erb`, `pages.dryml.erb` y
+   `forms.dryml.erb`, 534 líneas de ERB que generan un tag por modelo. Es *el*
+   motivo de usar Hobo.
+
+**Aplazado a la capa 6:** los 11 tags de `editors/`, que son widgets de
+navegador y se deciden con el tema delante.
 
 ## Reglas de trabajo
 
