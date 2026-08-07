@@ -1,9 +1,9 @@
-class <%= @migration_class_name %> < ActiveRecord::Migration
-  def self.up
+class <%= @migration_class_name %> < ActiveRecord::Migration[<%= ActiveRecord::Migration.current_version %>]
+  def up
     <%= @up %>
   end
 
-  def self.down
+  def down
     <%= @down %>
   end
 end

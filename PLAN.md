@@ -183,14 +183,54 @@ capa 2 se arreglaron cinco fallos causados justo por eso. **Ese peaje se paga en
 cada versión de Rails, para siempre.** La batería multi-adaptador es lo que lo
 hace asumible: te enteras el primer día.
 
-**La tensión de fondo, dicha en voz alta:** Rails apuesta por *migraciones como
-historia* —dan auditoría y permiten migrar **datos**— y Hobo por *modelo como
-verdad única*, que da un solo sitio donde mirar pero **no puede expresar una
-transformación de datos**.
+### ¿Choca con la filosofía de Rails? **No.** (verificado en el código)
+
+Se planteó la duda de si Hobo, al hacer del modelo la verdad, va contra Rails,
+que hace de las migraciones la verdad. **Mirando el generador, no hay conflicto:**
+
+```ruby
+migration_template 'migration.rb.erb', "db/migrate/#{name}.rb"
+rake('db:migrate') if action == 'm'
+```
+
+Hobo escribe **un fichero de migración normal de Rails** en `db/migrate/`, que se
+versiona en git y se ejecuta con `rails db:migrate`, y `schema.rb` se vuelca como
+siempre. **Las migraciones siguen siendo la historia y la verdad.** `fields do`
+no las sustituye: **las escribe por ti**.
+
+Para quien lo mire desde fuera, la frase es: *«tu flujo de Rails no cambia,
+simplemente dejas de escribir migraciones a mano»*. Y es cierta.
+
+**Lo que sí conviene tener claro:** `fields do` declara **dos cosas distintas**.
+
+```ruby
+fields do
+  title           :string, :required
+  contact_address :email_address
+end
+```
+
+- **La parte de esquema** (`title` es varchar) — se puede derivar de la base de
+  datos, así que **va y viene** con las migraciones.
+- **La parte semántica** (`:required` es una validación; `:email_address` es un
+  tipo rico que hace que la vista pinte `<input type="email">`) — **no está en el
+  esquema** y no se puede derivar de él. Es lo que Rails no tiene.
+
+**Dónde está la fricción de verdad** (que es mecánica, no filosófica): si alguien
+escribe a mano una migración que añade una columna que el modelo no declara, el
+siguiente `hobo:migration` propondrá **quitarla**.
+
+La solución es cerrar el círculo: además de `fields do → migración`, hace falta
+**`esquema → fields do`**. El primer intento ya lo tenía escrito
+(`declarations_from_schema.rb`, en el tag `intento-1-update`) y **conviene
+rescatarlo**. Con las dos direcciones, ninguna parte es «la verdad»: son dos
+vistas de lo mismo, igual que el `schema.rb` de Rails. Y da una invariante
+preciosa y comprobable con la batería: **`fields do → migración → esquema →
+fields do` tiene que ser un punto fijo.**
 
 **Decisión (2026-08-07):** se queda. Esta fase es **solo para aplicaciones
-nuevas**, así que la limitación de las migraciones de datos no bloquea. Cuando
-alguien la necesite, se verá entonces.
+nuevas**, así que lo de las migraciones de **datos** no bloquea; cuando alguien
+lo necesite, se verá. Pendiente para la capa 7: rescatar el generador inverso.
 
 ## La duda abierta: el sustrato de DRYML
 

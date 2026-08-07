@@ -269,6 +269,38 @@ module MigrationGeneratorBattery
     assert_reversible(up, down)
   end
 
+  # --- the migration file itself --------------------------------------------
+
+  # The battery above evals the up/down bodies directly, which would not have
+  # caught a broken *template*: inheriting from ActiveRecord::Migration with no
+  # version raises since Rails 5, and def self.up is Rails 3 style.
+  def test_the_generated_migration_file_is_a_runnable_migration_class
+    define_model(:Advert) { fields { name :string, :limit => 250 } }
+    up, down = generate
+
+    # The template reads instance variables of the generator, so fill them in
+    # by substitution rather than setting up a Thor generator here.
+    source = File.read(template_path)
+      .gsub("<%= @migration_class_name %>", "CreateAdverts")
+      .gsub("<%= ActiveRecord::Migration.current_version %>", ActiveRecord::Migration.current_version.to_s)
+      .gsub("<%= @up %>", up)
+      .gsub("<%= @down %>", down)
+
+    Object.class_eval(source)
+    migration = Object.const_get(:CreateAdverts).new
+
+    migration.up
+    assert_includes connection.tables, "adverts"
+    migration.down
+    refute_includes connection.tables, "adverts"
+  ensure
+    Object.send(:remove_const, :CreateAdverts) if Object.const_defined?(:CreateAdverts)
+  end
+
+  def template_path
+    File.expand_path("../../lib/generators/hobo/migration/templates/migration.rb.erb", __dir__)
+  end
+
   # --- several changes at once ----------------------------------------------
 
   def test_several_changes_in_one_migration
