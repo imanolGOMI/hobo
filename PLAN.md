@@ -1675,11 +1675,23 @@ navegador, en verde**, sobre lo que de verdad importa:
 inicialización cuando cambia el DOM. Stimulus conecta y desconecta por su cuenta,
 y eso era buena parte de lo que hacía `hjq.js`.
 
+### Las seis conductas que quedaban (2026-08-07)
+
+**18 pruebas en navegador, en verde.** El JS propio pasa de **1.045 líneas a
+~250**, y tres de las siete conductas se van sin sustituto:
+
+| Conducta | Qué le pasa |
+|---|---|
+| `spinner` (83) | **Fuera, sin sustituto.** No la usa ningún taglib, se llamaba desde la maquinaria de ajax que ya no existe, y Turbo trae barra de progreso y marca los frames mientras cargan |
+| `hot-input` (15) + `filter-menu` (6) | **Eran la misma idea escrita dos veces**: enviar el formulario cuando algo cambia. Son un solo controlador, `rapid-autosubmit`, y ya no hacen la petición: el formulario va a Turbo. Con retardo opcional, para no enviar una petición por tecla |
+| `before-unload` (15) | Portado. **Se le cae la opción `message`**: los navegadores ignoran el mensaje propio desde 2016, porque se usaba para atrapar a la gente |
+| `select-many` (62) | Portado. La versión de jQuery **convertía la opción elegida en un `<optgroup>`** para esconderla, y la volvía a convertir al quitarla; ahora se deshabilita y se oculta, que es para lo que están esos atributos, y nada de lo que lea el `select` ve una lista distinta |
+| `delete-button` (43) | **Pendiente, y probablemente no se porta**: quitar el registro del DOM tras borrarlo es un `<turbo-stream action="remove">` que manda el servidor. Se decide al portar el tag |
+
 ### Por dónde va la capa 5
 
-1. **El JS a Stimulus.** Hecho: el protocolo de partes, `<input-many>` y el
-   banco de navegador. Quedan seis conductas: `select-many`, `spinner`,
-   `delete-button`, `hot-input`, `before-unload` y `filter-menu`.
+1. ~~**El JS a Stimulus.**~~ **Hecho**, salvo `delete-button`, que se decide al
+   portar el tag. De 1.045 líneas de jQuery quedan ~250 de Stimulus.
 2. **El catálogo de vistas por tipo** (pieza 9), con el barrido de contrato de
    params de la capa 3: `require "rapid/param_contract"`.
 3. **El motor de derivación** (pieza 10): `cards.dryml.erb`, `pages.dryml.erb` y
