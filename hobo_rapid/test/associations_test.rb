@@ -260,4 +260,83 @@ class AssociationsTest < Minitest::Test
   # prefix, no member class and nothing to paint. Where it is really used is
   # inside a derived form, and that is where it is swept.
 
+  # --- <select-one-or-new>: elegir uno, o hacerlo aqui mismo -------------------
+  #
+  # The thing Hobo was known for in a form. Hobo 2 did it with a modal and told
+  # you, in its own documentation, to patch the controller's `create` action and
+  # inject JavaScript afterwards. Here the new record's fields ride in the
+  # parent form and `:accessible => true` creates it on save -- so the server
+  # side is the one that already works, and what is left is naming things right.
+
+  class Style
+    attr_accessor :id, :name
+    def self.field_specs = { :name => nil }
+    def self.name_attribute = :name
+    def self.attr_type(field) = { "name" => String }[field.to_s]
+    def self.human_attribute_name(field) = field.to_s.humanize
+    def self.limit(_n) = self
+    def self.select(&block) = [].select(&block)
+    def self.name = "Style"
+    def editable_by?(_user, _field = nil) = true
+    def viewable_by?(_user, _field = nil) = true
+  end
+
+  StyleReflection = Struct.new(:klass, :foreign_key, :macro, :options, :name)
+
+  class Track
+    attr_accessor :style, :plain_style
+
+    def self.name = "Track"
+    def self.reflections
+      { "style" => StyleReflection.new(Style, "style_id", :belongs_to, { :accessible => true }, :style),
+        "plain_style" => StyleReflection.new(Style, "plain_style_id", :belongs_to, {}, :plain_style) }
+    end
+    def self.attr_type(_field) = nil
+    def editable_by?(_user, _field = nil) = true
+    def viewable_by?(_user, _field = nil) = true
+  end
+
+  def track = @track ||= Track.new
+
+  def painted_on_track(tag_name, field, **attributes)
+    outer = Rapid::Tag.new
+    Rapid::Context.capture { outer.with_field(field, track) { outer.call_tag(tag_name, attributes) } }
+  end
+
+  # The record you are creating goes under the association name; the one you are
+  # choosing goes under the foreign key. They are two different questions and
+  # they must not collide.
+  def test_it_names_the_new_record_after_the_association
+    html = painted_on_track(:select_one_or_new, :style)
+
+    assert_includes html, %(name="track[style_id]")
+    assert_includes html, %(name="track[style][name]")
+  end
+
+  def test_it_offers_the_extra_option_that_reveals_the_fields
+    html = painted_on_track(:select_one_or_new, :style)
+
+    assert_includes html, %(<option value="__new__")
+    assert_includes html, %(data-controller="rapid-select-one-or-new")
+    assert_includes html, %(data-rapid-select-one-or-new-target="select")
+    assert_includes html, %(data-rapid-select-one-or-new-target="fields")
+  end
+
+  # `:accessible => true` is the model saying this one may be *created* from
+  # here, not only chosen. Nobody edits a view to get it, and nobody gets it by
+  # accident either.
+  def test_input_offers_it_only_when_the_model_allows_creating
+    assert_includes painted_on_track(:input, :style), "select-one-or-new"
+    refute_includes painted_on_track(:input, :plain_style), "select-one-or-new"
+  end
+
+  # Inside a row of an <input-many> the names nest one level further, and both
+  # halves have to nest together or the row builds a record nobody asked for.
+  def test_inside_a_row_both_names_nest
+    html = painted_on_track(:select_one_or_new, :style, :name => "album[tracks][2][style_id]")
+
+    assert_includes html, %(name="album[tracks][2][style_id]")
+    assert_includes html, %(name="album[tracks][2][style][name]")
+  end
+
 end

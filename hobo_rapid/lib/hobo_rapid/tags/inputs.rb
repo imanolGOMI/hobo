@@ -78,7 +78,13 @@ Rapid.define(:input, :attrs => [:no_edit, :name, :type]) do
     # A name the *caller* gave is kept, because inside an <input-many> the row
     # knows something the field cannot: which row it is.
     given = attributes[:name] ? { :name => attributes[:name] } : {}
-    next param(:default) { call_tag(:select_one, html.except(:name).merge(given), :as => :select) }
+
+    # `:accessible => true` on the association is the model saying this one may
+    # be *created* from here, not only chosen. So the control changes, and it
+    # changes because the model said so -- nobody edits a view to get it.
+    accessible = reflection.options[:accessible] rescue false
+    control = accessible ? :select_one_or_new : :select_one
+    next param(:default) { call_tag(control, html.except(:name).merge(given), :as => :select) }
   when :has_many, :has_and_belongs_to_many
     next param(:default) { call_tag(:check_many, html.except(:name), :as => :check_many) }
   end

@@ -9,6 +9,12 @@ require "hobo_rapid/tags/inputs"
 require "hobo_rapid/derivation"
 
 module HoboRapid
+
+  # The option value that means "I am not choosing one of these, I am making a
+  # new one". It never reaches the server: the browser takes the select's name
+  # away while it is selected, so nothing is submitted under it.
+  NEW_RECORD_OPTION = "__new__".freeze
+
   module Tags
 
     module AssociationSupport
@@ -71,6 +77,17 @@ module HoboRapid
         "#{prefix}[#{index}][#{column}]"
       end
 
+      # What a record you are creating right here is asked for: its name and
+      # whatever else it summarises with. The same list the derived form uses,
+      # so the two never drift.
+      def new_record_fields(member_class)
+        return [] unless member_class
+        name = HoboRapid::Derivation.name_attribute_of(member_class)
+        ([name] + HoboRapid::Derivation.summary_fields(member_class)).compact.uniq
+      rescue StandardError
+        []
+      end
+
       def foreign_key_for(member_class, field)
         return nil unless member_class.respond_to?(:reflections)
         reflection = member_class.reflections[field.to_s]
@@ -112,6 +129,9 @@ Rapid.define(:select_one, :attrs => [:include_none, :blank_message, :options, :s
       selected = { :selected => true } if value == chosen
       tag("option", { :value => value }.merge(selected || {})) { text label }
     end
+    # Room for one more, which is what <select-one-or-new> hangs off. A param
+    # rather than an attribute because what goes there is markup.
+    param(:extra_options)
   end
 end
 
@@ -196,11 +216,15 @@ Rapid.define(:input_many, :attrs => [:minimum, :prefix, :fields, :add_label, :re
         end
       end
 
-      tag("button", { :type => "button", :class => "add-item",
+      # `btn btn-sm btn-outline-secondary` is what keeps these small and grey.
+      # Without the `btn` they are just buttons inside a form, and the rule that
+      # styles the plain forms Rails paints turned them into big blue primary
+      # buttons -- the same rule that was eating the delete glyph.
+      tag("button", { :type => "button", :class => "btn btn-sm btn-outline-secondary add-item",
                       :"data-action" => "rapid-input-many#add" }, :add) do
         text(attributes[:add_label] || "+")
       end
-      tag("button", { :type => "button", :class => "remove-item",
+      tag("button", { :type => "button", :class => "btn btn-sm btn-outline-secondary remove-item",
                       :"data-action" => "rapid-input-many#remove" }, :remove) do
         text(attributes[:remove_label] || "−")
       end
@@ -221,6 +245,80 @@ Rapid.define(:input_many, :attrs => [:minimum, :prefix, :fields, :add_label, :re
     # only while there are none.
     tag("div", { :"data-rapid-input-many-target" => "empty", :hidden => true }, :empty) do
       tag("input", { :type => "hidden", :class => "empty-input", :name => prefix, :value => "" })
+    end
+  end
+end
+
+# `<select-one-or-new>`: choose one of the records that exist, or make one here.
+#
+# This is what gave Hobo its reputation for forms: you are filling in a film,
+# the genre you want does not exist yet, and you do not have to go away and come
+# back. Hobo 2 did it with a modal, and its own documentation admitted the
+# price -- you had to patch the controller's `create` action for xhr and inject
+# JavaScript to re-select the record afterwards.
+#
+# None of that is needed once the new record's fields ride in the parent form:
+# `:accessible => true` creates it on save, the same road <input-many> takes.
+# So this is a select with one more option and a block of fields, and the only
+# thing the browser has to do is make sure **exactly one of the two is sent** --
+# both would reach `attributes=` and the second would quietly win.
+Rapid.define(:select_one_or_new, :attrs => [:name, :new_label, :fields, :limit, :text_method,
+                                            :include_none, :blank_message, :sort]) do
+  reflection = this_reflection
+  member_class = reflection.respond_to?(:klass) && reflection.klass
+
+  select_name = attributes[:name] ||
+                (this_parent && reflection ? "#{this_parent.class.name.demodulize.underscore}[#{reflection.foreign_key}]" : nil)
+
+  # The new record travels under the *association* name, not the foreign key:
+  # `movie[category][name]` is a record to build, `movie[category_id]` is one to
+  # find. Same shape one level down, inside an <input-many> row.
+  fields_prefix = if select_name && reflection
+                    select_name.sub(/\[#{Regexp.escape(reflection.foreign_key.to_s)}\]\z/,
+                                    "[#{reflection.name}]")
+                  end
+
+  fields = attributes[:fields] || HoboRapid::Tags.new_record_fields(member_class)
+  blank = begin
+            member_class&.new
+          rescue StandardError
+            nil
+          end
+
+  # Nothing to build, nothing to offer: it degrades to a plain select rather
+  # than to a broken one.
+  next call_tag(:select_one, attributes.slice(:name, :limit, :text_method, :include_none,
+                                              :blank_message, :sort), :as => :select) if blank.nil? || fields.empty? || fields_prefix.nil?
+
+  tag("div", { :class => "select-one-or-new",
+               :"data-controller" => "rapid-select-one-or-new" }, :select_one_or_new) do
+    new_label = attributes[:new_label] ||
+                "Nuevo #{HoboRapid::Derivation.title_of(member_class).downcase}\u2026"
+
+    call_tag(:select_one,
+             attributes.slice(:limit, :text_method, :include_none, :blank_message, :sort)
+                       .merge(:name => select_name),
+             :as => :select,
+             # The select is the tag's own; what this adds is the extra option
+             # and the two data attributes that hand it to Stimulus.
+             :select => Rapid.parameter(
+               :attributes => { :"data-rapid-select-one-or-new-target" => "select",
+                                :"data-action" => "change->rapid-select-one-or-new#change" }),
+             :extra_options => Rapid.markup do
+               tag("option", { :value => HoboRapid::NEW_RECORD_OPTION }, :new_option) { text new_label }
+             end)
+
+    tag("div", { :class => "new-record",
+                 :"data-rapid-select-one-or-new-target" => "fields",
+                 :hidden => true }, :fields) do
+      fields.each do |field|
+        with_field(field, blank) do
+          tag("div", { :class => "field" }, :"#{field}_field") do
+            tag("label", {}, :"#{field}_label") { text HoboRapid::Derivation.label_for(member_class, field) }
+            call_tag(:input, { :name => "#{fields_prefix}[#{field}]" }, :as => :"#{field}_input")
+          end
+        end
+      end
     end
   end
 end

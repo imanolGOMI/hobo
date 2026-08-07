@@ -77,6 +77,13 @@ export default class extends Controller {
     if (node.name) {
       node.name = node.name.replace(this.#indexed(prefix, "\\[-?\\d+\\]"), `${prefix}[${index}]`)
     }
+    // A <select-one-or-new> that is busy creating has parked its name here, so
+    // it has to be renumbered too -- otherwise changing your mind after moving
+    // rows restores the name the row had before it moved.
+    if (node.dataset && node.dataset.rapidName) {
+      node.dataset.rapidName = node.dataset.rapidName.replace(
+        this.#indexed(prefix, "\\[-?\\d+\\]"), `${prefix}[${index}]`)
+    }
     if (node.id) {
       node.id = node.id.replace(this.#indexed(idPrefix, "_-?\\d+"), `${idPrefix}_${index}`)
     }

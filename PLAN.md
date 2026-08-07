@@ -2131,8 +2131,10 @@ Una aplicación Rails 8 generada con `hobo new`:
 
 - **Formularios anidados**: una colección hija se edita dentro del formulario
   de su dueño, con `+` y `−`, y las filas se renumeran solas.
+- **Crear desde el formulario**: una asociación con `:accessible => true` deja
+  elegir uno de los que hay o hacer uno nuevo ahí mismo.
 
-**Pruebas: 362 en las gemas, todas en verde, + la suite de conformidad en
+**Pruebas: 371 en las gemas, todas en verde, + la suite de conformidad en
 navegador (`cd hobo && HOBO_APP=/tmp/hobo_luz rake test`). `/tmp/hobo_luz` se
 regeneró con el `hobo new` de hoy: el banco tiene que ser lo que sale del
 generador, no lo que salía hace tres commits.**
@@ -2280,12 +2282,49 @@ Este es el patrón de la sesión: cada arreglo destapa el de abajo.
 > uno, y **ninguna aplicación cargaba ninguno**. Es el tema desenchufado otra
 > vez: la pieza existe y el producto no la tiene.
 
+### `<select-one-or-new>` — **hecho** (2026-08-07)
+
+Elegir uno de los que hay, **o hacerlo aquí mismo**. Verificado en un navegador:
+desde el formulario de la película se crearon una categoría y un género nuevos,
+sin salir de la página y **sin tocar el controlador**.
+
+Hobo 2 lo hacía con un modal, y su propia documentación admitía el precio:
+había que parchear el `create` del controlador para xhr **e inyectar JavaScript**
+que volviera a seleccionar el registro. Nada de eso hace falta cuando los campos
+del registro nuevo viajan en el formulario del padre: `:accessible => true` lo
+crea al guardar, que es el mismo camino de `<input-many>`.
+
+Así que en el servidor no había casi nada que inventar, y en el navegador queda
+**una sola invariante**:
+
+> Se envía exactamente **una** de las dos mitades. Las dos llegarían a
+> `attributes=` y la segunda ganaría en silencio — el tipo de fallo que parece
+> «a veces guarda otra cosa».
+
+El select no se deshabilita, que impediría cambiar de idea: **se le quita el
+nombre**, porque un control sin nombre no se envía. Y ese nombre queda aparcado
+en el elemento para que `<input-many>` lo renumere junto con todo lo demás.
+
+**Lo elige el modelo, no la vista:** `<input>` da un `<select-one-or-new>`
+cuando la asociación dice `:accessible => true`, y un `<select-one>` normal
+cuando no. Nadie edita una plantilla para conseguirlo, y nadie se lo encuentra
+sin querer.
+
+### El diseño, mirándolo al lado del de Hobo 2
+
+Imanol comparó 3008 y 3009 y señaló lo que salta en cuanto se ven juntos: la
+barra en blanco, sin fondo, y el icono de borrar mal. Las dos causas:
+
+| Qué | Era |
+|---|---|
+| La barra superior, blanca sobre blanco | Una `navbar` de Bootstrap 5 es **transparente** salvo que se le diga otra cosa. El tema viejo lo sacaba de `navbar-inner`, que Bootstrap 5 se llevó. Ahora `bg-body-tertiary border-bottom`, y las cabeceras de página igual |
+| El borrar salía como un botón azul enorme | Una regla de `hobo.css` escrita **para las páginas que pinta Rails** (`.container form button:not(.btn)`) alcanzaba el formulario de borrado de Hobo, que también es un formulario y cuyo botón tampoco es `.btn`. Y a los `+`/`−` de `<input-many>` igual. **Una regla escrita para el marcado de otro tiene que decir dónde para** |
+
 ### Lo que la comparación deja pendiente
 
 Visto en las capturas, ordenado por lo que más se nota:
 
-1. **Filtros** en el listado. No hay nada todavía; la pieza 6 se delegó a
-   Ransack y falta enchufarlo.
+1. **Filtros** en el listado. Decidido cómo (decisión 18), falta hacerlo.
 2. **Los textos de la interfaz están a medias en castellano**: «Nuevo movie»,
    «Crear», «Guardar», «Editar», «Acciones», junto a etiquetas en inglés. Hobo 2
    dice «New Movie», «Create Movie». La regla del repositorio es **código en
@@ -2306,17 +2345,32 @@ Visto en las capturas, ordenado por lo que más se nota:
     índice público se convierte en un muro de login. Los controladores de Hobo
     hacen `allow_unauthenticated_access` y deciden los permisos del modelo.
 
+## Decisiones tomadas el 2026-08-07 (segunda tanda)
+
+18. **Los filtros los pone la aplicación; Hobo pone los tags y Ransack.**
+    Se comprobó que **el índice derivado de Hobo 2 tampoco tenía filtros**:
+    pintaba `<collection>` y ya. `<search-filter>`, `<filter-menu>` y
+    `<table-plus>` eran tags que escribías **a mano** en tu `index.dryml`. Lo
+    que sí era automático eran los scopes de la pieza 6, y eso es lo que se
+    delegó a Ransack. Así que: Hobo trae los tags, el controlador pasa la
+    colección por Ransack para que funcionen sin escribir consultas, y el índice
+    derivado sigue sin filtros. Se mantiene la comparación pantalla a pantalla.
+19. **`<select-one-or-new>` va en línea, no en un modal.** Ver arriba: el modal
+    de Hobo 2 exigía tocar el controlador de cada aplicación.
+
 ## Lo siguiente, por orden
 
-1. **Los filtros** del listado, con Ransack (pieza 6). Es lo único del criterio
-   de aceptación que falta entero.
-2. **Las cadenas de interfaz a inglés**, y detrás i18n.
-3. **`select-one-or-new`**: hoy se elige un género de los que hay; Hobo 2
-   dejaba además crearlo desde ahí. Los formularios anidados ya funcionan, así
-   que esto es el paso corto que queda.
-4. **La fusión en una sola gema** (decisión 11), que sigue pendiente.
-5. **El contrato de plugin** (pieza 17): con los tags en Ruby, definir un tag ya
+Orden acordado con Imanol: cerrar el criterio de aceptación, luego empaquetar,
+y los textos al final.
+
+1. **Los filtros** del listado (decisión 18): los tags `<search-filter>` y
+   `<filter-menu>`, y el controlador pasando la colección por Ransack. Es lo
+   único del criterio de aceptación que falta entero.
+2. **La fusión en una sola gema** (decisión 11), que sigue pendiente.
+3. **El contrato de plugin** (pieza 17): con los tags en Ruby, definir un tag ya
    es registrarlo, así que el contrato se encoge — falta escribirlo y probarlo.
+4. **Las cadenas de interfaz a inglés**, y detrás i18n. Al final a propósito:
+   es lo más mecánico y lo que menos se aprende haciendo.
 
 ## Cómo mirar la aplicación con el navegador
 

@@ -85,7 +85,11 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
     tag("body", {}, :body) do
       # `<nav>` and `<header>` are real elements now: the old theme painted
       # `<div class="navbar">` because it predates HTML5.
-      tag("nav", { :class => "navbar navbar-expand-lg" }, :navbar) do
+      # `bg-body-tertiary` is not decoration: a Bootstrap 5 navbar is
+      # **transparent** unless it is told otherwise, so the bar came out white
+      # on white and the application looked like it had no chrome at all. The
+      # old theme got it from `navbar-inner`, which Bootstrap 5 dropped.
+      tag("nav", { :class => "navbar navbar-expand-lg bg-body-tertiary border-bottom mb-4" }, :navbar) do
         tag("div", { :class => "container" }, :navbar_container) do
           tag("div", {}, :app_name) do
             tag("a", { :class => "navbar-brand", :href => "#{base_url}/" }) { call_tag(:app_name, {}, :as => :app_name_link) }

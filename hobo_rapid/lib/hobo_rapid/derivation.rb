@@ -225,7 +225,7 @@ module HoboRapid
           in_page("#{title} #{heading}") do
             tag("article", { :class => "show-page #{model.name.demodulize.underscore}" }, :body) do
 
-              tag("div", { :class => "content-header card p-3 mb-4" }, :content_header) do
+              tag("div", { :class => "content-header card card-body bg-body-tertiary p-3 mb-4" }, :content_header) do
                 tag("div", { :class => "d-flex justify-content-between align-items-start" }) do
                   tag("h2", {}, :heading) do
                     text "#{title} "
@@ -285,7 +285,7 @@ module HoboRapid
           in_page(plural) do
             tag("div", { :class => "index-page #{model.name.demodulize.underscore.pluralize}" }, :body) do
 
-              tag("div", { :class => "content-header card p-3 mb-4" }, :content_header) do
+              tag("div", { :class => "content-header card card-body bg-body-tertiary p-3 mb-4" }, :content_header) do
                 tag("div", { :class => "d-flex justify-content-between align-items-center" }) do
                   tag("div") do
                     tag("h2", {}, :heading) { text plural }
