@@ -1776,6 +1776,66 @@ enseña apagado—, y se puede pedir `:disable`, `:skip` o `:ignore`.
 
 **16 pruebas**, más el barrido de contrato.
 
+## Pieza 10: el motor de derivación (2026-08-07) — **se ve una página**
+
+Declaras un modelo con `fields do` y **las páginas existen**: una tarjeta que
+resume un registro, un índice que los lista, una página que enseña uno, un
+formulario que lo edita. Nadie escribe esas vistas.
+
+### Lo que el sustrato de Ruby se ahorra: la generación de código
+
+El motor viejo **generaba fuente DRYML** en
+`app/views/taglibs/auto/rapid/*.dryml` desde **534 líneas de ERB**, en el
+arranque y en cada recarga. Era la única forma de hacerlo cuando los tags eran un
+lenguaje de plantillas.
+
+Con los tags como objetos de Ruby **no hay nada que generar**: los tags se
+definen ejecutando Ruby. Ni ficheros escritos, ni nada que meter en `.gitignore`,
+ni generación en el arranque — y **un error sale como un error de Ruby con su
+traza**, en vez de como un fallo de sintaxis en un fichero que nadie escribió.
+
+### Lo que lee del modelo
+
+Nada nuevo: lo que el modelo ya dijo. Los campos y sus tipos (`fields do`), cuál
+es su nombre (`name_attribute`), cuáles son sus hijos (`children :tasks`), y qué
+se puede ver y editar (los permisos de la pieza 4).
+
+```
+<article class="show-page story">
+  <h1><span class="view story-title">La luz de Hobo</span></h1>
+  <dl>
+    <dt>Body</dt>         <dd><span class="view story-body">Se ve algo</span></dd>
+    <dt>Published on</dt> <dd><span class="view story-published-on">2026-08-07</span></dd>
+    <dt>Featured</dt>     <dd><span class="view story-featured">&#10004;</span></dd>
+  </dl>
+  <section class="children tasks">
+    <h2>Tasks</h2> ...
+```
+
+y el formulario, sin que nadie diga qué control lleva cada campo:
+
+```
+<input type="text" value="La luz de Hobo" name="story[title]">
+<textarea name="story[body]">Se ve algo</textarea>
+<input type="date" value="2026-08-07" name="story[published_on]">
+```
+
+**Probado contra la aplicación de verdad**, no solo con dobles: `hobo_fields`
+declara los tipos, `hobo` aplica los permisos, el runtime de la capa 3 pinta, y
+el motor decide qué pintar. Si algo de esa cadena se rompe, esa prueba se entera.
+
+### Tres fallos más, y uno se repite por tercera vez
+
+| Qué | Dónde |
+|---|---|
+| **`autoload_paths` otra vez** | `hobo_rapid` tenía la misma línea que `hobo` y `hobo_fields`. **Tercera gema, tercera vez que impide arrancar cualquier aplicación**, y las tres veces solo se ve con una app de verdad |
+| **`member_class` devolvía nil** | `relation_with_origin.rb` leía `@klass` a pelo, y en Rails 8 ese ivar ya no está. Un tag polimórfico al que le pides pintar una colección de historias **caía al genérico sin decir nada** |
+| Atributos booleanos de HTML | Salía `selected="true"` donde va `selected`. No es cosmético: un navegador lee `checked="false"` **como marcado** |
+
+Y el barrido de contrato volvió a ganarse el sueldo: exigió que las vistas de
+cada campo y la colección de cada hijo fueran **puntos de extensión**, que es lo
+que permitirá que un tema entre en una página derivada sin reescribirla.
+
 ### Por dónde va la capa 5
 
 1. ~~**El JS a Stimulus.**~~ **Hecho**, salvo `delete-button`, que se decide al
@@ -1784,9 +1844,7 @@ enseña apagado—, y se puede pedir `:disable`, `:skip` o `:ignore`.
    los tipos ricos, las colecciones, los `inputs` y el barrido de contrato:
    **hecho**. Faltan los tags de colección con formulario (`select-one`,
    `select-many`, `check-many`), que son los que hablan con asociaciones.
-3. **El motor de derivación** (pieza 10): `cards.dryml.erb`, `pages.dryml.erb` y
-   `forms.dryml.erb`, 534 líneas de ERB que generan un tag por modelo. Es *el*
-   motivo de usar Hobo.
+3. ~~**El motor de derivación** (pieza 10).~~ **Hecho.** Sin generar código.
 
 **Aplazado a la capa 6:** los 11 tags de `editors/`, que son widgets de
 navegador y se deciden con el tema delante.

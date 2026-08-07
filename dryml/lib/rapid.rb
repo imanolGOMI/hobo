@@ -84,6 +84,10 @@ module Rapid
     # Ruby, so `true` and `false` get one.
     def dispatch_type(this)
       return Boolean if this == true || this == false
+      # A collection dispatches on what it holds, not on being a collection:
+      # an index page of stories is a page of *stories*. Hobo has always asked
+      # the relation for its member_class.
+      return this.member_class if this.respond_to?(:member_class) && this.member_class
       return this.class if this
 
       parent, field = Context.this_parent, Context.this_field

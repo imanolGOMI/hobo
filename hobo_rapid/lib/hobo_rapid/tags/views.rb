@@ -65,7 +65,7 @@ Rapid.define(:view, :attrs => [:if_blank, :inline, :block, :no_wrapper, :truncat
   painted = if this.nil?
               ""
             elsif collection?
-              capture { param(:default) { call_tag(:collection_view) } }
+              capture { param(:default) { call_tag(:collection_view, {}, :as => :collection) } }
             else
               capture { param(:default) { call_tag(:view_content) } }
             end
@@ -91,6 +91,10 @@ end
 Rapid.define(:view_content) do
   if this.respond_to?(:to_html)
     raw this.to_html
+  elsif this.class.respond_to?(:name_attribute) && this.class.name_attribute
+    # A record paints as its name, not as its inspect. Which field is its name
+    # is something the model already said, so nobody has to say it again.
+    text this.send(this.class.name_attribute).to_s
   else
     text this.to_s
   end
@@ -100,6 +104,13 @@ Rapid.define_for(:view_content, Date)    { text this.strftime("%Y-%m-%d") }
 Rapid.define_for(:view_content, Time)    { text this.strftime("%Y-%m-%d %H:%M") }
 Rapid.define_for(:view_content, Numeric) { text this.to_s }
 Rapid.define_for(:view_content, Rapid::Boolean) { raw(this ? "&#10004;" : "&#10008;") }
+
+# A record paints as its name, not as its inspect. Which field is its name is
+# something the model said with `fields do`, so nobody has to say it again.
+Rapid.define(:record_view_content) do
+  field = this.class.respond_to?(:name_attribute) && this.class.name_attribute
+  field ? text(this.send(field).to_s) : text(this.to_s)
+end
 
 
 # A `has_many` paints as a list of the views of its members. Anything that

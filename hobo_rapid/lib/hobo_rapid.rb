@@ -1,5 +1,11 @@
-ActiveSupport::Dependencies.autoload_paths |= [File.dirname(__FILE__)]
-ActiveSupport::Dependencies.autoload_once_paths |= [File.dirname(__FILE__)]
+# The third gem with this line, and the third to be broken by it. It used to put
+# the gem's own lib/ into ActiveSupport::Dependencies so the classic autoloader
+# would resolve its constants; that autoloader is gone, and what survives of
+# autoload_paths is the list Rails hands to **Zeitwerk** -- so the line
+# registered lib/ as a Zeitwerk root and no application could boot.
+#
+# It only ever shows up inside a real Rails application. hobo_fields had it too,
+# and layer 2 had declared that gem finished.
 
 module HoboRapid
 
@@ -10,6 +16,8 @@ module HoboRapid
   EDIT_LINK_BASE = "https://github.com/Hobo/hobodoc/edit/master/hobo_rapid"
 
   require 'hobo_rapid/previous_uri_filter'
+  require 'hobo_rapid/derivation'
+  require 'hobo_rapid/helper'
   require 'hobo_rapid/railtie' if defined?(Rails)
 
   class Engine < ::Rails::Engine

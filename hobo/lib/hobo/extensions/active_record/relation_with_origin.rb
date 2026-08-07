@@ -3,8 +3,12 @@ module ActiveRecord
   class Relation
     attr_accessor :origin, :origin_attribute
 
+    # What the collection holds. It read `@klass` straight, and in Rails 8 that
+    # ivar is not there any more -- so it answered nil, and a polymorphic tag
+    # asked to paint a collection of stories fell back to the generic one
+    # without a word.
     def member_class
-      @klass
+      klass
     end
   end
 

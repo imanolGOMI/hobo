@@ -1,0 +1,168 @@
+require "minitest/autorun"
+$LOAD_PATH.unshift File.expand_path("../../dryml/lib", __dir__)
+$LOAD_PATH.unshift File.expand_path("../../hobo_support/lib", __dir__)
+require "rapid/param_contract"
+require "hobo_rapid/derivation"
+
+# Piece 10: you declare a model and the pages exist.
+#
+# No file is generated. The tags are defined by running Ruby over what the model
+# already said -- which is the whole benefit of tags being Ruby objects.
+class DerivationTest < Minitest::Test
+  include ParamContract::Assertions
+
+  class Task
+    attr_accessor :id, :title, :done
+    def initialize(id, title, done) = (@id, @title, @done = id, title, done)
+    def self.field_specs = { :title => nil, :done => nil }
+    def self.name_attribute = :title
+    def self.attr_type(field) = { "title" => String, "done" => Rapid::Boolean }[field.to_s]
+    def viewable_by?(_user, _field = nil) = true
+    def editable_by?(_user, _field = nil) = true
+  end
+
+  class Story
+    attr_accessor :id, :title, :body, :published_on, :tasks
+
+    def self.field_specs = { :title => nil, :body => nil, :published_on => nil, :tasks => nil }
+    def self.name_attribute = :title
+    def self.attr_type(field)
+      { "title" => String, "body" => String, "published_on" => Date, "tasks" => Array }[field.to_s]
+    end
+    def self.view_hints = self
+    def self.children = [:tasks]
+    def self.human_attribute_name(field) = field.to_s.humanize
+    def viewable_by?(_user, _field = nil) = true
+    def editable_by?(_user, _field = nil) = true
+  end
+
+  def story
+    @story ||= Story.new.tap do |s|
+      s.id = 1
+      s.title = "Primera historia"
+      s.body = "El cuerpo"
+      s.published_on = Date.new(2026, 8, 7)
+      s.tasks = [Task.new(1, "Una tarea", true)]
+    end
+  end
+
+  def setup
+    HoboRapid::Derivation.derive(Story)
+    HoboRapid::Derivation.derive(Task)
+  end
+
+  # A collection knows what it holds -- that is how an index of stories knows to
+  # paint story cards. An ActiveRecord relation answers this; here it is a double.
+  class Collection < Array
+    def member_class = Story
+  end
+
+  def collection_of(records) = Collection.new(records)
+
+  def render(tag_name, this)
+    Rapid.render(tag_name, {}, :this => this)
+  end
+
+  # --- what the engine reads out of the model ---------------------------------
+
+  def test_it_finds_the_name_attribute
+    assert_equal "title", HoboRapid::Derivation.name_attribute_of(Story)
+  end
+
+  # The summary is everything but the name (that is the heading) and the
+  # children (those are collections, not summary material).
+  def test_the_summary_leaves_out_the_name_and_the_children
+    assert_equal %w[body published_on], HoboRapid::Derivation.summary_fields(Story)
+  end
+
+  # --- the card ---------------------------------------------------------------
+
+  def test_a_card_shows_the_name_as_its_heading
+    html = render(:card, story)
+
+    assert_includes html, "<h3><span"
+    assert_includes html, "Primera historia"
+  end
+
+  def test_a_card_lists_the_other_fields_with_their_labels
+    html = render(:card, story)
+
+    assert_includes html, "<dt>Body</dt>"
+    assert_includes html, "El cuerpo"
+    assert_includes html, "<dt>Published on</dt>"
+  end
+
+  # --- the show page ----------------------------------------------------------
+
+  def test_a_show_page_leads_with_the_name
+    assert_includes render(:show_page, story), "<h1>"
+    assert_includes render(:show_page, story), "Primera historia"
+  end
+
+  # The type decides how each field is painted, all the way down.
+  def test_a_date_field_paints_as_a_date
+    assert_includes render(:show_page, story), "2026-08-07"
+  end
+
+  def test_the_children_get_a_section_of_their_own
+    html = render(:show_page, story)
+
+    assert_includes html, %(<section class="children tasks">)
+    assert_includes html, "<h2>Tasks</h2>"
+    assert_includes html, "Una tarea"
+  end
+
+  # --- the index page ---------------------------------------------------------
+
+  def test_an_index_paints_a_card_for_each_record
+    other = Story.new
+    other.id = 2
+    other.title = "Segunda"
+    other.tasks = []
+
+    html = render(:index_page, collection_of([story, other]))
+
+    assert_includes html, "Primera historia"
+    assert_includes html, "Segunda"
+    assert_equal 2, html.scan("card story").length
+  end
+
+  def test_an_empty_index_says_so
+    assert_includes render(:index_page, collection_of([])), "Nada por aqui todavia"
+  end
+
+  # --- the form ---------------------------------------------------------------
+
+  # Where `fields do` pays off: nobody said what control each field gets.
+  def test_the_form_gives_each_field_the_control_its_type_asks_for
+    html = render(:model_form, story)
+
+    assert_includes html, %(name="story[title]")
+    assert_includes html, %(type="date")
+    assert_includes html, %(value="2026-08-07")
+  end
+
+  def test_the_form_labels_every_field
+    html = render(:model_form, story)
+
+    assert_includes html, "<label>Title</label>"
+    assert_includes html, "<label>Body</label>"
+  end
+
+  # --- the contract -----------------------------------------------------------
+  #
+  # A derived tag is still a tag: a theme has to be able to get inside it.
+
+  def test_every_param_of_a_derived_card_is_overridable
+    assert_every_param_overridable(:card, { :name => "una historia", :this => story })
+  end
+
+  def test_every_param_of_a_derived_show_page_is_overridable
+    assert_every_param_overridable(:show_page, { :name => "una historia", :this => story })
+  end
+
+  def test_every_param_of_a_derived_form_is_overridable
+    assert_every_param_overridable(:model_form, { :name => "una historia", :this => story })
+  end
+
+end

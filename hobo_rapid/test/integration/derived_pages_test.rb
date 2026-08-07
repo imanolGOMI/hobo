@@ -1,0 +1,136 @@
+require "minitest/autorun"
+require_relative "../../../hobo/test/prepare_testapp"
+
+# Piece 10 against a real application: a model with `fields do`, and the pages
+# exist. Nobody writes a view.
+#
+# This is the one that says whether the whole stack works: hobo_fields declares
+# the types, hobo enforces the permissions, the layer-3 runtime paints, and the
+# derivation engine decides what to paint from what the model said.
+class DerivedPagesTest < Minitest::Test
+
+  MODELS = <<~RUBY
+    ActiveRecord::Base.connection.create_table(:stories, :force => true) do |t|
+      t.string :title; t.text :body; t.date :published_on; t.boolean :featured
+    end
+    ActiveRecord::Base.connection.create_table(:tasks, :force => true) do |t|
+      t.string :title; t.boolean :done; t.integer :story_id
+    end
+
+    class Story < ActiveRecord::Base
+      include Hobo::Model
+      fields do
+        title        :string
+        body         :text
+        published_on :date
+        featured     :boolean
+      end
+      has_many :tasks
+      children :tasks
+      def view_permitted?(field) = true
+      def edit_permitted?(field) = true
+    end
+
+    class Task < ActiveRecord::Base
+      include Hobo::Model
+      fields { title :string; done :boolean }
+      belongs_to :story, :optional => true
+      def view_permitted?(field) = true
+    end
+
+    HoboRapid::Derivation.derive(Story)
+    HoboRapid::Derivation.derive(Task)
+
+    story = Story.create!(:title => "La luz de Hobo", :body => "Se ve algo",
+                          :published_on => Date.new(2026, 8, 7), :featured => true)
+    story.tasks.create!(:title => "Portar el catalogo", :done => true)
+  RUBY
+
+  def setup
+    skip TestApp.why_not unless TestApp.built?
+  end
+
+  def test_a_show_page_is_derived_from_the_model
+    output = run_in_app(<<~RUBY)
+      #{MODELS}
+      puts Rapid.render(:show_page, {}, :this => story)
+    RUBY
+
+    assert_includes output, %(<article class="show-page story">), output
+    assert_includes output, "La luz de Hobo"
+    # Each field painted by its type, with a label nobody wrote.
+    assert_includes output, "<dt>Body</dt>"
+    assert_includes output, %(<span class="view story-published-on">2026-08-07</span>)
+    # The boolean as a tick, not as "true".
+    assert_includes output, "&#10004;"
+    # And the children in a section of their own, because `children :tasks` said so.
+    assert_includes output, %(<section class="children tasks">)
+    assert_includes output, "Portar el catalogo"
+  end
+
+  def test_an_index_page_paints_a_card_for_each_record
+    output = run_in_app(<<~RUBY)
+      #{MODELS}
+      Story.create!(:title => "Segunda")
+      puts Rapid.render(:index_page, {}, :this => Story.all)
+    RUBY
+
+    assert_includes output, %(<div class="index-page stories">), output
+    assert_includes output, "<h1>Stories</h1>"
+    assert_equal 2, output.scan(%(<div class="card story">)).length
+  end
+
+  # An ActiveRecord relation knows what it holds, and that is how an index of
+  # stories knows to paint story cards.
+  def test_a_relation_dispatches_on_what_it_holds
+    output = run_in_app(<<~RUBY)
+      #{MODELS}
+      puts "MEMBER \#{Story.all.member_class}"
+    RUBY
+
+    assert_includes output, "MEMBER Story", output
+  end
+
+  # Where `fields do` pays off: nobody said what control each field gets.
+  def test_a_form_gives_each_field_the_control_its_type_asks_for
+    output = run_in_app(<<~RUBY)
+      #{MODELS}
+      puts Rapid.render(:model_form, {}, :this => story)
+    RUBY
+
+    assert_includes output, %(<input type="text" value="La luz de Hobo" name="story[title]">), output
+    assert_includes output, %(<textarea name="story[body]">Se ve algo</textarea>)
+    assert_includes output, %(<input type="date" value="2026-08-07" name="story[published_on]">)
+    assert_includes output, %(type="checkbox")
+  end
+
+  # The permission layer is not bypassed by the derivation: a field the user may
+  # not see does not appear on the page it derives.
+  def test_a_field_that_may_not_be_viewed_is_refused
+    output = run_in_app(<<~RUBY)
+      #{MODELS}
+      Story.define_method(:view_permitted?) { |field| field.to_s != "body" }
+      begin
+        Rapid.render(:show_page, {}, :this => story)
+        puts "SIN QUEJA"
+      rescue => e
+        puts "NEGADO \#{e.class}"
+      end
+    RUBY
+
+    assert_includes output, "NEGADO", output
+    refute_includes output, "SIN QUEJA"
+  end
+
+  private
+
+  def run_in_app(script)
+    file = File.join(TestApp::PATH, "tmp", "derived_probe.rb")
+    FileUtils.mkdir_p(File.dirname(file))
+    File.write(file, script)
+    `cd #{TestApp::PATH} && bin/rails runner #{file} 2>&1`
+  ensure
+    FileUtils.rm_f(file)
+  end
+
+end

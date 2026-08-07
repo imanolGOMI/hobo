@@ -19,7 +19,7 @@ module TestApp
   # hobo/app/* as autoload roots and the application registers its own, and one
   # ends up inside the other.
   PATH = ENV["HOBO_TESTAPP_PATH"] || File.join(Dir.tmpdir, "hobo_testapp")
-  GEMS = %w[hobo_support hobo_fields dryml hobo].freeze
+  GEMS = %w[hobo_support hobo_fields dryml hobo hobo_rapid].freeze
 
   class << self
 
