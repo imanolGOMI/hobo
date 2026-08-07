@@ -80,14 +80,29 @@ module Hobo
         (not refl.options[:conditions])
     end
 
+    # A directory inside app/controllers that holds controllers defines a
+    # subsite: app/controllers/admin/story_controller.rb is the admin subsite.
+    #
+    # Two things used to go wrong here. `concerns` is a directory Rails creates
+    # in **every** application, for shared modules and not for controllers, so
+    # every Hobo application had a phantom `concerns` subsite and the router
+    # dutifully wrote `namespace :concerns`. And the result was memoised for the
+    # life of the process, so a subsite added while the server was running was
+    # never seen. Asking for a directory that holds at least one controller fixes
+    # both, and it is a couple of globs.
+    NOT_A_SUBSITE = %w[concerns].freeze
+
     def subsites
-      # Any directory inside app/controllers defines a subsite
       app_dirs = ["#{Rails.root}/app"] + Hobo.engines.map { |e| "#{e}/app" }
-      @subsites ||= app_dirs.map do |app|
-                      Dir["#{app}/controllers/*"].map do |f|
-                        File.basename(f) if File.directory?(f)
-                      end.compact
-                    end.flatten
+      app_dirs.flat_map do |app|
+        Dir["#{app}/controllers/*"].filter_map do |dir|
+          name = File.basename(dir)
+          next unless File.directory?(dir)
+          next if name.in?(NOT_A_SUBSITE)
+          next if Dir["#{dir}/*_controller.rb"].empty?
+          name
+        end
+      end.uniq
     end
 
   end

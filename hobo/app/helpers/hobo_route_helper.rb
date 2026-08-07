@@ -25,8 +25,14 @@ module HoboRouteHelper
     end
 
 
+    # Which subsite we are in. The controller class knows -- Admin::StoriesController
+    # is the admin subsite -- and it knows outside a request too, which is where
+    # `params[:controller]` has nothing to say: a mailer, a job, a console.
     def subsite
-      params[:controller]&.match(/([^\/]+)\//)&.[](1)
+      from_class = self.class.name.to_s[/\A(.+?)::/, 1]&.underscore
+      return from_class if from_class
+
+      params[:controller]&.match(/([^\/]+)\//)&.[](1) if respond_to?(:params)
     end
 
     IMPLICIT_ACTIONS = [:index, :show, :create, :update, :destroy]
@@ -71,7 +77,11 @@ module HoboRouteHelper
         poly = [obj]
       end
 
-      poly = [options[:subsite]] + poly if !options[:subsite].blank?
+      # A symbol, not a string: Rails refuses a string namespace in a polymorphic
+      # route ("Please use symbols for polymorphic route arguments"). It raised
+      # ArgumentError, which the rescue below turned into nil -- so every link
+      # into a subsite came out empty, and nothing said why.
+      poly = [options[:subsite].to_sym] + poly if !options[:subsite].blank?
 
       begin
         base_url = url = polymorphic_path(poly, params)

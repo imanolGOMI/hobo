@@ -605,7 +605,7 @@ Estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho
 | `[x]` | **1** | `hobo_support`: quitar ~230 líneas de azúcar, codemod de 113 sitios, `classy_module` → `Concern` | 16 |
 | `[x]` | **2** | `hobo_fields`: `fields do`, tipos ricos, migraciones **+ batería que ejecute `up` y `down`** | 1, 2, 3 |
 | `[x]` | **3** | **El remix de DRYML**: runtime, contrato de params, params anidados, pseudo-params y dos tags grandes portados. Ya es la gema `dryml` | 8 |
-| `[~]` | **4** | `hobo`: permisos, lifecycles, view hints, auto-actions, router | 4, 5, 6, 7, 11, 12, 14 |
+| `[x]` | **4** | `hobo`: permisos, lifecycles, view hints, auto-actions, router, subsites | 4, 5, 6, 7, 11, 12, 14 |
 | `[ ]` | **5** | `hobo_rapid` + motor de derivación | 9, 10 |
 | `[ ]` | **6** | Separar `hobo_bootstrap` en tags estructurales (→ RAPID) y tema | 13a, 13b |
 | `[ ]` | **7** | `hobo new`, generadores, contrato de plugin | 17 |
@@ -1455,9 +1455,62 @@ pila. Estaba esperando a que alguien escribiera `attr_accessor :x, :type => …`
 Las que quedan en el repositorio son las del **compilador viejo de DRYML**
 (`dryml/lib/dryml/legacy.rb` y compañía), que se conserva a propósito.
 
-### Lo que queda de la capa 4
+## Pieza 14 hecha: subsites (2026-08-07) — **y con ella la capa 4**
 
-**Pieza 14, subsites**, que es transversal y va la última.
+Un directorio dentro de `app/controllers` es un sitio entero más sobre los
+mismos modelos, y atraviesa **cuatro subsistemas a la vez**: qué controladores
+existen, qué rutas les tocan, qué controlador le corresponde a un modelo en cada
+sitio, y qué URL tiene un registro en cada sitio. Los cuatro pasan, con un
+`admin` de verdad escrito en ficheros.
+
+### Dos fallos, y los dos silenciosos
+
+**1. `concerns` era un subsite.** `Hobo.subsites` daba por subsite *cualquier*
+directorio dentro de `app/controllers`, y Rails crea `app/controllers/concerns`
+en **todas** las aplicaciones. O sea que toda aplicación Hobo tenía un subsite
+fantasma y el router escribía obedientemente `namespace :concerns`. Ahora un
+subsite es un directorio **que contiene algún `*_controller.rb`**, y `concerns`
+está excluido por nombre.
+
+De paso, el resultado estaba memorizado para toda la vida del proceso, así que un
+subsite añadido con el servidor en marcha no se veía nunca.
+
+**2. Los enlaces a un subsite salían vacíos.** `object_url` construye la ruta con
+`polymorphic_path([subsite, objeto])`, y Rails **exige un símbolo** para el
+espacio de nombres: con una cadena lanza `ArgumentError`. Ese error caía en el
+`rescue` de `object_url`, que **devuelve `nil`**. Resultado: **todos los enlaces
+a un subsite, muertos, sin una sola queja.**
+
+Es el mismo patrón que lleva apareciendo toda la capa: un `rescue` amplio
+convierte un fallo concreto en un resultado plausible.
+
+### Y `subsite` se lo pregunta ahora a la clase
+
+Se deducía de `params[:controller]`, así que fuera de una petición no había nada
+que mirar. `Admin::StoriesController` **ya sabe** en qué subsite está, y lo sabe
+también desde un correo, un job o la consola.
+
+---
+
+# La capa 4, terminada (2026-08-07)
+
+| Pieza | Qué se hizo |
+|---|---|
+| **4** Permisos | Ganchos privados de AR → `before_create`/`before_update`/`before_destroy`. Los envoltorios de asociación, muertos desde Rails 4.1, fuera |
+| **5** Lifecycles | `attr_protected` reimplementado, que es la parte de la gema muerta que Hobo usaba de verdad |
+| **6** Scopes automáticos | 429 líneas fuera, delegado en Ransack |
+| **7** View hints | Un fallo que impedía apagar la paginación |
+| **11** Auto-actions | Lectura y escritura de punta a punta, con Ransack y parámetros fuertes |
+| **12** Router | Sin `config/hobo_routes.rb`: `hobo_routes` en el `routes.rb` de la aplicación |
+| **14** Subsites | Los cuatro subsistemas, con `admin` de verdad |
+
+**77 pruebas en `hobo`**, 222 en el repositorio. **Cero `alias_method_chain`**, de
+35. Una aplicación Rails 8 arranca con las cuatro gemas, sirve un índice, crea,
+modifica y borra con permisos, y tiene subsites.
+
+**Lo que la capa 4 no trae, y es lo siguiente:** la vista. Hoy la aplicación de
+pruebas usa ERB y lee `@stories`; `this` solo llega a una plantilla por el
+runtime de tags. Eso es la capa 5.
 
 Quedan **5 `alias_method_chain`** —eran 35 al empezar la capa—, todas de la
 pieza 12:

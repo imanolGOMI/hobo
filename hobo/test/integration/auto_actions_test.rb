@@ -154,6 +154,54 @@ class AutoActionsIntegrationTest < Minitest::Test
     assert_includes output, "GET /stories/:id/edit(.:format)", output
   end
 
+  # Piece 14: subsites. A directory inside app/controllers is a whole second site
+  # over the same models, and it runs through four subsystems at once: which
+  # controllers exist, which routes they get, which controller a model belongs to
+  # in each site, and which url a record has in each site.
+  def test_a_subsite_gets_its_own_routes_and_its_own_urls
+    output = run_in_app(<<~RUBY, {}, FILES.merge(SUBSITE_FILES))
+      ActiveRecord::Base.connection.create_table(:stories, :force => true) { |t| t.string :title }
+      Rails.application.routes.draw { hobo_routes }
+      story = Story.create!(:title => "Hola")
+
+      def url_from(klass, record)
+        controller = klass.new
+        controller.set_request!(ActionDispatch::Request.new(Rack::MockRequest.env_for("http://localhost/")))
+        controller.send(:object_url, record)
+      end
+
+      puts "SUBSITES \#{Hobo.subsites.inspect}"
+      puts "CONTROLADORES \#{Story.hobo_controller.keys.inspect}"
+
+      paths = Rails.application.routes.routes.map { |r| "\#{r.verb} \#{r.path.spec}" }
+      puts "ADMIN \#{paths.grep(%r{/admin/}).sort.join(' | ')}"
+
+      puts "URL_RAIZ \#{url_from(StoriesController, story)}"
+      puts "URL_ADMIN \#{url_from(Admin::StoriesController, story)}"
+    RUBY
+
+    assert_includes output, %(SUBSITES ["admin"]), output
+    assert_includes output, %(CONTROLADORES [nil, "admin"]), output
+
+    # The admin controller declares only index and show, and gets only those.
+    assert_includes output, "GET /admin/stories(.:format)", output
+    assert_includes output, "GET /admin/stories/:id(.:format)", output
+    refute_includes output, "DELETE /admin/stories", output
+
+    # The same record has a different url in each site. This came out nil until
+    # the subsite was passed as a symbol.
+    assert_includes output, "URL_RAIZ /stories/1-hola", output
+    assert_includes output, "URL_ADMIN /admin/stories/1-hola", output
+  end
+
+  # `app/controllers/concerns` is a directory Rails creates in every application.
+  # It is not a subsite, and it used to be taken for one.
+  def test_concerns_is_not_a_subsite
+    output = run_in_app(%(puts "SUBSITES \#{Hobo.subsites.inspect}"))
+
+    assert_includes output, "SUBSITES []", output
+  end
+
   # Nobody logged in, and the application has no Guest model of its own. That
   # used to be a NameError on *every* request, before any action ran: the helper
   # named a bare `::Guest` that only the classic autoloader could resolve.
@@ -194,6 +242,15 @@ class AutoActionsIntegrationTest < Minitest::Test
       class StoriesController < ApplicationController
         include Hobo::Controller::Model
         auto_actions :all
+      end
+    RUBY
+  }.freeze
+
+  SUBSITE_FILES = {
+    "app/controllers/admin/stories_controller.rb" => <<~RUBY,
+      class Admin::StoriesController < ApplicationController
+        include Hobo::Controller::Model
+        auto_actions :index, :show
       end
     RUBY
   }.freeze
@@ -254,7 +311,14 @@ class AutoActionsIntegrationTest < Minitest::Test
 
     `cd #{TestApp::PATH} && bin/rails runner #{file} 2>&1`
   ensure
-    written.each { |path| FileUtils.rm_f(path) }
+    written.each do |path|
+      FileUtils.rm_f(path)
+      # And the directories they created: an empty app/controllers/admin is not
+      # a subsite any more, but leaving litter in the application is how one
+      # test starts changing what the next one sees.
+      dir = File.dirname(path)
+      FileUtils.rmdir(dir) if File.directory?(dir) && Dir.empty?(dir)
+    end
   end
 
   def write_in_app(path, content)
