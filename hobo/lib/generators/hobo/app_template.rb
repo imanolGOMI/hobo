@@ -29,13 +29,15 @@ append_to_file "Gemfile", (["", "# Hobo"] + gems.map(&gem_line) + [""]).join("\n
 after_bundle do
   # Rails 8 brings its own authentication generator, and it is better than the
   # one Hobo used to carry: piece 15 of PLAN.md is delegated to it.
-  say "Hobo: la sesion la genera Rails con `bin/rails generate authentication`", :green
-
   # One worked example, so `bin/rails server` shows something on the first run.
   generate "hobo:resource", "story title:string body:text published_on:date"
 
+  # Rails owns the user, the session and the passwords (piece 15). Hobo owns the
+  # page that lets the first person in without a console.
+  generate "authentication"
+  generate "hobo:front_page"
+
   route "hobo_routes"
-  route %(root to: "stories#index")
 
   generate "hobo:migration", "-n -m" rescue nil
 
@@ -50,8 +52,9 @@ after_bundle do
     "deriva Hobo de lo que dice el modelo. Cuando una pagina tenga que ser",
     "distinta, escribe su plantilla y Hobo se aparta.",
     "",
+    "Al abrirla te pedira crear el primer usuario.",
+    "",
     "  bin/rails generate hobo:resource task title:string done:boolean",
-    "  bin/rails generate authentication",
     "",
   ].join("\n"), :green
 end

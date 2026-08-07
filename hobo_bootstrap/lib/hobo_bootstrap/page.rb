@@ -145,5 +145,46 @@ Rapid.define(:javascript, :attrs => [:name]) do
   src = asset_path_for(attributes[:name], "js")
   tag("script", { :src => src, :defer => true }) if src
 end
-Rapid.define(:main_nav, :attrs => [:current, :class]) { tag("ul", { :class => attributes[:class] }, :items) }
-Rapid.define(:account_nav) { tag("ul", { :class => "navbar-nav ms-auto" }, :items) }
+# The navigation is not written anywhere either: it is the models that have an
+# index page. A menu somebody has to keep in step with the application is a menu
+# that goes out of date the first week.
+Rapid.define(:main_nav, :attrs => [:current, :class]) do
+  tag("ul", { :class => attributes[:class] || "navbar-nav" }, :items) do
+    HoboBootstrap.navigable_models.each do |model, path|
+      label = model.name.demodulize.underscore.humanize.pluralize
+      current = { :class => "nav-link active", :"aria-current" => "page" } if label == attributes[:current]
+
+      tag("li", { :class => "nav-item" }, :"#{model.name.demodulize.underscore}_item") do
+        tag("a", { :class => "nav-link", :href => path }.merge(current || {})) { text label }
+      end
+    end
+  end
+end
+
+Rapid.define(:account_nav) do
+  tag("ul", { :class => "navbar-nav ms-auto" }, :items) do
+    param(:session_links)
+  end
+end
+
+module HoboBootstrap
+
+  # The models a person can actually navigate to: the ones with an index route.
+  # Asking the routes rather than keeping a list is what stops the menu drifting
+  # away from the application.
+  def self.navigable_models
+    return [] unless defined?(Rails) && Rails.respond_to?(:application) && Rails.application
+    return [] unless defined?(Hobo::Model)
+
+    helpers = Rails.application.routes.url_helpers
+    Hobo::Model.all_models.filter_map do |model|
+      path = begin
+               helpers.polymorphic_path(model)
+             rescue StandardError
+               nil
+             end
+      [model, path] if path
+    end.sort_by { |model, _| model.name }
+  end
+
+end

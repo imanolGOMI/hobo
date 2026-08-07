@@ -1,0 +1,99 @@
+# The first thing a person sees, and the first thing they can do.
+#
+# A brand new Hobo application used to open on a form that said "Register
+# Administrator": no console, no seeds, no reading the README -- you fill in
+# three boxes and the application is yours. It is specified in the old bench, in
+# integration_tests/agility_bootstrap/test/integration/create_account_test.rb,
+# and losing it is losing the first five minutes of Hobo.
+#
+# What has changed is who owns the user: Rails 8 generates the model, the
+# session and the password handling (`bin/rails generate authentication`), and
+# piece 15 delegates all of that. What Hobo keeps is **this page**, because
+# Rails does not have it: knowing that an application with no users should ask
+# for one is a Hobo idea.
+
+require "rapid"
+require "hobo_rapid/tags/structure"
+require "hobo_rapid/tags/inputs"
+
+module HoboRapid
+  module Tags
+
+    module FrontPageSupport
+
+      # The application's user model, whatever it called it.
+      def user_model
+        return @user_model if defined?(@user_model)
+        @user_model = %w[User Account].filter_map { |name| Object.const_get(name) rescue nil }.first
+      end
+
+      def no_users_yet?
+        model = user_model
+        model.respond_to?(:count) && model.count.zero?
+      rescue StandardError
+        false
+      end
+
+      # What the model calls the thing people log in with. Rails 8 generates
+      # `email_address`; older applications used `email` or `login`.
+      def login_field
+        columns = user_model.respond_to?(:column_names) ? user_model.column_names : []
+        (%w[email_address email login name] & columns).first || "email_address"
+      end
+
+    end
+
+  end
+end
+
+Rapid::Tag.include(HoboRapid::Tags::FrontPageSupport)
+
+Rapid.define(:front_page, :attrs => [:app_name, :action]) do
+  in_page(attributes[:app_name] || "Inicio") do
+    tag("div", { :class => "front-page" }, :body) do
+      call_tag(:flash_messages, {}, :as => :flash)
+
+      if no_users_yet?
+        call_tag(:first_user_form, { :action => attributes[:action] }, :as => :first_user)
+      else
+        param(:welcome) do
+          tag("h1", {}, :heading) { text attributes[:app_name] || "Hobo" }
+          tag("p", { :class => "lead" }, :blurb) { text "Ya puedes entrar y empezar." }
+        end
+      end
+    end
+  end
+end
+
+# The form that makes the first person the owner of the application.
+Rapid.define(:first_user_form, :attrs => [:action]) do
+  field = login_field
+
+  tag("div", { :class => "first-user" }, :box) do
+    tag("h1", {}, :heading) { text "Bienvenido" }
+    tag("p", { :class => "lead" }, :blurb) do
+      text "Todavia no hay nadie. Crea el primer usuario y seras el administrador."
+    end
+
+    tag("form", { :method => "post", :action => attributes[:action] || "/", :class => "first-user-form" }, :form) do
+      param(:authenticity_token) { authenticity_token_field }
+
+      tag("div", { :class => "field" }, :"#{field}_field") do
+        tag("label", { :for => "user_#{field}" }, :"#{field}_label") { text field.humanize }
+        tag("input", { :type => field.include?("email") ? "email" : "text",
+                       :name => "user[#{field}]", :id => "user_#{field}", :required => true })
+      end
+
+      { "password" => "Contrasena", "password_confirmation" => "Repite la contrasena" }.each do |name, label|
+        tag("div", { :class => "field" }, :"#{name}_field") do
+          tag("label", { :for => "user_#{name}" }, :"#{name}_label") { text label }
+          tag("input", { :type => "password", :name => "user[#{name}]", :id => "user_#{name}", :required => true })
+        end
+      end
+
+      tag("div", { :class => "actions" }, :actions) do
+        tag("button", { :type => "submit", :class => "btn btn-primary" }, :submit) { text "Register Administrator" }
+      end
+    end
+  end
+end

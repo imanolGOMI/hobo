@@ -10,15 +10,23 @@
 
 require "rapid"
 require "hobo_rapid/tags/views"
+require "hobo_rapid/helper"
 
 module HoboRapid
   module Tags
 
     module StructureSupport
 
-      # Supplied by the controller in an application; nil in isolation.
-      def flash_messages = {}
-      def current_user = nil
+      # Supplied by the controller in an application; empty in isolation.
+      def flash_messages = HoboRapid.flash_messages
+      def current_user = HoboRapid.current_user
+
+      # Every form Hobo paints carries it, because Rails answers 422 without it.
+      def authenticity_token_field
+        token = HoboRapid.authenticity_token
+        return unless token
+        tag("input", { :type => "hidden", :name => "authenticity_token", :value => token })
+      end
 
     end
 

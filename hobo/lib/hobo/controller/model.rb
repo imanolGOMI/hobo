@@ -542,7 +542,10 @@ module Hobo
     # protocol. With Turbo it does not: the page is rendered as always and Turbo
     # takes the frame it asked for out of it.
     def show_response
-      render_derived_or(:show_page) { respond_with(self.this) }
+      # `new` and `edit` want a form, not a read-only page. Which one it is is
+      # something the action already knows.
+      page = action_name.in?(%w[new edit]) ? :form_page : :show_page
+      render_derived_or(page) { respond_with(self.this) }
     end
 
     def index_response

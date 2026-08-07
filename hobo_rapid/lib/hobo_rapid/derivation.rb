@@ -41,6 +41,20 @@ module HoboRapid
 
   end
 
+  # Where a record lives. The tag runtime is not a Rails view, so it asks Rails
+  # when there is one and paints no link when there is not -- a catalogue that
+  # cannot be used outside an application would be a catalogue nobody can test.
+  module Routing
+
+    def path_for(record_or_model)
+      return nil unless defined?(Rails) && Rails.respond_to?(:application) && Rails.application
+      Rails.application.routes.url_helpers.polymorphic_path(record_or_model)
+    rescue StandardError
+      nil
+    end
+
+  end
+
   module Derivation
 
     class << self
@@ -71,10 +85,15 @@ module HoboRapid
       def title_of(model) = model.name.demodulize.underscore.humanize
       def plural_of(model) = title_of(model).pluralize
 
+      # Rails keeps these, and they are never what a page is about.
+      HOUSEKEEPING = %w[created_at updated_at id type].freeze
+
       # The fields a summary shows: everything but the name (which is the
-      # heading) and the children (which are collections, not summary material).
+      # heading), the children (collections, not summary material) and the
+      # housekeeping columns -- a card that leads with "Created at" is a card
+      # about the database, not about the record.
       def summary_fields(model)
-        fields_of(model) - [name_attribute_of(model)] - children_of(model)
+        fields_of(model) - [name_attribute_of(model)] - children_of(model) - HOUSEKEEPING
       end
 
       # Defines <card>, <show-page>, <index-page> and <form> for one model.
@@ -85,6 +104,7 @@ module HoboRapid
         derive_show_page(model)
         derive_index_page(model)
         derive_form(model)
+        derive_form_page(model)
         model
       end
 
@@ -95,13 +115,28 @@ module HoboRapid
         name_attribute = name_attribute_of(model)
         fields = summary_fields(model)
 
+        # What a record is called, on its own, so both the card and the link
+        # can use it.
+        Rapid.define_for(:name_view, model) do
+          if name_attribute
+            with_field(name_attribute) { call_tag(:view, { :no_wrapper => true }, :as => :name) }
+          else
+            param(:name) { text this.to_s }
+          end
+        end
+
         Rapid.define_for(:card, model) do
           tag("div", { :class => "card #{model.name.demodulize.underscore}" }, :card) do
             tag("h3", {}, :heading) do
-              if name_attribute
-                with_field(name_attribute) { call_tag(:view, {}, :as => :name) }
-              else
-                param(:name) { text this.to_s }
+              # A card nobody can click is a list nobody can use. The link is a
+              # param of its own so a theme can change it without losing it.
+              param(:name) do
+                path = path_for(this)
+                if path
+                  tag("a", { :href => path }, :link) { call_tag(:name_view, {}, :as => :name_view) }
+                else
+                  call_tag(:name_view, {}, :as => :name_view)
+                end
               end
             end
             tag("dl", {}, :body) do
@@ -197,6 +232,43 @@ module HoboRapid
         end
       end
 
+      # The page you get at `new` and `edit`: the form, in the theme, with a
+      # button to send it. Deriving the form and never rendering it anywhere was
+      # the same mistake as building the theme and not connecting it -- the
+      # piece existed and the product did not have it.
+      def derive_form_page(model)
+        Rapid.define_for(:form_page, model) do
+          new_record = this.respond_to?(:new_record?) && this.new_record?
+          title = "#{new_record ? 'Nuevo' : 'Editar'} #{model.name.demodulize.underscore.humanize.downcase}"
+
+          in_page(title) do
+            tag("div", { :class => "form-page #{model.name.demodulize.underscore}" }, :body) do
+              tag("h1", {}, :heading) { text title }
+
+              action = path_for(new_record ? model : this)
+              tag("form", { :class => "hobo-form", :method => "post", :action => action }, :form) do
+                unless new_record
+                  tag("input", { :type => "hidden", :name => "_method", :value => "patch" })
+                end
+                param(:authenticity_token) { authenticity_token_field }
+
+                call_tag(:error_messages, {}, :as => :errors)
+                # Not `:as => :fields`: the form declares a param of that name
+                # itself, and the outer one silently replaced it -- the fields
+                # came out empty and nothing complained.
+                call_tag(:model_form, {}, :as => :form_fields)
+
+                tag("div", { :class => "actions" }, :actions) do
+                  tag("button", { :type => "submit", :class => "btn btn-primary" }, :submit) do
+                    text(new_record ? "Crear" : "Guardar")
+                  end
+                end
+              end
+            end
+          end
+        end
+      end
+
       public
 
       def label_for(model, field)
@@ -210,9 +282,12 @@ module HoboRapid
 end
 
 Rapid::Tag.include(HoboRapid::InPage)
+Rapid::Tag.include(HoboRapid::Routing)
 
 # The tags the derived ones fall back to when a model has said nothing.
 Rapid.define(:card) { tag("div", { :class => "card" }, :card) { call_tag(:view, :force => true) } }
 Rapid.define(:show_page) { tag("article", {}, :page) { call_tag(:view, :force => true) } }
 Rapid.define(:index_page) { tag("div", {}, :page) { call_tag(:view, :force => true) } }
 Rapid.define(:model_form) { tag("div", {}, :fields) { } }
+Rapid.define(:name_view) { text this.to_s }
+Rapid.define(:form_page) { tag("div", {}, :page) { call_tag(:model_form) } }

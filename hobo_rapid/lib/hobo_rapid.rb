@@ -16,6 +16,7 @@ module HoboRapid
   EDIT_LINK_BASE = "https://github.com/Hobo/hobodoc/edit/master/hobo_rapid"
 
   require 'hobo_rapid/previous_uri_filter'
+  require 'hobo_rapid/tags/front_page'
   require 'hobo_rapid/derivation'
   require 'hobo_rapid/helper'
   require 'hobo_rapid/engine' if defined?(Rails)

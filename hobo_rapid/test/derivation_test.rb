@@ -80,8 +80,15 @@ class DerivationTest < Minitest::Test
   def test_a_card_shows_the_name_as_its_heading
     html = render(:card, story)
 
-    assert_includes html, "<h3><span"
+    assert_includes html, "<h3>"
     assert_includes html, "Primera historia"
+  end
+
+  # Housekeeping columns are never what a page is about: a card that leads with
+  # "Created at" is a card about the database.
+  def test_a_card_leaves_out_the_timestamps
+    refute_includes HoboRapid::Derivation.summary_fields(Story), "created_at"
+    refute_includes HoboRapid::Derivation.summary_fields(Story), "updated_at"
   end
 
   def test_a_card_lists_the_other_fields_with_their_labels

@@ -2015,6 +2015,97 @@ HOBO_TEST_NEW=1 rake test
 
 Es la única prueba que comprueba **lo primero que hace una persona**.
 
+---
+
+# Lo que se aprendió el 2026-08-07, y hay que no olvidar
+
+## Por qué 324 pruebas en verde y la aplicación se veía mal
+
+Imanol abrió la aplicación y la vio **sin estilos, sin enlaces y sin la portada
+del primer usuario** — con toda la suite en verde. La razón, escrita para no
+repetirla:
+
+> **Una prueba escrita a partir del código no puede ver una ausencia.**
+
+Porté `<view>` y probé `<view>`. Porté el tema y probé el tema. Nunca escribí
+«una tarjeta enlaza a su registro» ni «la página carga una hoja de estilo», así
+que **nada falló cuando no había ninguna de las dos**. Las pruebas decían que
+cada pieza hacía lo que yo dije que haría; no que Hobo hiciera lo que Hobo hacía.
+
+Tres agravantes concretos:
+
+1. **No miré lo que hacía el Hobo viejo**, teniéndolo en el repositorio:
+   `integration_tests/agility_bootstrap/test` tiene 22 ficheros, y siete de
+   integración (`create_account`, `lifecycle`, `search`, `nested_has_many`…).
+   **Esa era la especificación de comportamiento.**
+2. **Cada capa probó su costura, no el montaje.** Que el tema exista y que las
+   páginas existan no prueba que estén conectados — y no lo estaban.
+3. **La prueba más cercana al producto (`hobo new`) no corre por defecto.**
+
+## La suite de conformidad: `hobo/test/conformance/`
+
+Lo que arregla eso. Son propiedades **del producto montado**, sacadas de lo que
+el Hobo viejo hacía, y escritas para **fallar cuando algo falta**, no cuando algo
+está mal. Corren en un navegador de verdad contra una aplicación generada:
+
+```sh
+cd hobo && HOBO_APP=/tmp/hobo_luz rake test
+```
+
+Encontró, a la primera: las tarjetas no enlazaban, la navegación no llevaba a
+ninguna parte, los timestamps salían en el resumen, `/stories/new` no pintaba
+formulario, y la página venía envuelta dos veces.
+
+**Regla nueva de trabajo: antes de portar una pieza, buscar qué exigía de ella el
+banco viejo, y escribir esa exigencia como prueba.**
+
+## La portada del primer usuario (pieza 15, la parte que es de Hobo)
+
+**No se había tirado a propósito: faltaba.** Lo que se delegó a Rails es el
+modelo de usuario, la sesión y las contraseñas (`bin/rails generate
+authentication`). Lo que **Rails no tiene** es saber que una aplicación sin
+usuarios debe pedir uno — y eso es la primera pantalla de Hobo, especificada en
+`create_account_test.rb`:
+
+```ruby
+visit root_path
+click_button "Register Administrator"
+assert has_content?("You are now the site administrator")
+```
+
+Reconstruida: `<front-page>` y `<first-user-form>` en `hobo_rapid`, y un
+generador `hobo:front_page` que escribe el `FrontController`. Verificado de punta
+a punta: formulario → 302 → «You are now the site administrator» → sesión
+iniciada.
+
+Se adapta sola al modelo que haya: busca `User` o `Account`, y usa
+`email_address`, `email`, `login` o `name`, lo que la aplicación tenga.
+
+## Cuatro fallos de montaje, todos invisibles a las pruebas de pieza
+
+| Qué | Por qué no se veía |
+|---|---|
+| **El tema no estaba conectado.** Las páginas derivadas se pintaban sueltas | Probé el tema y probé las páginas, nunca la unión |
+| **`model_form` no lo pintaba nadie**: `new` y `edit` daban la página de solo lectura | Igual: la pieza existía y el producto no la tenía |
+| **`as: :fields` chocaba con el param `:fields` del formulario** y lo vaciaba en silencio | El barrido de params vigila que se pueda **llegar** a un param, no que dos no se pisen |
+| **El token CSRF llegaba nil**: `respond_to?(:form_authenticity_token)` **no ve métodos protegidos**, y en un controlador lo es. Todo formulario de Hobo daba **422** | Fuera de una petición no hay token, así que ninguna prueba de pieza lo notaba |
+
+## La prueba de aceptación final: una videoteca
+
+Propuesta por Imanol, y es el criterio de «esto está terminado»:
+
+> Una aplicación de ejemplo **videoteca**: películas, categorías y géneros, con
+> pantallas de listado **con filtros**, formularios, y **formularios anidados** —
+> crear un género o una categoría **desde** la película, que es lo que Hobo hacía
+> con `input-many` y `select-one-or-new`.
+
+Sencilla, pero toca a la vez: `fields do`, asociaciones en los dos sentidos,
+permisos, páginas derivadas, filtros (Ransack), formularios anidados y el
+JavaScript de Stimulus. **Si la videoteca se construye sin escribir vistas y
+funciona, la portación está hecha.**
+
+Va **después** del empaquetado en una gema.
+
 ## Reglas de trabajo
 
 - **Nunca hacer push.** Ni a este repo ni a ninguno. Solo commits locales.
