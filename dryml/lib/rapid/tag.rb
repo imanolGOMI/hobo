@@ -306,9 +306,15 @@ module Rapid
       nil
     end
 
+    # `true` writes the attribute on its own -- `selected`, not `selected="true"`.
+    # HTML boolean attributes mean "present or absent", and a browser reads
+    # `checked="false"` as checked.
     def format_attrs(attrs)
       attrs.reject { |_, v| v.nil? || v == false }
-           .map { |k, v| %( #{k.to_s.tr("_", "-")}="#{CGI.escapeHTML(v.to_s)}") }.join
+           .map do |name, value|
+             name = name.to_s.tr("_", "-")
+             value == true ? " #{name}" : %( #{name}="#{CGI.escapeHTML(value.to_s)}")
+           end.join
     end
   end
 
