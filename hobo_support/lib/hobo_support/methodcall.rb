@@ -7,7 +7,7 @@
 
 require 'delegate'
 require 'singleton'
-require 'blankslate'
+require 'hobo_support/blankslate'
 
 module HoboSupport
   def self.hobo_try(this, *args, &block)

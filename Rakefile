@@ -1,36 +1,34 @@
 RUBY = File.join(RbConfig::CONFIG['bindir'], RbConfig::CONFIG['ruby_install_name']).sub(/.*\s.*/m, '"\&"')
-RUBYDOCTEST = ENV['RUBYDOCTEST'] || "#{RUBY} `which rubydoctest`"
 GEMS_ROOT = File.expand_path('../')
 
-desc "Run tests and doctests for all components."
+# Gems whose suite has already been ported to minitest. Each layer of the plan
+# adds its own gem here once its suite is green; see PLAN.md.
+PORTED_GEMS = %w[hobo_support]
+
+# Gems still carrying the pre-2026 suites (rubydoctest / irt / cucumber), not
+# yet runnable on Ruby 3.4. Listed so the gap stays visible.
+PENDING_GEMS = %w[hobo_fields dryml hobo]
+
+desc "Run the test suite of every ported gem"
 task :test do |t|
-  puts 'You probably want to set the HOBODEV variable before running rake test_all' if ENV['HOBODEV'].nil?
-  system("cd dryml ; #{RUBY} -S bundle exec rake test:doctest") &&
-    system("cd hobo_fields ; #{RUBY} -S bundle exec rake test:doctest < test_responses.txt") &&
-    system("cd hobo_fields ; #{RUBY} -S bundle exec rake test:unit") &&
-    system("cd hobo_support ; #{RUBY} -S bundle exec rake test:doctest") &&
-    system("cd hobo ; #{RUBY} -S bundle exec rake test:doctest") &&
-    system("cd hobo ; #{RUBY} -S bundle exec rake test:irt") &&
-    system("cd hobo ; #{RUBY} -S bundle exec rake test")
-  exit($?.exitstatus)
+  failed = PORTED_GEMS.reject do |gem|
+    puts "\n=== #{gem} ==="
+    system("cd #{gem} && #{RUBY} -S rake test")
+  end
+
+  unless PENDING_GEMS.empty?
+    puts "\nSin portar todavia: #{PENDING_GEMS.join(', ')}"
+  end
+
+  unless failed.empty?
+    puts "\nFallan: #{failed.join(', ')}"
+    exit(1)
+  end
 end
 
-desc "Run tests and doctests for all components."
-task :test_jruby do |t|
-  puts 'You probably want to set the HOBODEV variable before running rake test_all' if ENV['HOBODEV'].nil?
-  system("cd dryml ; #{RUBY} -S bundle exec rake test:doctest") &&
-    system("cd hobo_fields ; #{RUBY} -S bundle exec rake test:doctest") &&
-    system("cd hobo_fields ; #{RUBY} -S bundle exec rake test:unit") &&
-    system("cd hobo_support ; #{RUBY} -S bundle exec rake test:doctest") &&
-    system("cd hobo ; #{RUBY} -S bundle exec rake test:doctest") &&
-    system("cd hobo ; #{RUBY} -S bundle exec rake test:irt") &&
-    system("cd hobo ; #{RUBY} -S bundle exec rake test")
-  exit($?.exitstatus)
-end
-
-desc "Run the integration tests"
+desc "Run the integration tests (agility_bootstrap)"
 task :test_integration do |t|
-  system("cd integration_tests/agility; #{RUBY} -S rake test:integration")
+  system("cd integration_tests/agility_bootstrap && #{RUBY} -S rake test")
   exit($?.exitstatus)
 end
 

@@ -1,6 +1,6 @@
 # From: http://jicksta.com/articles/2007/08/04/the-methodphitamine
 
-require 'blankslate'
+require 'hobo_support/blankslate'
 
 module Kernel
 

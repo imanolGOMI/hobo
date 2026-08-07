@@ -43,6 +43,12 @@ Fecha: 2026-08-07. No volver a discutirlas salvo que aparezca información nueva
    actualizador que migrará las plantillas de las apps existentes.
 7. **`will_paginate` no se toca** al actualizar. Pagy no parchea nada y convive.
 8. **Se conserva el pipeline de assets que la app tenga.** Propshaft fue un error.
+9. **Las pruebas se portan todas a minitest.** Se acaba la dependencia de
+   `rubydoctest` (abandonada en 2014) y de `irt` (2015). El estándar de Rails,
+   que corre en paralelo y da fallos legibles. La capa 0 monta el andamiaje; el
+   port de cada gema se hace en su capa, no todo de golpe.
+10. **No se vendorizan más repos de la organización por ahora.** Quedan
+    inventariados aquí abajo y clonables cuando toque la capa que los necesite.
 
 ---
 
@@ -173,7 +179,7 @@ Estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho
 
 | | Capa | Qué | Piezas |
 |---|---|---|---|
-| `[~]` | **0** | **Banco de pruebas**: app Rails 8 mínima donde montar las gemas y verificar de verdad | — |
+| `[x]` | **0** | **Banco de pruebas**: andamiaje minitest y corredor de la raíz | — |
 | `[ ]` | **1** | `hobo_support`: quitar ~230 líneas de azúcar, codemod de 113 sitios, `classy_module` → `Concern` | 16 |
 | `[ ]` | **2** | `hobo_fields`: `fields do`, tipos ricos, migraciones **+ batería que ejecute `up` y `down`** | 1, 2, 3 |
 | `[ ]` | **3** | **El remix de DRYML** (empieza por el spike) | 8 |
@@ -247,6 +253,39 @@ ricos (`:markdown`, `Color`), los cuatro permisos incluido
 **Es el objetivo, no la herramienta del día a día**: no podrá arrancar hasta la
 capa 5 o 6. Para las capas 1 y 2 hace falta que corra el `rake test` de cada
 gema por separado.
+
+### Lo que se hizo en la capa 0 — **terminada**
+
+**El andamiaje de minitest, no el port entero.** Cada gema se porta en su capa.
+
+- `hobo_support/test/test_helper.rb` y `hobo_support/Rakefile` con
+  `Rake::TestTask`. **Ese es el patrón** a repetir en cada gema.
+- `hobo_support/test/hobo_support/hash_test.rb` — primer fichero portado, de
+  `test/hobosupport/hash.rdoctest`. **13 pruebas, verdes.**
+- El `Rakefile` de la raíz tiene ahora dos listas, `PORTED_GEMS` y
+  `PENDING_GEMS`: `rake test` corre las portadas y **dice en voz alta cuáles
+  faltan**, para que el hueco no se olvide.
+- `hobo_support` **ya carga en Ruby 3.4 con Rails 8.1**. Lo único que hacía falta
+  era que `methodcall.rb` y `methodphitamine.rb` requirieran el `BlankSlate`
+  local en vez de la gema `blankslate`, que ya no existe.
+- `hobo_support.gemspec`: `rails >= 8.0` (antes `< 5.0`), `required_ruby_version
+  >= 3.2`, fuera `rubyforge_project`. `Gemfile` limpio, sin el `git://` muerto.
+
+**Nota:** el problema de `Hash#inspect` de Ruby 3.4 **desaparece solo** al portar
+a minitest, porque minitest compara objetos y no la cadena de `inspect`. Los 21
+sitios afectados dejan de importar en cuanto se porta cada fichero.
+
+Se comprobó además que los *overrides* de `HashWithIndifferentAccess` en
+`hash.rb` **siguen activos** en Rails 8.1 (`partition_hash` normaliza `:a` a
+`"a"` correctamente). No hay problema ahí.
+
+### Cómo correr las pruebas
+
+```sh
+rake test              # todas las gemas ya portadas
+rake test_integration  # agility_bootstrap (no arrancara hasta la capa 5-6)
+cd hobo_support && rake test
+```
 
 ---
 

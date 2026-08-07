@@ -7,12 +7,12 @@ Gem::Specification.new do |s|
   s.authors = ['Tom Locke']
   s.email = 'tom@tomlocke.com'
   s.homepage = 'http://hobocentral.net'
-  s.rubyforge_project = 'hobo'
   s.summary = 'Core Ruby extensions from the Hobo project'
   s.description = 'Core Ruby extensions from the Hobo project'
 
-  s.add_runtime_dependency('rails', [">= 4.2.7.1", '< 5.0'])
-  # s.add_development_dependency('rubydoctest', [">= 0"])
+  s.add_runtime_dependency('rails', ['>= 8.0'])
+  s.add_development_dependency('rake', ['>= 13.0'])
+  s.add_development_dependency('minitest', ['>= 5.0'])
 
   s.files = `git ls-files -x #{name}/* -z`.split("\0")
 
@@ -20,6 +20,7 @@ Gem::Specification.new do |s|
   s.version = version
   s.date = Date.today.to_s
 
+  s.required_ruby_version = ">= 3.2"
   s.required_rubygems_version = ">= 1.3.6"
   s.rdoc_options = ["--charset=UTF-8"]
   s.require_paths = ["lib"]
