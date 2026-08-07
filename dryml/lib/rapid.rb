@@ -73,8 +73,6 @@ module Rapid
       Context.with(:this => this) { klass.new(attributes, params, :path => path).render }
     end
 
-    private
-
     # What a polymorphic tag dispatches on.
     #
     # Not `this.class`: a rich type is a real class, so a `:markdown` field does
@@ -94,6 +92,13 @@ module Rapid
       return nil unless parent && field && parent.class.respond_to?(:attr_type)
       parent.class.attr_type(field)
     end
+
+    # Whether a polymorphic definition exists for what `this` is. A caller
+    # outside the runtime needs this to know whether a derived tag exists before
+    # deciding to use it.
+    def polymorphic?(name, this) = !polymorphic_lookup(name, dispatch_type(this), nil).nil?
+
+    private
 
     def polymorphic_lookup(name, type, from)
       return nil unless @polymorphic.key?(name) && type.is_a?(Module)

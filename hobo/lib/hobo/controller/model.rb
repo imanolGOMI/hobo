@@ -542,11 +542,11 @@ module Hobo
     # protocol. With Turbo it does not: the page is rendered as always and Turbo
     # takes the frame it asked for out of it.
     def show_response
-      respond_with(self.this)
+      render_derived_or(:show_page) { respond_with(self.this) }
     end
 
     def index_response
-      respond_with(self.this)
+      render_derived_or(:index_page) { respond_with(self.this) }
     end
 
     def hobo_new_for(owner, record=nil, &b)
@@ -881,6 +881,26 @@ module Hobo
 
     def dryml_context
       this
+    end
+
+
+    # An application that has written a template gets its template. One that has
+    # not gets the page the derivation engine builds from its model -- which is
+    # the whole promise of Hobo: declare the model, and the pages are there.
+    #
+    # Falling back rather than taking over on purpose: the moment a page needs
+    # to be different, you write it, and nothing argues with you.
+    def render_derived_or(tag_name)
+      return yield if template_exists_for_this_action? || !derived_tag?(tag_name)
+      render :html => Rapid.render(tag_name, {}, :this => this).html_safe, :layout => true
+    end
+
+    def template_exists_for_this_action?
+      lookup_context.exists?(action_name, lookup_context.prefixes, false)
+    end
+
+    def derived_tag?(tag_name)
+      defined?(Rapid) && Rapid.polymorphic?(tag_name, this)
     end
 
 

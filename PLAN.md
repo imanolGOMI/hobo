@@ -1836,6 +1836,26 @@ Y el barrido de contrato volvió a ganarse el sueldo: exigió que las vistas de
 cada campo y la colección de cada hijo fueran **puntos de extensión**, que es lo
 que permitirá que un tema entre en una página derivada sin reescribirla.
 
+### Y la luz: una petición devuelve la página derivada
+
+```
+GET /stories  ->  200
+<div class="index-page stories">
+  <h1>Stories</h1>
+  <div class="collection">
+    <div class="card story">
+      <h3><span class="view story-title">La luz de Hobo</span></h3>
+      <dl><dt>Body</dt><dd><span class="view story-body">Se ve algo</span></dd>...
+```
+
+Un modelo con `fields do`, un controlador con `auto_actions`, las rutas de
+`hobo_routes`, y **ninguna vista escrita**. Es la promesa de Hobo, funcionando
+sobre Rails 8.
+
+**Y cae hacia atrás, no toma el mando:** una aplicación que ha escrito su
+plantilla recibe **su** plantilla. En cuanto una página necesita ser distinta, se
+escribe, y nada discute. Hay prueba de las dos cosas.
+
 ### Por dónde va la capa 5
 
 1. ~~**El JS a Stimulus.**~~ **Hecho**, salvo `delete-button`, que se decide al

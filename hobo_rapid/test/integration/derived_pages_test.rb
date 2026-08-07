@@ -122,15 +122,80 @@ class DerivedPagesTest < Minitest::Test
     refute_includes output, "SIN QUEJA"
   end
 
+  # The whole thing over HTTP: a model with `fields do`, a controller with
+  # `auto_actions`, routes from `hobo_routes`, and a page nobody wrote.
+  def test_a_request_returns_the_derived_page
+    output = run_in_app(<<~RUBY)
+      #{MODELS}
+
+      class StoriesController < ApplicationController
+        include Hobo::Controller::Model
+        auto_actions :all
+      end
+
+      Rails.application.routes.draw { hobo_routes }
+
+      env = Rack::MockRequest.env_for("http://localhost/stories")
+      status, _headers, body = Rails.application.call(env)
+      html = ""; body.each { |chunk| html << chunk }
+
+      puts "STATUS \#{status}"
+      puts "BODY \#{html.gsub(/<!--.*?-->/m, '')}"
+    RUBY
+
+    assert_includes output, "STATUS 200", output
+    assert_includes output, %(<div class="index-page stories">), output
+    assert_includes output, %(<div class="card story">)
+    assert_includes output, "La luz de Hobo"
+  end
+
+  # And an application that has written a template still gets its template: the
+  # derived page falls back, it does not take over.
+  def test_a_template_of_its_own_wins
+    output = run_in_app(<<~RUBY, "app/views/stories/index.html.erb" => "MI PROPIA PLANTILLA")
+      #{MODELS}
+
+      class StoriesController < ApplicationController
+        include Hobo::Controller::Model
+        auto_actions :all
+      end
+
+      Rails.application.routes.draw { hobo_routes }
+
+      env = Rack::MockRequest.env_for("http://localhost/stories")
+      status, _headers, body = Rails.application.call(env)
+      html = ""; body.each { |chunk| html << chunk }
+
+      puts "STATUS \#{status}"
+      puts "BODY \#{html.gsub(/<!--.*?-->/m, '')}"
+    RUBY
+
+    assert_includes output, "MI PROPIA PLANTILLA", output
+    refute_includes output, %(<div class="index-page stories">)
+  end
+
   private
 
-  def run_in_app(script)
+  def run_in_app(script, views = {})
+    written = views.map do |path, content|
+      full = File.join(TestApp::PATH, path)
+      FileUtils.mkdir_p(File.dirname(full))
+      File.write(full, content)
+      full
+    end
+
     file = File.join(TestApp::PATH, "tmp", "derived_probe.rb")
     FileUtils.mkdir_p(File.dirname(file))
     File.write(file, script)
+    written << file
+
     `cd #{TestApp::PATH} && bin/rails runner #{file} 2>&1`
   ensure
-    FileUtils.rm_f(file)
+    written.to_a.each do |path|
+      FileUtils.rm_f(path)
+      dir = File.dirname(path)
+      FileUtils.rmdir(dir) if File.directory?(dir) && Dir.empty?(dir)
+    end
   end
 
 end
