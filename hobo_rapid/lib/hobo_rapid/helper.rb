@@ -28,8 +28,20 @@ module HoboRapid
       user = nil if user.respond_to?(:guest?) && user.guest?
       messages = flash.to_h.symbolize_keys if respond_to?(:flash, true) && flash
 
-      HoboRapid.with_request(token, user, messages || {}) do
-        Rapid.render(name, attributes, :this => this).html_safe
+      query = request.query_parameters if respond_to?(:request, true) && request
+
+      # A `Rapid::Parameter` is a param, anything else is an attribute. In DRYML
+      # the two were told apart by syntax -- `<heading:>...</heading:>` against
+      # `class="big"` -- and here the value says which it is, which keeps the
+      # call site short:
+      #
+      #   <%= rapid_tag :index_page, @movies,
+      #         :filters => Rapid.markup { call_tag(:search_filter) } %>
+      params, attributes = attributes.partition { |_, value| value.is_a?(Rapid::Parameter) }
+                                     .map(&:to_h)
+
+      HoboRapid.with_request(token, user, messages || {}, query || {}) do
+        Rapid.render(name, attributes, :this => this, **params).html_safe
       end
     end
 

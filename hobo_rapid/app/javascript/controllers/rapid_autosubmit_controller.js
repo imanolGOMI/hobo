@@ -9,7 +9,16 @@ import { Controller } from "@hotwired/stimulus"
 // Neither needs to do the request itself any more. The form goes to Turbo, which
 // swaps whatever frame it targets, so all that is left here is *when* to submit.
 export default class extends Controller {
+  static targets = ["fallback"]
   static values = { delay: { type: Number, default: 0 } }
+
+  // A menu that submits itself still needs a button for whoever does not have
+  // JavaScript -- and the button is wrong the moment this controller connects,
+  // because then there are two ways to do one thing. So the markup ships it and
+  // this takes it away: the page works either way, and looks right both times.
+  connect() {
+    this.fallbackTargets.forEach((button) => (button.hidden = true))
+  }
 
   submit() {
     if (this.delayValue > 0) {

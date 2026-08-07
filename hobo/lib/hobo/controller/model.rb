@@ -493,6 +493,8 @@ module Hobo
       do_pagination = options.delete(:paginate) && finder.respond_to?(:paginate)
       finder = Array.wrap(options.delete(:scope)).inject(finder) { |a, v| a.send(*Array.wrap(v).flatten) }
 
+      finder = apply_search(finder)
+
       order = options.delete(:order_by) || options.delete(:order)
       order = finder.default_order if order.blank? && finder.try(:order_values).blank?
       finder = finder.order(order) if order.present?
@@ -504,6 +506,28 @@ module Hobo
         # Equivalent to the old finder.scoped (http://stackoverflow.com/a/18199294)
         finder.where(nil)
       end
+    end
+
+
+    # The filters of a list, which are Ransack's (piece 6). The application
+    # writes `<search-filter>` or `<filter-menu>` in its page, the browser sends
+    # `q[title_cont]=blade`, and this is where it lands. Nothing to configure:
+    # the model already said which of its attributes may be searched.
+    #
+    # Only when `q` is a hash. `hobo_completions` reads `params[:q]` too, as a
+    # plain string, because that is what jQuery Tokeninput sent -- the two never
+    # meet in one action, but reading a string as a search would be a puzzling
+    # way to find that out.
+    #
+    # It goes *before* the ordering and the pagination, so a filtered list is
+    # paginated by what it has left rather than by what it started with.
+    def apply_search(finder)
+      query = params[:q]
+      return finder unless query.is_a?(Hash) || query.respond_to?(:to_unsafe_h)
+      return finder unless finder.respond_to?(:ransack)
+
+      query = query.to_unsafe_h if query.respond_to?(:to_unsafe_h)
+      finder.ransack(query).result
     end
 
 

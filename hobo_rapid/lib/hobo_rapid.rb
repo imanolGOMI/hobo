@@ -17,6 +17,7 @@ module HoboRapid
 
   require 'hobo_rapid/previous_uri_filter'
   require 'hobo_rapid/tags/front_page'
+  require 'hobo_rapid/tags/filters'
   require 'hobo_rapid/derivation'
   require 'hobo_rapid/helper'
   require 'hobo_rapid/engine' if defined?(Rails)

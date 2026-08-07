@@ -15,16 +15,17 @@ module HoboRapid
 
   class << self
 
-    def with_request(token, user, flash = {})
+    def with_request(token, user, flash = {}, query = {})
       previous = [Thread.current[:hobo_rapid_token], Thread.current[:hobo_rapid_user],
-                  Thread.current[:hobo_rapid_flash]]
+                  Thread.current[:hobo_rapid_flash], Thread.current[:hobo_rapid_query]]
       Thread.current[:hobo_rapid_token] = token
       Thread.current[:hobo_rapid_user] = user
       Thread.current[:hobo_rapid_flash] = flash
+      Thread.current[:hobo_rapid_query] = query
       yield
     ensure
       Thread.current[:hobo_rapid_token], Thread.current[:hobo_rapid_user],
-        Thread.current[:hobo_rapid_flash] = previous
+        Thread.current[:hobo_rapid_flash], Thread.current[:hobo_rapid_query] = previous
     end
 
     def authenticity_token = Thread.current[:hobo_rapid_token]
@@ -35,6 +36,12 @@ module HoboRapid
     def current_user = Thread.current[:hobo_rapid_user]
 
     def flash_messages = Thread.current[:hobo_rapid_flash] || {}
+
+    # What is being filtered right now. A filter that cannot see the query
+    # string cannot show what is selected, and cannot keep the other filters
+    # when you change one -- which is how a search box and a menu on the same
+    # page start cancelling each other out.
+    def query_parameters = Thread.current[:hobo_rapid_query] || {}
 
   end
 

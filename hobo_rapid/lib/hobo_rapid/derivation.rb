@@ -306,6 +306,19 @@ module HoboRapid
               tag("div", { :class => "content-body" }, :content_body) do
                 with_actions = records.any? { |record| with_this(record) { editable_here? || destroyable_here? } }
 
+                # An empty extension point above the list, and the only way an
+                # application can put filters on a derived index without taking
+                # the whole page over. Empty by default on purpose (decision
+                # 18): a list that grows a select for every column is not a
+                # decision, it is a pile.
+                #
+                #   # app/views/movies/index.html.erb
+                #   <%= rapid_tag :index_page, @movies, :filters => Rapid.markup {
+                #         call_tag(:search_filter, :fields => "title, synopsis")
+                #         call_tag(:filter_menu, :field => "category")
+                #       } %>
+                tag("div", { :class => "filters mb-3" }, :filters)
+
                 if records.empty?
                   tag("p", { :class => "empty text-secondary" }, :empty) { text "Nada por aqui todavia." }
                 else

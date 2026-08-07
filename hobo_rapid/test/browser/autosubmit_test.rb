@@ -40,4 +40,18 @@ class AutosubmitTest < Minitest::Test
     assert_equal 1, submitted, "y se envia una sola vez al parar"
   end
 
+  # The menu submits itself, so the button that submits it is wrong the moment
+  # this controller is running: two ways to do one thing. The markup ships it
+  # for whoever has no JavaScript, and this takes it away.
+  def test_the_fallback_button_is_taken_away
+    page = BrowserBench.visit("rapid-autosubmit", <<~HTML)
+      <form data-controller="rapid-autosubmit" method="get">
+        <select data-action="change->rapid-autosubmit#submit"><option>uno</option></select>
+        <button data-rapid-autosubmit-target="fallback">Filtrar</button>
+      </form>
+    HTML
+
+    refute page.find("button", :visible => :all).visible?, "el boton de reserva sobra cuando hay javascript"
+  end
+
 end

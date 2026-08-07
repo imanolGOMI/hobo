@@ -2135,8 +2135,10 @@ Una aplicación Rails 8 generada con `hobo new`:
   elegir uno de los que hay o hacer uno nuevo ahí mismo.
 - **La barra**: quién eres, cómo salir, y el **selector de usuario** de
   desarrollo para mirar la aplicación como cualquiera.
+- **Filtros**: `<search-filter>` y `<filter-menu>` sobre Ransack, que suman en
+  vez de turnarse.
 
-**Pruebas: 376 en las gemas, todas en verde, + la suite de conformidad en
+**Pruebas: 389 en las gemas, todas en verde, + la suite de conformidad en
 navegador (`cd hobo && HOBO_APP=/tmp/hobo_luz rake test`). `/tmp/hobo_luz` se
 regeneró con el `hobo new` de hoy: el banco tiene que ser lo que sale del
 generador, no lo que salía hace tres commits.**
@@ -2426,18 +2428,76 @@ Más cosas que Imanol vio comparando 3008 y 3009:
 | El menú no ocupaba todo el ancho | `container-fluid px-4` en la barra, en vez de `container`, que la encogía a 1140px |
 | Las cabeceras, menos marcadas que las de Hobo 2 | `font-weight: 700` en las cabeceras de página y en la marca |
 
+### Los filtros — **hechos** (2026-08-07). Con esto el criterio de aceptación está completo
+
+`<search-filter>` y `<filter-menu>`, y el índice pasando la colección por
+Ransack. Verificado en navegador con las cuatro combinaciones y con el SQL
+delante:
+
+```
+sin filtro          -> Blade Runner, El apartamento
+q[title_or_synopsis_cont]=blade    -> Blade Runner
+q[category_id_eq]=2                -> El apartamento
+los dos a la vez                   -> nada (Blade Runner no es comedia)
+```
+
+**La mitad del servidor ya estaba hecha desde la capa 4**, y el plan no lo
+decía: `Hobo::Model.ransackable_attributes` deriva de las columnas del modelo
+menos las que nunca se enseñan. Eso es lo que hace que funcionen sin escribir
+nada: con Ransack a secas hay que escribir esa lista a mano en cada modelo.
+
+Lo que faltaba:
+
+- **`apply_search` en `find_or_paginate`**, antes de ordenar y paginar, para que
+  una lista filtrada se pagine por lo que le queda y no por lo que tenía. Solo
+  cuando `params[:q]` es un hash: `hobo_completions` también lee `params[:q]`,
+  como cadena, porque es lo que mandaba jQuery Tokeninput.
+- **Un param `:filters`** en el índice derivado, vacío. Es la única forma de que
+  una aplicación ponga filtros sin adueñarse de la página entera, y vacío por
+  decisión 18.
+- **El puente lleva ahora la query string** (`HoboRapid.query_parameters`). Sin
+  eso un filtro no puede enseñar lo que está puesto ni conservar lo de los
+  demás.
+
+**La propiedad que más se rompe, y la que tiene prueba propia:** dos filtros en
+una página tienen que **sumar, no turnarse**. Cada formulario lleva escondido lo
+que tienen los otros; si no, elegir una categoría se lleva por delante la
+búsqueda que habías escrito — y en silencio, que es la peor forma de perder algo.
+
+Así se escribe en una aplicación, y es todo lo que hay que escribir:
+
+```erb
+<%# app/views/movies/index.html.erb %>
+<%= rapid_tag :index_page, @movies,
+      :filters => Rapid.markup {
+        call_tag(:search_filter, { :fields => "title, synopsis" })
+        call_tag(:filter_menu, { :field => "category" })
+      } %>
+```
+
+> **Ojo con las llaves.** `call_tag(nombre, atributos, **params)`: sin llaves,
+> Ruby manda los `:clave => valor` a los **params** y el tag no ve ni un
+> atributo. Pasó al escribir esta misma página, y falla en silencio.
+
+De paso, `rapid_tag` aprendió a distinguirlos: un `Rapid::Parameter` es un
+param, cualquier otra cosa es un atributo. En DRYML los separaba la sintaxis
+—`<heading:>…</heading:>` frente a `class="big"`—, y aquí lo dice el valor.
+
+Y el `<filter-menu>` trae un botón «Filtrar» **para quien no tenga JavaScript**,
+que el controlador de Stimulus quita al conectarse: la página funciona de las
+dos maneras y se ve bien las dos veces.
+
 ### Lo que la comparación deja pendiente
 
 Visto en las capturas, ordenado por lo que más se nota:
 
-1. **Filtros** en el listado. Decidido cómo (decisión 18), falta hacerlo.
-2. **Los textos de la interfaz están a medias en castellano**: «Nuevo movie»,
+1. **Los textos de la interfaz están a medias en castellano**: «Nuevo movie»,
    «Crear», «Guardar», «Editar», «Acciones», junto a etiquetas en inglés. Hobo 2
    dice «New Movie», «Create Movie». La regla del repositorio es **código en
    inglés**, y esto es cadena de interfaz: va en inglés, y luego i18n.
-3. **Un `belongs_to` no enlaza**: Hobo 2 pinta «Drama» como enlace a la
+2. **Un `belongs_to` no enlaza**: Hobo 2 pinta «Drama» como enlace a la
    categoría; Hobo 3 pinta el texto.
-4. **El buscador de la barra** (`<live-search>` de Hobo 2, contra `/search`).
+3. **El buscador de la barra** (`<live-search>` de Hobo 2, contra `/search`).
    El menú de usuario ya está; el buscador no.
 
 ## Decisiones tomadas en esta sesión
@@ -2475,31 +2535,11 @@ Visto en las capturas, ordenado por lo que más se nota:
 
 ## Lo siguiente, por orden
 
-Orden acordado con Imanol: cerrar el criterio de aceptación, luego empaquetar,
-y los textos al final.
+**El criterio de aceptación está completo**: la videoteca se construye sin
+escribir vistas —salvo tres líneas para decir por dónde se filtra—, funciona, y
+se parece a la de Hobo 2. Lo que queda es empaquetar y pulir.
 
-### 1. Los filtros del listado (decisión 18)
-
-Lo único del criterio de aceptación que falta entero. **No hay que derivar
-nada**: el índice sigue como está. Lo que hay que escribir son dos tags y una
-línea en el controlador.
-
-- **`<search-filter>`** — un formulario GET con un `<input type="search"
-  name="q">` y un botón. El de Hobo 2 está en
-  `/tmp/hobo2/hobo_rapid/taglibs/plus/search_filter.dryml`, son 14 líneas, y
-  lleva además un botón de **limpiar** que aparece solo si hay búsqueda, y
-  campos ocultos para no perder el resto de la query.
-- **`<filter-menu>`** — un `<select>` que se envía solo. **Ya está medio hecho**:
-  usa `rapid_autosubmit_controller` igual que `<dev-user-changer>`, que es el
-  patrón a copiar (mirar `Rapid.define(:dev_user_changer)` en
-  `hobo_rapid/lib/hobo_rapid/tags/structure.rb`).
-- **El controlador**: en `hobo_index` (o donde se arme la colección), pasarla
-  por Ransack — `model.ransack(params[:q]).result` — respetando los permisos que
-  ya se aplican. Falta añadir `ransack` a `hobo.gemspec`.
-- **Ojo con el nombre del parámetro**: Ransack usa `params[:q]`, y Hobo 2 usaba
-  `params[:search]`. Elegir el de Ransack y anotarlo.
-
-### 2. La fusión en una sola gema (decisión 11)
+### 1. La fusión en una sola gema (decisión 11)
 
 `hobo_support`, `hobo_fields`, `dryml`, `hobo` y `hobo_rapid` pasan a ser una
 sola gema `hobo`. Lo que hay que tener en cuenta:
@@ -2518,13 +2558,13 @@ sola gema `hobo`. Lo que hay que tener en cuenta:
 - Cuidado con `app_template.rb` y con `TestApp::GEMS` en
   `hobo/test/prepare_testapp.rb`: los dos enumeran las gemas.
 
-### 3. El contrato de plugin (pieza 17)
+### 2. El contrato de plugin (pieza 17)
 
 Con los tags en Ruby, **definir un tag ya es registrarlo**, así que el contrato
 se encoge muchísimo: un plugin es un Engine que requiere sus ficheros de tags y
 añade sus assets. Falta escribirlo y probarlo con uno de verdad.
 
-### 4. Las cadenas de interfaz a inglés, y detrás i18n
+### 3. Las cadenas de interfaz a inglés, y detrás i18n
 
 Al final a propósito: es lo más mecánico y lo que menos se aprende haciendo.
 Están en `hobo_rapid/lib/hobo_rapid/derivation.rb` («Nuevo», «Editar», «Crear»,
