@@ -1,3 +1,4 @@
+require 'action_view'
 module HoboFields
 
   module SanitizeHtml

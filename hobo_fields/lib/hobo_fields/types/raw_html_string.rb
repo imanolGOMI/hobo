@@ -1,3 +1,4 @@
+require 'hobo_fields/types/text'
 module HoboFields
   module Types
     class RawHtmlString < HoboFields::Types::Text

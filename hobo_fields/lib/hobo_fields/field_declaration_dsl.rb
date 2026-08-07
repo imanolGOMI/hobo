@@ -2,9 +2,14 @@ require 'hobo_fields/types/enum_string'
 
 module HoboFields
 
-  class FieldDeclarationDsl < BlankSlate
+  # BasicObject rather than Object, so that a field can be named after any
+  # method Object happens to define -- `hash`, `display`, `method`, `test`...
+  # This is what the old hobo_support BlankSlate was for.
+  class FieldDeclarationDsl < BasicObject
 
-    include HoboFields::Types::EnumString::DeclarationHelper
+    # Anchored at the root: BasicObject has no Object in its ancestry, so
+    # top-level constants are not reachable by the usual lookup.
+    include ::HoboFields::Types::EnumString::DeclarationHelper
 
     def initialize(model)
       @model = model

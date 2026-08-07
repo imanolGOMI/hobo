@@ -87,7 +87,7 @@ module HoboFields
 
 end
 
-require 'hobo_fields/extensions/active_record/attribute_methods'
+require 'hobo_fields/rich_type'
 require 'hobo_fields/extensions/active_record/fields_declaration'
 require 'hobo_fields/field_declaration_dsl'
 require 'hobo_fields/model'

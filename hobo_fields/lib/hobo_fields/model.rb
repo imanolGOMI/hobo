@@ -62,8 +62,10 @@ module HoboFields
       options = attrs.extract_options!
       type = options.delete(:type)
       attrs << options unless options.empty?
-      public
-      attr_accessor_without_rich_types(*attrs)
+      # Since Ruby 3.0 a bare `public` inside a method body does nothing, and
+      # attr_accessor returns the names it defined -- so make them public
+      # explicitly.
+      public(*attr_accessor_without_rich_types(*attrs))
 
       if type
         type = HoboFields.to_class(type)
@@ -141,11 +143,17 @@ module HoboFields
     # declarations.
     def self.declare_field(name, type, *args)
       options = args.extract_options!
-      try.field_added(name, type, args, options)
+      try(:field_added, name, type, args, options)
       add_formatting_for_field(name, type, args)
       add_validations_for_field(name, type, args)
       add_index_for_field(name, args, options)
-      declare_attr_type(name, type, options) unless HoboFields.plain_type?(type)
+      unless HoboFields.plain_type?(type)
+        declare_attr_type(name, type, options)
+        # Register the rich type with ActiveRecord itself, so reading and
+        # writing the attribute go through the Attributes API instead of the
+        # private methods this used to override.
+        attribute name, HoboFields::RichType.new(HoboFields.to_class(type))
+      end
       field_specs[name] = HoboFields::Model::FieldSpec.new(self, name, type, options)
       attr_order << name unless name.in?(attr_order)
     end

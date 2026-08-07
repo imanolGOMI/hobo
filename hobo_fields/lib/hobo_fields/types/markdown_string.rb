@@ -1,3 +1,4 @@
+require 'hobo_fields/types/raw_markdown_string'
 module HoboFields
   module Types
     class MarkdownString < RawMarkdownString

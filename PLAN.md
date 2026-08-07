@@ -137,7 +137,12 @@ router (pieza 12) tiene el mismo problema. Son dos piezas que necesitan lo mismo
 :383    metaclass.class_eval   → unknownify_attribute
 ```
 
-- `alias_method_chain` **no existe desde Rails 5.1**. Bloqueo desde el minuto uno.
+- `alias_method_chain` lo quitó Rails en 5.1, **pero `hobo_support` trae su
+  propia copia** en `fixes/module.rb`, así que los **48 sitios siguen
+  funcionando**. No es un bloqueo: es una técnica que Rails abandonó porque se
+  lleva mal con `prepend`, ensucia las trazas y se dobla mal al aplicarse dos
+  veces. Se sustituye por `Module#prepend` + `super` por calidad, no por
+  urgencia.
 - `_create_record` / `_update_record` son **privados** de ActiveRecord.
 - Reescribir las macros de asociación hace que *toda* declaración de *todo*
   modelo pase por Hobo.
@@ -406,8 +411,14 @@ más abajo. ~45 sitios más reescritos.
 
 | Aplazado | A la capa | Por qué |
 |---|---|---|
-| `hobo_fields/lib/hobo_fields/model.rb` | **2** | Lleva **3 `alias_method_chain`**, que Rails borró en 5.1: hay que reescribirlo entero de todas formas |
+| `hobo_fields/lib/hobo_fields/model.rb` | **2** | Lleva **3 `alias_method_chain`** que hay que pasar a `prepend`: se reescribe entero de todas formas |
 | `hobo/lib/hobo/model/accessible_associations.rb` | **4** | Igual, con **5 `alias_method_chain`** |
+
+> **Corrección (2026-08-07):** al principio se dio por hecho que esos
+> `alias_method_chain` estaban rotos porque Rails los borró en 5.1. **No lo
+> están:** `hobo_support/lib/hobo_support/fixes/module.rb` define su propia
+> versión, y los 48 sitios del repo funcionan. El motivo para cambiarlos es de
+> calidad, no de urgencia.
 | 6 generadores de Thor (`controller`, `subsite`, `plugin`, `taglib`, `invite_only`, `activation_email`) | **7** | El DSL de Thor (`argument`, `class_option`) se ejecuta a nivel de clase, así que en un `Concern` va dentro de `included do`. No es mecánico y no se puede verificar hasta que se toquen los generadores |
 | `hobo_support/lib/generators/hobo_support/{model,eval_template}.rb` | **7** | Lo mismo, son de Thor |
 | `hobo_support/lib/hobo_support/common_tasks.rb` | **2 y 4** | No es candidato a `Concern`: son tareas de Rake (`namespace :test do`) envueltas para incluirlas en un Rakefile. Solo lo usan los `Rakefile` viejos de `hobo` y `hobo_fields`, así que **muere con ellos** al portar sus pruebas |
