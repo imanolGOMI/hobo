@@ -24,22 +24,55 @@ module Rapid
     end
   end
 
-  class Tag
-    attr_reader :attributes, :all_attributes, :params, :this
+  # The output buffer, `this` and `scope` are *dynamic*, not per-tag state.
+  #
+  # This is the whole lesson of spike C. A param block is written inside one tag
+  # but executed while another is rendering, and Ruby closures capture `self`
+  # lexically -- so the block must keep the self of the tag that wrote it (that
+  # is who owns its params) while writing into the buffer, `this` and `scope` of
+  # whoever is rendering right now.
+  #
+  # DRYML's part_context.rb and scoped_variables exist for exactly this.
+  module Context
+    class << self
+      def state = (Thread.current[:rapid_state] ||= { :buffer => nil, :this => nil, :scope => Scope.new })
 
-    def initialize(attributes = {}, params = {}, this: nil, scope: Scope.new)
+      def buffer = state[:buffer]
+      def this   = state[:this]
+      def scope  = state[:scope]
+
+      def with(**changes)
+        previous = state.dup
+        state.merge!(changes)
+        yield
+      ensure
+        Thread.current[:rapid_state] = previous
+      end
+
+      def capture
+        with(:buffer => +"") do
+          yield
+          buffer
+        end
+      end
+    end
+  end
+
+  class Tag
+    attr_reader :attributes, :all_attributes, :params
+
+    def initialize(attributes = {}, params = {})
       @attributes = attributes
       @all_attributes = attributes.dup.freeze
       @params = params
-      @this = this
-      @scope = scope
       @old_stack = []
-      @out = +""
     end
 
+    def this  = Context.this
+    def scope = Context.scope
+
     def render
-      content
-      @out
+      Context.capture { content }
     end
 
     # --- extension points ----------------------------------------------------
@@ -51,12 +84,15 @@ module Rapid
       if override
         @old_stack.push(default)
         begin
-          instance_exec(&override)
+          # `call`, not `instance_exec`: the block keeps the self of the tag that
+          # wrote it, which is who owns the params it declares. Getting this
+          # wrong makes overrides vanish without a word.
+          override.call
         ensure
           @old_stack.pop
         end
       elsif default
-        instance_exec(&default)
+        default.call
       end
       nil
     end
@@ -64,7 +100,7 @@ module Rapid
     # <old-x/> -- emit what the param would have rendered.
     def old
       default = @old_stack.last
-      instance_exec(&default) if default
+      default&.call
       nil
     end
 
@@ -76,53 +112,43 @@ module Rapid
     # `param_name` may be nil (no extension point) or :none (explicitly not one).
     def tag(name, attrs = {}, param_name = nil, &body)
       emit = proc do
-        @out << "<#{name}#{format_attrs(attrs)}>"
-        instance_exec(&body) if body
-        @out << "</#{name}>"
+        Context.buffer << "<#{name}#{format_attrs(attrs)}>"
+        body&.call
+        Context.buffer << "</#{name}>"
       end
       if param_name && param_name != :none
         param(param_name) { emit.call }
       else
         emit.call
       end
+      nil
     end
 
-    def text(string) = (@out << CGI.escapeHTML(string.to_s); nil)
-    def raw(string)  = (@out << string.to_s; nil)
+    def text(string) = (Context.buffer << CGI.escapeHTML(string.to_s); nil)
+    def raw(string)  = (Context.buffer << string.to_s; nil)
 
     # --- calling other tags --------------------------------------------------
 
     # `as:` makes the call site itself an extension point -- DRYML's bare
     # `<search-filter param/>`. `merge_params:` forwards the caller's leftover
     # params down, which is `merge-params`.
-    def call_tag(name, attributes = {}, as: nil, merge_params: false, this: @this, **params, &block)
+    def call_tag(name, attributes = {}, as: nil, merge_params: false, this: Context.this, **params, &block)
       params = params.merge(:default => block) if block
       params = @params.merge(params) if merge_params
 
-      emit = proc do
-        raw Rapid.render(name, attributes, :this => this, :scope => @scope, **params)
-      end
+      emit = proc { raw Rapid.render(name, attributes, :this => this, **params) }
       as ? param(as) { emit.call } : emit.call
+      nil
     end
 
     # --- context -------------------------------------------------------------
 
-    def with_scope(vars)
-      previous = @scope
-      @scope = @scope.merge(vars)
-      yield
-    ensure
-      @scope = previous
+    def with_scope(vars, &block)
+      Context.with(:scope => Context.scope.merge(vars), &block)
     end
 
-    def scope = @scope
-
-    def with_this(record)
-      previous = @this
-      @this = record
-      yield
-    ensure
-      @this = previous
+    def with_this(record, &block)
+      Context.with(:this => record, &block)
     end
 
     # --- odds and ends the templates use -------------------------------------
@@ -171,6 +197,13 @@ module Rapid
 
     def attrs_for(name) = @attrs.fetch(name, [])
 
+    # A param block written outside any tag -- a page template, or a test.
+    # It becomes an anonymous tag that declares no params of its own.
+    def markup(&block)
+      outer = Tag.new({}, {})
+      proc { outer.instance_exec(&block) }
+    end
+
     # <extend tag="x"> -- prepend, so `super` is <old-x>.
     def extend_tag(name, &body)
       @tags.fetch(name).prepend(Module.new { define_method(:content, &body) })
@@ -180,9 +213,9 @@ module Rapid
       @polymorphic[name][type] = Class.new(Tag) { define_method(:content, &body) }
     end
 
-    def render(name, attributes = {}, this: nil, scope: Scope.new, **params)
+    def render(name, attributes = {}, this: Context.this, **params)
       klass = polymorphic_lookup(name, this) || @tags.fetch(name)
-      klass.new(attributes, params, :this => this, :scope => scope).render
+      Context.with(:this => this) { klass.new(attributes, params).render }
     end
 
     private

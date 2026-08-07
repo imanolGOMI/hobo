@@ -730,10 +730,15 @@ cualquier decisión sobre DRYML o sobre assets **los rompe a los ocho a la vez**
 El sustrato está **decidido** y el spike ya dijo lo que cuesta. Lo siguiente, en
 orden:
 
-1. **Reescribir `spike/dryml/runtime.rb` con la arquitectura correcta**: tags que
-   **devuelven cadenas** y `this`/`scope` en una **pila dinámica**. Con eso, el
-   override de `:title_heading` de `c_table_plus.rb` tiene que aplicarse — hoy se
-   pierde en silencio, y ese es el criterio de que está bien.
+1. ~~Reescribir el runtime con la arquitectura correcta.~~ **HECHO el 2026-08-07.**
+   `Rapid::Context` guarda **buffer, `this` y `scope` en una pila dinámica**
+   (thread-local), y `param` llama a los bloques con `call`, no con
+   `instance_exec`, para que conserven el `self` del tag que los escribió. Con
+   eso el override de `:title_heading` **ya se aplica**: sale
+   `<th class="shouty">TITLE!</th>` y la cabecera de al lado queda intacta.
+   Verificado ejecutando `ruby spike/dryml/c_table_plus.rb`.
+   Se añadió `Rapid.markup { }` para los bloques escritos fuera de un tag
+   (una plantilla de página, o una prueba): son un tag anónimo sin params propios.
 2. **Escribir la prueba de contrato**: por cada `param` declarado en un tag,
    existe una forma de sobreescribirlo y se nota. Es el seguro contra el fallo
    del primer intento.

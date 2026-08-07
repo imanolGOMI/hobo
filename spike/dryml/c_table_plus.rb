@@ -143,12 +143,12 @@ if __FILE__ == $PROGRAM_NAME
   puts Rapid.render(:table_plus,
                     { :fields => "title, status", :sort_field => "title", :sort_direction => "asc" },
                     :this => stories,
-                    :title_heading => proc { tag("th", { :class => "shouty" }) { text "TITLE!" } })
+                    :title_heading => Rapid.markup { tag("th", { :class => "shouty" }) { text "TITLE!" } })
 
   puts
   puts "--- asking whether the caller supplied :controls (all_parameters) ---"
   puts Rapid.render(:table_plus,
                     { :fields => "title" },
                     :this => stories,
-                    :controls => proc { text "" })
+                    :controls => Rapid.markup { text "" })
 end
