@@ -98,3 +98,42 @@ class ViewsTest < Minitest::Test
   end
 
 end
+
+# The rich types of layer 2 paint themselves: the catalogue does not carry a
+# view for each one.
+class RichTypeViewsTest < Minitest::Test
+
+  class Markdownish < String
+    def to_html(*) = "<p>#{self}</p>"
+  end
+
+  class Post
+    attr_accessor :body, :tasks
+    def self.attr_type(field) = { "body" => Markdownish, "tasks" => Array }[field.to_s]
+    def viewable_by?(_user, _field = nil) = true
+  end
+
+  def view_of(field, record, **attributes)
+    outer = Rapid::Tag.new
+    Rapid::Context.capture { outer.with_field(field, record) { outer.call_tag(:view, attributes) } }
+  end
+
+  def test_a_rich_type_paints_itself_through_to_html
+    post = Post.new
+    post.body = Markdownish.new("hola")
+
+    assert_includes view_of(:body, post), "<p>hola</p>"
+  end
+
+  def test_a_collection_paints_as_a_list_of_its_members
+    post = Post.new
+    post.tasks = %w[uno dos]
+
+    painted = view_of(:tasks, post)
+    assert_includes painted, "<ul"
+    assert_includes painted, "<li>"
+    assert_includes painted, "uno"
+    assert_includes painted, "dos"
+  end
+
+end

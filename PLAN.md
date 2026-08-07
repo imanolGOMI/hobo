@@ -1718,13 +1718,42 @@ de su envoltorio, la clase css lleva el modelo y el campo, un campo en blanco
 pinta su envoltorio igual, `if_blank` pone algo en su lugar, y un campo que no se
 puede ver **se niega** salvo `force`.
 
+### Los tipos ricos ya sabían pintarse solos
+
+No hace falta una vista por tipo rico. Un `Markdown`, un `Textile`, un
+`EnumString` o un `LifecycleState` **saben pintarse**: llevan `to_html` desde la
+capa 2. El catálogo no carga con ellos; **el tipo lo lleva puesto**, y eso es lo
+que significa «tipos ricos que viajan a la vista». El defecto de
+`<view-content>` es «si sabe darme html, se lo pido; si no, `to_s`».
+
+### El barrido de contrato, apuntado al catálogo
+
+`require "rapid/param_contract"` y una línea por tag. **Y encontró algo a la
+primera:** en `<collection-view>`, la vista de cada miembro se llamaba **sin
+exponerla**, así que un tema no tenía forma de decir cómo se pinta un miembro de
+una colección. Ahora hay cuatro puntos de extensión, y el barrido los recorre:
+
+```
+collection        element
+item              element
+member            call
+member > default  bare
+```
+
+> **Y de paso, un fallo en el entregable de la capa 3:**
+> `rapid/param_contract.rb` **no requería `rapid`**. Es el fichero que las gemas
+> de arriba tienen que poder requerir solas —es la razón de que viva en `lib/`—
+> y solo funcionaba si alguien había cargado el runtime antes. Es exactamente la
+> lección de la capa 4: una gema requiere lo que usa. Solo se vio al usarlo
+> desde otra gema, que es la primera vez que ha pasado.
+
 ### Por dónde va la capa 5
 
 1. ~~**El JS a Stimulus.**~~ **Hecho**, salvo `delete-button`, que se decide al
    portar el tag. De 1.045 líneas de jQuery quedan ~250 de Stimulus.
-2. **El catálogo de vistas por tipo** (pieza 9). Empezado: `<view>` y las vistas
-   de fecha, hora, número y booleano. Faltan los tipos ricos (markdown, textile,
-   html), las colecciones y el barrido de contrato de params.
+2. **El catálogo de vistas por tipo** (pieza 9). `<view>`, las vistas por tipo,
+   los tipos ricos, las colecciones y el barrido de contrato: **hecho**. Faltan
+   los `inputs` (30 tags), que son la otra mitad del catálogo.
 3. **El motor de derivación** (pieza 10): `cards.dryml.erb`, `pages.dryml.erb` y
    `forms.dryml.erb`, 534 líneas de ERB que generan un tag por modelo. Es *el*
    motivo de usar Hobo.

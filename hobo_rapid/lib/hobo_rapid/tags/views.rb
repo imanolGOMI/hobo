@@ -37,6 +37,11 @@ module HoboRapid
       # wires it through.
       def acting_user = nil
 
+      # A collection paints as a list of its members, not as itself.
+      def collection?
+        this.respond_to?(:each) && !this.is_a?(String) && !this.is_a?(Hash)
+      end
+
     end
 
   end
@@ -57,7 +62,13 @@ Rapid.define(:view, :attrs => [:if_blank, :inline, :block, :no_wrapper, :truncat
   # A blank value never reaches the type view -- there is nothing to paint and
   # `nil` does not answer to what a type view would ask of it. The wrapper is
   # still painted, so the page does not jump about when a value appears.
-  painted = this.nil? ? "" : capture { param(:default) { call_tag(:view_content) } }
+  painted = if this.nil?
+              ""
+            elsif collection?
+              capture { param(:default) { call_tag(:collection_view) } }
+            else
+              capture { param(:default) { call_tag(:view_content) } }
+            end
 
   painted = attributes[:if_blank].to_s if painted.blank? && attributes[:if_blank]
   painted = painted.to_s[0, attributes[:truncate].to_i] if attributes[:truncate]
@@ -72,9 +83,37 @@ Rapid.define(:view, :attrs => [:if_blank, :inline, :block, :no_wrapper, :truncat
 end
 
 # The paint itself, decided by the type.
-Rapid.define(:view_content) { text this.to_s }
+#
+# The default already covers the rich types, and that is the point of them: a
+# Markdown, a Textile, an EnumString or a LifecycleState **knows how to paint
+# itself**, through `to_html`. The catalogue does not need a view per rich type;
+# the type carries it, which is what "tipos ricos que viajan a la vista" means.
+Rapid.define(:view_content) do
+  if this.respond_to?(:to_html)
+    raw this.to_html
+  else
+    text this.to_s
+  end
+end
 
 Rapid.define_for(:view_content, Date)    { text this.strftime("%Y-%m-%d") }
 Rapid.define_for(:view_content, Time)    { text this.strftime("%Y-%m-%d %H:%M") }
 Rapid.define_for(:view_content, Numeric) { text this.to_s }
 Rapid.define_for(:view_content, Rapid::Boolean) { raw(this ? "&#10004;" : "&#10008;") }
+
+
+# A `has_many` paints as a list of the views of its members. Anything that
+# answers to `each` and is not a string counts.
+Rapid.define(:collection_view, :attrs => [:tag]) do
+  wrapper = attributes[:tag] || "ul"
+  tag(wrapper, { :class => "collection-view" }, :collection) do
+    Array(this).each do |member|
+      # Every one of these is an extension point on purpose: without them a
+      # theme could not say how a member is painted, and the param contract
+      # sweep of layer 3 is what caught that they were missing.
+      with_this(member) do
+        tag("li", {}, :item) { call_tag(:view, { :force => true }, :as => :member) }
+      end
+    end
+  end
+end

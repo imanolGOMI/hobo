@@ -14,6 +14,11 @@
 #
 # A param nobody can reach is a param that does not exist.
 
+# The gems above require this file on its own -- it is the whole point of it
+# living in lib/ -- so it says what it needs instead of hoping somebody loaded
+# the runtime first.
+require "rapid"
+
 module ParamContract
 
   # A mark no tag can produce by accident.
