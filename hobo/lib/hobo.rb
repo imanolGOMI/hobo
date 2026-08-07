@@ -1,6 +1,13 @@
 require 'hobo_support'
 require 'hobo_fields'
-require 'dryml'
+# The tag runtime of layer 3, not the old DRYML compiler. The compiler is still
+# in the dryml gem, but only as the front end of the template updater, and it
+# needs erubis, which has been dead since 2011.
+#
+# Seven call sites in the controller and generator layers still name Dryml
+# (Dryml.page, .get, .empty, .precompile, Dryml::DrymlGenerator). They belong to
+# layers 5 to 7 and will fail loudly when reached, which is what we want.
+require 'rapid'
 begin
   gem 'hobo_will_paginate'
 rescue Gem::LoadError => e
@@ -9,8 +16,12 @@ rescue Gem::LoadError => e
 end
 require 'hobo/extensions/enumerable'
 
-ActiveSupport::Dependencies.autoload_paths |= [File.dirname(__FILE__)]
-ActiveSupport::Dependencies.autoload_once_paths |= [File.dirname(__FILE__)]
+# Until Rails 7 this gem leaned on the classic autoloader for its *own*
+# internals: `ActiveSupport::Dependencies.autoload_paths` pointed at this
+# directory, and a reference to Hobo::Model loaded hobo/model.rb. That
+# autoloader is gone -- autoload_paths survives only as a list Zeitwerk reads --
+# so lib/ says out loud what it needs, which is what a gem should do anyway and
+# makes the load order of the patches visible.
 
 module Hobo
 
@@ -83,6 +94,7 @@ module Hobo
 
 end
 
+require 'hobo/model'
 require 'hobo/engine'
 
 

@@ -125,32 +125,13 @@ ActiveRecord::Associations::HasManyThroughAssociation.class_eval do
 
 end
 
-ActiveRecord::Associations::AssociationProxy.class_eval do
-
-  # Helper - the user acting on the owner (if there is one)
-  def acting_user
-    @owner.acting_user if @owner.is_a?(Hobo::Model)
-  end
-
-  def create(attrs = {})
-    if attrs.is_a?(Array)
-      attrs.collect { |attr| create(attr) }
-    else
-      create_record(attrs) do |record|
-        yield(record) if block_given?
-        user = acting_user if record.is_a?(Hobo::Model)
-        user ? record.user_save(user) : record.save
-      end
-    end
-  end
-
-  def create!(attrs = {})
-    create_record(attrs) do |record|
-      yield(record) if block_given?
-      user = acting_user if record.is_a?(Hobo::Model)
-      user ? record.user_save!(user) : record.save!
-    end
-  end
-
-end
+# ActiveRecord::Associations::AssociationProxy went away in Rails 4.0, twelve
+# years ago, so the block that used to be here -- wrapping `collection.create`
+# and `create!` so that `project.tasks.create(...)` went through `user_save` --
+# has not been able to load since. It is gone.
+#
+# The behaviour is not: the rewrite of piece 4 puts the permission check in
+# `before_create` / `before_update` on the model, which catches every path that
+# saves a record, association creates included. Until that lands, creating
+# through an association does not check permissions.
 

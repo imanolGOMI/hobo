@@ -5,15 +5,23 @@ GEMS_ROOT = File.expand_path('../')
 # adds its own gem here once its suite is green; see PLAN.md.
 PORTED_GEMS = %w[hobo_support hobo_fields dryml]
 
-# Gems still carrying the pre-2026 suites (rubydoctest / irt / cucumber), not
-# yet runnable on Ruby 3.4. Listed so the gap stays visible.
-PENDING_GEMS = %w[hobo]
+# Gems whose port is under way: they load on Ruby 3.4 and have a minitest suite
+# that runs, but the old suites (rubydoctest / irt) are still there and the
+# layer is not finished. Listed apart so "green" is not read as "done".
+PARTIAL_GEMS = %w[hobo]
+
+# Gems still carrying the pre-2026 suites in full, not yet runnable.
+PENDING_GEMS = %w[]
 
 desc "Run the test suite of every ported gem"
 task :test do |t|
-  failed = PORTED_GEMS.reject do |gem|
+  failed = (PORTED_GEMS + PARTIAL_GEMS).reject do |gem|
     puts "\n=== #{gem} ==="
     system("cd #{gem} && #{RUBY} -S rake test")
+  end
+
+  unless PARTIAL_GEMS.empty?
+    puts "\nPort a medias, con suites viejas sin portar: #{PARTIAL_GEMS.join(', ')}"
   end
 
   unless PENDING_GEMS.empty?

@@ -605,7 +605,7 @@ Estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho
 | `[x]` | **1** | `hobo_support`: quitar ~230 líneas de azúcar, codemod de 113 sitios, `classy_module` → `Concern` | 16 |
 | `[x]` | **2** | `hobo_fields`: `fields do`, tipos ricos, migraciones **+ batería que ejecute `up` y `down`** | 1, 2, 3 |
 | `[x]` | **3** | **El remix de DRYML**: runtime, contrato de params, params anidados, pseudo-params y dos tags grandes portados. Ya es la gema `dryml` | 8 |
-| `[ ]` | **4** | `hobo`: permisos, lifecycles, view hints, auto-actions, router | 4, 5, 7, 11, 12, 14 |
+| `[~]` | **4** | `hobo`: permisos, lifecycles, view hints, auto-actions, router | 4, 5, 6, 7, 11, 12, 14 |
 | `[ ]` | **5** | `hobo_rapid` + motor de derivación | 9, 10 |
 | `[ ]` | **6** | Separar `hobo_bootstrap` en tags estructurales (→ RAPID) y tema | 13a, 13b |
 | `[ ]` | **7** | `hobo new`, generadores, contrato de plugin | 17 |
@@ -1025,12 +1025,101 @@ de contrato; si no, se repite el primer intento.
 
 ---
 
-## Por dónde seguir: la capa 4
+## Capa 4 — el arranque (2026-08-07)
 
-`hobo`: permisos, lifecycles, view hints, auto-actions, router y subsites
-(piezas 4, 5, 7, 11, 12, 14). Es la capa más grande de las que quedan.
+**La gema `hobo` carga en Ruby 3.4 con Rails 8.1**, tiene banco de pruebas
+minitest y las primeras 3 pruebas en verde. Es el gate de todo lo demás: hasta
+ahora no arrancaba.
 
-Lo que ya se sabe antes de empezar, y está arriba en este fichero:
+En el `Rakefile` de la raíz aparece un estado nuevo, **`PARTIAL_GEMS`**: la suite
+corre y está verde, pero las suites viejas (`test/doctest` en rubydoctest,
+`test/irt`) siguen sin portar y la capa no está terminada. Que salga verde no
+quiere decir que esté hecha, y el corredor lo dice en voz alta.
+
+### El hallazgo estructural: la gema se autocargaba a sí misma
+
+`lib/hobo.rb` metía su propio `lib/` en
+`ActiveSupport::Dependencies.autoload_paths`, y una referencia a `Hobo::Model`
+cargaba `hobo/model.rb`. **Ese autocargador ya no existe**: en Rails 8
+`autoload_paths` sobrevive solo como la lista que lee Zeitwerk, y
+`load_missing_constant` no está.
+
+Se sustituye por **`require` explícitos**, que es lo que una gema debe hacer de
+todas formas —su `lib/` no es del autocargador de la aplicación— y que además
+**deja a la vista el orden de carga**, que aquí importa porque media gema son
+parches sobre ActiveRecord.
+
+### Tres trozos de código muerto, dos de ellos muertos hace más de una década
+
+| Qué | Desde cuándo | Qué se hizo |
+|---|---|---|
+| `extensions/active_record/associations/scope.rb` | El fichero **entero** está envuelto en `if false # DISABLED Getting Rails 3.1 working` | Fuera. La opción `:scope` de las asociaciones lleva **una década aceptándose y no haciendo nada** |
+| El bloque `AssociationProxy.class_eval` de `extensions/active_record/permissions.rb` | `AssociationProxy` desapareció en **Rails 4.0** | Fuera |
+| `require 'dryml'` en `lib/hobo.rb` | — | Ahora `require 'rapid'`. El compilador viejo pide `erubis`, muerta desde 2011 |
+
+> ⚠ **Consecuencia anotada:** el bloque de `AssociationProxy` era lo que hacía
+> que `project.tasks.create(...)` pasara por `user_save`. **Hasta que la pieza 4
+> ponga el permiso en `before_create`/`before_update`, crear a través de una
+> asociación no comprueba permisos.** El plan de la Deuda 2 ya dice que ese es el
+> sitio correcto, y desde ahí cubre *todos* los caminos, no solo este.
+>
+> Y en `integration_tests/agility_bootstrap/app/models/project.rb:27` hay un
+> `has_many :contributor_memberships, :scope => :contributor` que **no hace nada
+> desde Rails 3.1**. Cuando el banco tenga que arrancar, en la capa 5-6, se
+> escribe como Rails manda: `has_many :contributor_memberships, -> { contributor }`.
+
+### Pieza 6 hecha: fuera los scopes automáticos
+
+**429 líneas** (`model/scopes/automatic_scopes.rb`) más el `method_missing` y el
+`respond_to?` de `model.rb` que los conjuraban. El veredicto ya estaba tomado
+(se delega en Ransack); esto es ejecutarlo.
+
+Los consumidores reales, localizados, son **dos, y los dos en controladores**:
+
+| Dónde | Qué |
+|---|---|
+| `controller/model.rb:774` | `:query_scope => "#{attribute}_contains"`, el autocompletado |
+| `projects_controller.rb:18` del banco | `:order_by => parse_sort_param(...)`, la ordenación de `<table-plus>` |
+
+Los dos están en código que **esta misma capa** tiene que portar (pieza 11), y
+hasta entonces **lanzan `NoMethodError` a la cara**, que es lo que queremos.
+
+De paso: `respond_to?` estaba sobreescrito en vez de `respond_to_missing?`,
+que es el gancho correcto desde Ruby 1.9.
+
+### Cuatro API privadas de Rails 8 que ya no se dejan
+
+| Sitio | Qué pasaba |
+|---|---|
+| `model/scopes.rb` y `accessible_associations.rb` | `Builder::Association.valid_options << :x`. En Rails 8 `valid_options` es **privado y recibe las opciones**. En `accessible_associations` se resuelve con `prepend` + `super`, que es adonde va el fichero entero cuando la pieza 4 lo reescriba |
+| `Hobo::Model.all_models` | Escaneaba `#{Rails.root}/app/models/` sin guarda: fuera de una aplicación buscaba en `/app/models`. **La misma guarda que hubo que poner en el generador de migraciones en la capa 2** |
+| `Hobo::Model.register_model` | Guardaba `model.name` sin comprobar: con una clase anónima registraba `nil`. **Otra vez el mismo fallo de la capa 2** |
+| `test_helper` | `DescendantsTracker.clear` ahora recibe las clases |
+
+### Lo que queda de la capa 4
+
+Por orden, y con lo que ya se sabe:
+
+1. **Pieza 4, permisos** (`model/permissions.rb`, 449 líneas). Es la Deuda 2 y el
+   trabajo más grande. `alias_method_chain` → `prepend` + `super`, y los ganchos
+   privados `_create_record`/`_update_record` → `before_create`/`before_update`.
+   Lo único genuinamente difícil siguen siendo los permisos de **lectura por
+   campo**, porque Rails no tiene gancho de lectura.
+2. **`accessible_associations.rb`**, aplazado desde la capa 1, con sus **5**
+   `alias_method_chain` y su `classy_module`.
+3. **Piezas 5 y 7**, lifecycles y view hints, que son las más independientes.
+4. **Pieza 11, auto-actions** (`controller/model.rb`, 889 líneas), donde hay que
+   sustituir los dos scopes automáticos por Ransack.
+5. **Pieza 12, router**, con el agravante de la carga ansiosa por `descendants`.
+6. **Pieza 14, subsites**, que es transversal y va la última.
+
+Quedan **35 `alias_method_chain` en 15 ficheros** y **7 `classy_module`**, casi
+todos en generadores de Thor, que la capa 7 se lleva.
+
+## Lo que ya se sabía antes de empezar la capa 4
+
+Se conserva porque sigue valiendo, y porque el arranque ya confirmó dos de estos
+puntos: la carga ansiosa y el fichero aplazado de la capa 1.
 
 - **La Deuda 2 (permisos)** es casi toda autoinfligida: los `alias_method_chain`
   y las macros de asociación reescritas se sustituyen por ganchos públicos. Lo
@@ -1045,6 +1134,14 @@ Lo que ya se sabe antes de empezar, y está arriba en este fichero:
 Y la capa 3 deja dos cosas usables desde ella: `require "rapid/param_contract"`
 para cualquier tag que se escriba, y `dryml/test/tags/` como ejemplo de cómo se
 porta un tag grande.
+
+### Cómo correr lo de esta capa
+
+```sh
+cd hobo && rake test
+ruby -Ilib -I../hobo_support/lib -I../hobo_fields/lib -I../dryml/lib \
+     -e 'require "active_record"; require "hobo"'   # el gate de carga
+```
 
 ## Reglas de trabajo
 

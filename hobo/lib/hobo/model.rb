@@ -1,3 +1,12 @@
+require 'hobo/undefined'
+require 'hobo/model/permissions'
+require 'hobo/model/lifecycles'
+require 'hobo/model/find_for'
+require 'hobo/model/accessible_associations'
+require 'hobo/model/include_in_save'
+require 'hobo/model/scopes'
+require 'hobo/model/view_hints'
+
 module Hobo
   module Model
     require 'will_paginate/active_record'
@@ -43,13 +52,19 @@ module Hobo
 
     def self.register_model(model)
       @model_names ||= Set.new
-      @model_names << model.name
+      # An anonymous class has no name, and the register is by name: there would
+      # be no way to look it up again. Layer 2 hit the same thing in the
+      # migration generator.
+      @model_names << model.name if model.name
     end
 
 
     def self.all_models
       # Load every model in app/models...
-      unless @models_loaded
+      # Outside a Rails application there is nothing to scan, and asking for
+      # Rails.root gives nil -- which used to send this looking in "/app/models".
+      # The same guard layer 2 had to put on the migration generator.
+      if !@models_loaded && defined?(Rails) && Rails.respond_to?(:root) && Rails.root
         Dir.entries("#{Rails.root}/app/models/").each do |f|
           f =~ /^[a-zA-Z_][a-zA-Z0-9_]*\.rb$/ and f.sub(/.rb$/, '').camelize.constantize
         end
@@ -304,19 +319,16 @@ module Hobo
       end
 
 
-      def method_missing(name, *args, &block)
-        name = name.to_s
-        if create_automatic_scope(name)
-          send(name.to_sym, *args, &block)
-        else
-          super(name.to_sym, *args, &block)
-        end
-      end
-
-
-      def respond_to?(method, include_private=false)
-        super || create_automatic_scope(method, true)
-      end
+      # The automatic scopes used to be conjured here, by `method_missing`
+      # answering to names like `title_contains` or `order_by`. They are
+      # delegated to Ransack now (piece 6 of PLAN.md): 429 lines for two live
+      # callers, both of them in controllers.
+      #
+      #   controller/model.rb:774   :query_scope => "#{attribute}_contains"
+      #   the sorting of <table-plus>   :order_by => parse_sort_param(...)
+      #
+      # Both are in code this layer still has to port, and both will raise
+      # NoMethodError out loud until they do.
 
 
       def to_url_path

@@ -184,8 +184,17 @@ module Hobo
       singleton_class.alias_method_chain :belongs_to, :accessible
 
 
-      # Add :accessible to the valid options so AR doesn't complain
-      ::ActiveRecord::Associations::Builder::Association.valid_options << :accessible
+      # Tell AR that `:accessible` is a legitimate association option.
+      #
+      # It used to be `valid_options << :accessible`, a class-level array. In
+      # Rails 8 valid_options is a private method that takes the options hash,
+      # so the option is added by prepending to it -- which is also how the rest
+      # of this file will stop using alias_method_chain when piece 4 rewrites it.
+      ::ActiveRecord::Associations::Builder::Association.singleton_class.prepend(Module.new do
+        def valid_options(options)
+          super + [:accessible]
+        end
+      end)
 
     end
   end
