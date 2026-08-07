@@ -52,7 +52,9 @@ module ParamContract
       previous = Thread.current[:param_contract_log]
       Thread.current[:param_contract_log] = []
       yield
-      Thread.current[:param_contract_log].uniq(&:name)
+      # By address, not by name: the same name at two depths is two different
+      # extension points, and deduping by name loses the deeper one.
+      Thread.current[:param_contract_log].uniq(&:address)
     ensure
       Thread.current[:param_contract_log] = previous
     end

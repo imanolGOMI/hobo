@@ -445,6 +445,58 @@ El gancho pasó de `param` a `parameter_for`, que es lo único que comparten los
 `<table-plus>` llama a `<with-field-names>` **sin exponer la llamada**, así que
 a sus params no llega nadie. Es una decisión de `<table-plus>`, y está escrita.
 
+### El segundo tag grande: `<form>` (2026-08-07) — **portado**
+
+`spike/dryml/d_form.rb`, con su barrido en `test/form_contract_test.rb`.
+
+Se eligió porque **no se parece en nada a `<table-plus>`**. `<form>` son en
+realidad **dos tags**:
+
+- el **base** (`hobo_rapid/taglibs/forms/form.dryml`): polimórfico, diez líneas
+  de marcado, **ningún param**, y todo el trabajo en un helper de Ruby
+  (`form_helper`, `hobo_rapid_helper.rb:106`);
+- el **generado por modelo** (`hobo/lib/hobo/rapid/generators/rapid/forms.dryml.erb`),
+  que es donde viven los params: `error-messages`, `field-list`, `actions`,
+  `submit`, `cancel`.
+
+Así que ejercita lo que `<table-plus>` no tocaba: **despacho polimórfico por el
+modelo**, `merge` en una llamada, una llamada expuesta como `param="default"`, y
+**params que viven una y dos llamadas más abajo** del tag que el que llama
+nombra.
+
+El barrido encuentra **16 params, en tres tipos de sitio y hasta dos niveles de
+profundidad, y ninguna excepción**:
+
+```
+default                     call        field_list > title_field   element
+default > default           bare        field_list > title_label   element
+error_messages              call        field_list > title_view    bare
+field_list                  call        field_list > title_tag     call
+field_list > fieldset       element     actions / submit / cancel  …
+```
+
+**Se quedó fuera** lo que es Rails y no runtime de tags: enrutado, protección
+contra falsificación, i18n y los permisos de verdad del modelo. `<field-list>`
+va reducido: el de verdad es `<feckless-fieldset>`, y lo que importaba de él era
+que declara **un param por campo con nombre calculado**.
+
+### Los tres fallos que destapó el port
+
+1. **Un `<def tag="form" for="Story">` que llama a `<form>` se llamaba a sí
+   mismo**, hasta desbordar la pila. En DRYML esa llamada va a la **definición
+   base**, como un `super`. Arreglado con `from:`: un tag polimórfico **nunca
+   despacha a la clase que hace la llamada**. Es léxico —lo decide quién escribió
+   la llamada— y no dinámico.
+2. **Los elementos vacíos llevaban etiqueta de cierre**: salía
+   `<input …></input>`. Ahora `<input>`, `<br>`, `<img>` y compañía se emiten
+   solos, y **rellenar uno con contenido lanza un error** en vez de escribir
+   HTML inválido: para poner algo en su sitio hace falta `replace`.
+3. **El grabador del barrido deduplicaba por nombre, no por dirección.** Dos
+   params con el mismo nombre a distinta profundidad son **dos puntos de
+   extensión distintos**, y el de dentro se perdía. Con `<table-plus>` no se
+   notaba; con `<form>`, que tiene `default` y `default > default`, sí.
+   **La prueba de contrato tenía ella misma el fallo que persigue.**
+
 ### Lo que queda de la sintaxis de parámetros
 
 Sin hacer, y anotado para no confundirlo con lo que sí está:
@@ -875,11 +927,13 @@ orden:
 3. ~~Sintaxis de params anidados.~~ **HECHA el 2026-08-07.** Ver «Los params
    anidados» más arriba. Trajo consigo el modelo de parámetro completo:
    contenido, atributos, `replace` y params anidados.
-4. Portar un segundo tag grande —`<form>` (104 líneas) o `<field-list>`— para
-   confirmar antes de comprometerse con los 111. **Pasarle el barrido de
-   contrato**, que es gratis: `assert_every_param_overridable`.
-5. Sólo entonces, sacar el runtime del directorio `spike/` y convertirlo en la
-   gema. La prueba de contrato se muda con él sin cambios.
+4. ~~Portar un segundo tag grande.~~ **HECHO el 2026-08-07:** `<form>`, base y
+   generado, con su barrido. Ver «El segundo tag grande» más arriba. Destapó
+   tres fallos, uno de ellos en la propia prueba de contrato.
+5. Sacar el runtime del directorio `spike/` y convertirlo en la gema. La prueba
+   de contrato se muda con él sin cambios. Antes de eso conviene decidir qué se
+   hace con lo que queda de la sintaxis de parámetros (lista abajo): los
+   pseudo-params son los que más se usan en los temas.
 
 **No empezar por portar tags en masa.** Primero el runtime correcto y la prueba
 de contrato; si no, se repite el primer intento.

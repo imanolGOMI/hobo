@@ -8,6 +8,9 @@ require_relative "param_contract"
 # has to run against the real port, or it proves nothing.
 require_relative "../c_table_plus"
 
+# And the ported <form> of spike D, base tag and generated per-model tag.
+require_relative "../d_form"
+
 module RapidTest
 
   # A collection of records, standing in for an ActiveRecord relation.

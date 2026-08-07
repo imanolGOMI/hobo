@@ -199,7 +199,14 @@ module Rapid
         params = params.merge(:default => shadowing_default(parameter, params[:default])) if parameter.content?
       end
 
-      whole_call = proc { raw Rapid.render(name, attributes, :this => this, :path => path, **params) }
+      # `from:` is what makes `<form>` inside `<def tag="form" for="Story">`
+      # reach the base definition instead of calling itself: a polymorphic tag
+      # never dispatches back to the class doing the calling. It is DRYML's
+      # `super`, decided by who wrote the call and not by what is on the stack.
+      whole_call = proc do
+        raw Rapid.render(name, attributes,
+                         :this => this, :path => path, :from => self.class, **params)
+      end
       parameter&.replace? ? render_content(parameter, whole_call) : whole_call.call
       nil
     end
@@ -270,7 +277,11 @@ module Rapid
     # the tag was already supplying some, that is what `old` reaches.
     def shadowing_default(parameter, shadowed)
       return parameter.content unless shadowed
-      Parameter.new { render_content(parameter, Parameter.wrap(shadowed).content) }
+      # `merge_params` can hand a tag its own parameter back. Shadowing it with
+      # itself would make `old` call the override again, for ever.
+      shadowed = Parameter.wrap(shadowed)
+      return parameter.content if shadowed.content.equal?(parameter.content)
+      Parameter.new { render_content(parameter, shadowed.content) }
     end
 
     # DRYML merges the class attribute rather than overwriting it, which is how
@@ -282,7 +293,17 @@ module Rapid
       merged
     end
 
+    VOID_ELEMENTS = %w[area base br col embed hr img input link meta source track wbr].freeze
+
     def emit_element(name, attrs)
+      if VOID_ELEMENTS.include?(name.to_s)
+        body = block_given? ? Context.capture { yield } : ""
+        raise ArgumentError, "<#{name}> es un elemento vacio y no puede llevar contenido; " \
+                             "para poner algo en su sitio hace falta `replace`" unless body.empty?
+        Context.buffer << "<#{name}#{format_attrs(attrs)}>"
+        return nil
+      end
+
       Context.buffer << "<#{name}#{format_attrs(attrs)}>"
       yield if block_given?
       Context.buffer << "</#{name}>"
@@ -328,18 +349,19 @@ module Rapid
       @polymorphic[name][type] = Class.new(Tag) { define_method(:content, &body) }
     end
 
-    def render(name, attributes = {}, this: Context.this, path: [], **params)
-      klass = polymorphic_lookup(name, this) || @tags.fetch(name)
+    # :this, :path and :from are taken; a param cannot be called any of those.
+    def render(name, attributes = {}, this: Context.this, path: [], from: nil, **params)
+      klass = polymorphic_lookup(name, this, from) || @tags.fetch(name)
       Context.with(:this => this) { klass.new(attributes, params, :path => path).render }
     end
 
     private
 
-    def polymorphic_lookup(name, this)
+    def polymorphic_lookup(name, this, from)
       return nil unless @polymorphic.key?(name) && this
       this.class.ancestors.each do |ancestor|
         found = @polymorphic[name][ancestor]
-        return found if found
+        return found if found && !found.equal?(from)
       end
       nil
     end

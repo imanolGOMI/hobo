@@ -248,6 +248,41 @@ tipos de sitio. Enganchado a `param` se perdía dos de los tres.
 **Queda una sola excepción en `<table-plus>`**, y no es del runtime:
 `<table-plus>` llama a `<with-field-names>` sin exponer la llamada.
 
+---
+
+# Spike D — el segundo tag grande: `<form>`
+
+```sh
+ruby spike/dryml/d_form.rb
+```
+
+Elegido porque **no se parece en nada a `<table-plus>`**. `<form>` son dos tags:
+el **base** (polimórfico, diez líneas de marcado, **ningún param**, todo el
+trabajo en `form_helper`) y el **generado por modelo**, que es donde viven
+`error-messages`, `field-list`, `actions`, `submit` y `cancel`.
+
+El barrido encuentra **16 params, tres tipos de sitio, hasta dos niveles de
+profundidad, y ninguna excepción**.
+
+Fuera del port, por ser Rails y no runtime: enrutado, protección contra
+falsificación, i18n y los permisos de verdad. `<field-list>` va reducido —el de
+verdad es `<feckless-fieldset>`— conservando lo que importaba: **un param por
+campo con nombre calculado**.
+
+## Los tres fallos que destapó
+
+1. **Un `<def tag="form" for="Story">` que llama a `<form>` se llamaba a sí
+   mismo.** En DRYML esa llamada va a la base, como un `super`. Arreglado con
+   `from:`: un tag polimórfico nunca despacha a la clase que hace la llamada.
+2. **Los elementos vacíos llevaban cierre**: `<input …></input>`. Ahora se
+   emiten solos, y **rellenar uno lanza un error** en vez de escribir HTML
+   inválido: para eso está `replace`.
+3. **El grabador deduplicaba por nombre, no por dirección**, así que `default` y
+   `default > default` contaban como uno y el de dentro se perdía. **La prueba
+   de contrato tenía el fallo que persigue.**
+
+---
+
 ## Lo que falta de la sintaxis de parámetros
 
 Pseudo-params (`append-`, `prepend-`, `before-`, `after-`, `without-`), `<x:
