@@ -83,7 +83,7 @@ module HoboFields
           # a nil table_name for some strange reason.
           begin
             if model.table_exists?
-              col_comment = ActiveRecord::Base.try.column_comment(col_spec.name, model.table_name)
+              col_comment = ActiveRecord::Base.try(:column_comment, col_spec.name, model.table_name)
               col_comment != nil && col_comment != comment
             else
               false
@@ -96,7 +96,7 @@ module HoboFields
             check_attributes << :limit if sql_type.in?([:string, :text, :binary, :integer])
             check_attributes.any? do |k|
               if k==:default && sql_type==:datetime
-                col_spec.default.try.to_datetime != default.try.to_datetime
+                col_spec.default.try(:to_datetime) != default.try(:to_datetime)
               elsif k==:default && sql_type==:boolean
                 value_to_check = col_spec.default.to_s
                 if value_to_check == 'f'

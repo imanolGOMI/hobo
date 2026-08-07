@@ -7,7 +7,7 @@ An example of when this is useful is when a form is rendered differently dependi
        <do part="shipping">
          <field-list fields="address,city,region,country,postal_code">
            <country-view:><hot-input ajax /></country-view:>
-           <region-label:><%= this_parent.country._?.region_label %></region-label:>
+           <region-label:><%= this_parent.country&.region_label %></region-label:>
          </field-list>
        </do>
      </field-list:>

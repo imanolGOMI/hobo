@@ -62,7 +62,7 @@ module Hobo
     def hobo_ajax_response(options=nil)
       r = params[:render]
       if r
-        ajax_update_response(r.is_a?(String) ? [] : r.values, options._?.get(:results) || {}, options || params[:render_options] || {})
+        ajax_update_response(r.is_a?(String) ? [] : r.values, options&.get(:results) || {}, options || params[:render_options] || {})
         true
       else
         false

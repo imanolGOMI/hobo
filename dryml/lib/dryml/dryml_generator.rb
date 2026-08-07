@@ -57,7 +57,7 @@ require 'fileutils'
         # Ensure all view hints loaded before running
         subsites = [nil]
         if defined?(:Hobo)
-          Hobo::Model.all_models.*.view_hints
+          Hobo::Model.all_models.map(&:view_hints)
           subsites += [*Hobo.subsites]
         end
 
@@ -193,7 +193,7 @@ require 'fileutils'
         klass = args.first.is_a?(Class) ? args.shift : model
         extras = args
 
-        fields = klass.attr_order.*.to_s & (klass.table_exists? ? klass.content_columns.*.name : [])
+        fields = klass.attr_order.map(&:to_s) & (klass.table_exists? ? klass.content_columns.map(&:name) : [])
 
         fields -= %w{created_at updated_at created_on updated_on deleted_at} unless extras.include?(:include_timestamps)
 

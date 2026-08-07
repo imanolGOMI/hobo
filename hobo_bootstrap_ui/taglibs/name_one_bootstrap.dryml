@@ -63,7 +63,7 @@ All other attributes are passed through to the `<typeahead>` that provides the c
   begin
     source = polymorphic_url(complete_target, :action => "complete_#{completer}", :routing_type => :path)
   rescue NoMethodError => e
-    source = polymorphic_url(complete_target.class, :action => "complete_#{completer}", :routing_type => :path, :id => complete_target._?.id)
+    source = polymorphic_url(complete_target.class, :action => "complete_#{completer}", :routing_type => :path, :id => complete_target&.id)
   end
   value = name(:no_wrapper => true, :if_present => true)
 -%>

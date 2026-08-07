@@ -72,7 +72,7 @@ with :it locale and summary="choice" (key "tags.count.choice")
   label ||= case
             when this.is_a?(Class)
               this.model_name.human(:count=>c)
-            when (attr = this.try.origin_attribute)
+            when (attr = this.try(:origin_attribute))
               (this_parent || this.origin).class.human_attribute_name(attr, :count=>c)
             when this.member_class
               this.member_class.model_name.human(:count => c)

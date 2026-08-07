@@ -16,7 +16,7 @@
         if name.to_s =~ /\?$/
           has_key?(name.to_s[0..-2].to_sym)
         else
-          self[name]._?.call(default_content) || ""
+          self[name]&.call(default_content) || ""
         end
       end
 

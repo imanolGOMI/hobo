@@ -21,7 +21,7 @@ There is one difference:  accordion does not support the `href` option.
         <% attrs, params = param.call -%>
         <% merge_attrs = attrs - [:name] -%>
         <h3><a href="#"><%= attrs[:name] || param_name.to_s.titleize %></a></h3>
-        <div merge-attrs="&merge_attrs"><%= params[:default]._?.call %></div>
+        <div merge-attrs="&merge_attrs"><%= params[:default]&.call %></div>
       </div>
     <% } end.join("").html_safe -%>
   </div>

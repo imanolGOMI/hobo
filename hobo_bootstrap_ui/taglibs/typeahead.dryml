@@ -33,7 +33,7 @@ Other attributes:
   if !completer_path
     options['source'] ||= source_function || begin
                           complete_target = this_field_reflection.klass
-                          complete_target.find(:all, :limit => 5000).*.send(complete_target.name_attribute)
+                          complete_target.find(:all, :limit => 5000).map { |record| record.send(complete_target.name_attribute) }
                         end
   end
 

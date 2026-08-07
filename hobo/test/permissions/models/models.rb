@@ -105,7 +105,7 @@ module Models
       end
       belongs_to :recipe
       delegate :user, :to => :recipe
-      def create_permitted?;  user._?.paid_up? && user == acting_user end
+      def create_permitted?;  user&.paid_up? && user == acting_user end
       def update_permitted?;  user == acting_user end
       def destroy_permitted?; user == acting_user end
     end

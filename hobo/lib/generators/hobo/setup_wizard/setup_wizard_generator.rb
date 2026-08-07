@@ -244,7 +244,7 @@ EOI
       if wizard?
         say_title 'I18n'
         i18n_templates = File.expand_path('../../i18n/templates', __FILE__)
-        supported_locales = Dir.glob("#{i18n_templates}/hobo.*.yml").map do |l|
+        supported_locales = Dir.glob("#{i18n_templates}/hobo.map(&:yml)").map do |l|
           l =~ /([^\/.]+)\.yml$/
           $1
         end

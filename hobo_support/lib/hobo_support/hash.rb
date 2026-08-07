@@ -96,7 +96,7 @@ if defined? HashWithIndifferentAccess
     end
 
     def partition_hash(keys=nil)
-      keys = keys._?.map {|k| k.is_a?(Symbol) ? k.to_s : k }
+      keys = keys&.map {|k| k.is_a?(Symbol) ? k.to_s : k }
       yes = HashWithIndifferentAccess.new
       no = HashWithIndifferentAccess.new
       each do |k,v|

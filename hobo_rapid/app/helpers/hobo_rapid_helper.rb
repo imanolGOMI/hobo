@@ -49,9 +49,9 @@ module HoboRapidHelper
     # returns the number of items in the collection.  See LH #889
     def collection_count
       if this.respond_to?(:to_a)
-        this.try.count
+        this.try(:count)
       else
-        this.try.to_int || this.try.total_entries || (this.try.loaded? && this.try.length) || this.try.count || this.try.length
+        this.try(:to_int) || this.try(:total_entries) || (this.try(:loaded?) && this.try(:length)) || this.try(:count) || this.try(:length)
       end
     end
 
@@ -65,13 +65,13 @@ module HoboRapidHelper
     def non_through_collections(object=this)
       names = object.class.reflections.values.select do |refl|
         refl.macro == :has_many
-      end.*.name
+      end.map(&:name)
 
       names - through_collection_names
     end
 
     def standard_fields(model, include_timestamps=false)
-      fields = model.attr_order.*.to_s & model.content_columns.*.name
+      fields = model.attr_order.map(&:to_s) & model.content_columns.map(&:name)
       fields -= %w{created_at updated_at created_on updated_on deleted_at} unless include_timestamps
       fields.reject! { |f| model.never_show? f }
       fields
@@ -119,7 +119,7 @@ module HoboRapidHelper
       form_attrs[:enctype] = html_attrs[:enctype] if html_attrs[:enctype]
       form_attrs[:enctype] ||= "multipart/form-data" if attrs[:multipart]
 
-      new_record = self.this.try.new_record?
+      new_record = self.this.try(:new_record?)
 
       method = if attrs[:method].nil?
                  (attrs[:action] || attrs[:web_method] || new_record) ? "post" : "put"
@@ -219,12 +219,12 @@ module HoboRapidHelper
                       columns = standard_fields(klass, attrs[:include_timestamps])
 
                       if attrs[:skip_associations] == "has_many"
-                        assocs = this.class.reflections.values.reject {|r| r.macro == :has_many }.map &its.name.to_s
+                        assocs = this.class.reflections.values.reject {|r| r.macro == :has_many }.map { |r| r.name.to_s }
                         columns + assocs
                       elsif attrs[:skip_associations]
                         columns
                       else
-                        assocs = klass.reflections.values.map &its.name.to_s
+                        assocs = klass.reflections.values.map { |r| r.name.to_s }
                         columns + assocs
                       end
                     else

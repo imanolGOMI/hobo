@@ -3,7 +3,7 @@
 The message can be customized via the `empty-collection-message` parameter or by changing the `products.collection.empty_message` translation.
   -->
 <def tag="empty-collection-message">
-  <unless test="&!this.respond_to?('member_class') || this._?.member_class.nil? || this._?.member_class==NilClass">
+  <unless test="&!this.respond_to?('member_class') || this&.member_class.nil? || this&.member_class==NilClass">
     <div class="empty-collection-message" style="#{'display:none' if !this.empty?}" param="default">
       <ht key="#{this.member_class.name.underscore}.collection.empty_message">
         No <collection-name/> to display

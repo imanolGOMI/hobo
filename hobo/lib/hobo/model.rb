@@ -128,8 +128,8 @@ module Hobo
 
       def attrib_names
         names = []
-        names += table_exists? ? content_columns.*.name : field_specs.keys
-        names += public_instance_methods.*.to_s
+        names += table_exists? ? content_columns.map(&:name) : field_specs.keys
+        names += public_instance_methods.map(&:to_s)
       end
 
       def belongs_to_with_creator_metadata(name, *args, &block)
@@ -213,14 +213,14 @@ module Hobo
 
       def never_show(*fields)
         @hobo_never_show ||= []
-        @hobo_never_show.concat(fields.*.to_sym)
+        @hobo_never_show.concat(fields.map(&:to_sym))
       end
 
 
       def set_search_columns(*columns)
         class_eval %{
           def self.search_columns
-            %w{#{columns.*.to_s * ' '}}
+            %w{#{columns.map(&:to_s) * ' '}}
           end
         }
       end
@@ -253,7 +253,7 @@ module Hobo
 
 
       def search_columns
-        column_names = columns.*.name
+        column_names = columns.map(&:name)
         SEARCH_COLUMNS_GUESS.select{|c| c.in?(column_names) }
       end
 
@@ -388,7 +388,7 @@ module Hobo
       if !attr_type.is_a?(Class)
         # attr_type is an instance - typically AssociationReflection for a polymorphic association
         self.send("#{attr}=", user)
-      elsif self.class.attr_type(attr)._? <= String
+      elsif (declared_type = self.class.attr_type(attr)) && declared_type <= String
         # Set it to the name of the current user
         self.send("#{attr}=", user.to_s) unless user.guest?
       else

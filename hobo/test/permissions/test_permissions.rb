@@ -22,9 +22,9 @@ Models.init
 class PermissionsTest < Test::Unit::TestCase
 
   def assert_create_prevented(*models)
-    counts = models.*.count
+    counts = models.map(&:count)
     assert_raises(Hobo::PermissionDeniedError) { yield }
-    assert_equal(counts, models.*.count)
+    assert_equal(counts, models.map(&:count))
   end
 
   def assert_created(*args)

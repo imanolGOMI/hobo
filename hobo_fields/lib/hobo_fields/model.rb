@@ -35,7 +35,7 @@ module HoboFields
 
     def self.index(fields, options = {})
       # don't double-index fields
-      index_specs << HoboFields::Model::IndexSpec.new(self, fields, options) unless index_specs.*.fields.include?(Array.wrap(fields).*.to_s)
+      index_specs << HoboFields::Model::IndexSpec.new(self, fields, options) unless index_specs.map(&:fields).include?(Array.wrap(fields).map(&:to_s))
     end
 
     # tell the migration generator to ignore the named index. Useful for existing indexes, or for indexes
@@ -131,7 +131,7 @@ module HoboFields
     def self.declare_attr_type(name, type, options={})
       klass = HoboFields.to_class(type)
       attr_types[name] = HoboFields.to_class(type)
-      klass.try.declared(self, name, options)
+      klass.try(:declared, self, name, options)
     end
 
 
@@ -161,7 +161,7 @@ module HoboFields
       type_class = HoboFields.to_class(type)
       if type_class && type_class.public_method_defined?("validate")
         self.validate do |record|
-          v = record.send(name)._?.validate
+          v = record.send(name)&.validate
           record.errors.add(name, v) if v.is_a?(String)
         end
       end
@@ -172,7 +172,7 @@ module HoboFields
       type_class = HoboFields.to_class(type)
       if type_class && "format".in?(type_class.instance_methods)
         self.before_validation do |record|
-          record.send("#{name}=", record.send(name)._?.format)
+          record.send("#{name}=", record.send(name)&.format)
         end
       end
     end

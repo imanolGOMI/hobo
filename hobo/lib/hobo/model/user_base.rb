@@ -7,7 +7,7 @@ module Hobo
       @user_models = []
 
       def self.default_user_model
-        @user_models.first._?.constantize
+        @user_models.first&.constantize
       end
 
       AUTHENTICATION_FIELDS = [:salt, :crypted_password, :remember_token, :remember_token_expires_at]

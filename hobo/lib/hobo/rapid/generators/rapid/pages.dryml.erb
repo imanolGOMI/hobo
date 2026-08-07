@@ -107,19 +107,19 @@ model_key = model.to_s.underscore
 back_link      = model.view_hints.parent
 back_link_human_name = model.reflections[back_link.to_s] && model.reflections[back_link.to_s].klass unless back_link.blank?
 back_link_human_name = back_link_human_name && back_link_human_name.model_name.human
-boolean_fields = model.table_exists? ? (model.columns.select { |c| c.type == :boolean }.*.name - model.view_hints.inline_booleans) : []
+boolean_fields = model.table_exists? ? (model.columns.select { |c| c.type == :boolean }.map(&:name) - model.view_hints.inline_booleans) : []
 creator        = model.creator_attribute
 creator_link   = creator && model.reflections[creator.to_s] && linkable?(model.reflections[creator.to_s].klass, :show)
 edit_link      = linkable?(model, :edit)
 main_content   = model.primary_content_attribute
-show_fields    = standard_fields(:belongs_to).*.to_s - [model.name_attribute, main_content, creator, back_link, *boolean_fields].*.to_s
+show_fields    = standard_fields(:belongs_to).map(&:to_s) - [model.name_attribute, main_content, creator, back_link, *boolean_fields].map(&:to_s)
 
 is_user_model = model < Hobo::Model::UserBase
 
 collection     = model.view_hints.primary_children
 if collection
   collection_class = model.reflections[collection.to_s].klass
-  owner            = model.reverse_reflection(collection)._?.name
+  owner            = model.reverse_reflection(collection)&.name
   if owner
     add_link = collection && linkable?(collection_class, :"new_for_#{owner}")
     add_form = !add_link && linkable?(collection_class, :"create_for_#{owner}")

@@ -74,7 +74,7 @@ module Dryml
       # compile the build instructions
       @builder.build(local_names, auto_taglibs, mtime)
 
-      logger.try.info("  DRYML: Compiled #{template_path} in #{'%.2fs' % (Time.now - now)}") if parsed
+      logger.try(:info, "  DRYML: Compiled #{template_path} in #{'%.2fs' % (Time.now - now)}") if parsed
     end
 
 
@@ -227,7 +227,7 @@ module Dryml
     def declared_attributes(def_element)
       attrspec = def_element.attributes["attrs"]
       attr_names = attrspec ? attrspec.split(/\s*,\s*/).map{ |n| n.underscore.to_sym } : []
-      invalids = attr_names & ([:with, :field, :this] + SPECIAL_ATTRIBUTES.*.to_sym)
+      invalids = attr_names & ([:with, :field, :this] + SPECIAL_ATTRIBUTES.map(&:to_sym))
       dryml_exception("invalid attrs in def: #{invalids * ', '}", def_element) unless invalids.empty?
       attr_names
     end
@@ -467,7 +467,7 @@ module Dryml
 
       raise 'id should have been added elsewhere' if dom_id.nil?
 
-      part_src = "<% def #{part_name}_part(#{part_locals._?.gsub('@', '')}) #{tag_newlines(el)}; new_context do %>" +
+      part_src = "<% def #{part_name}_part(#{part_locals&.gsub('@', '')}) #{tag_newlines(el)}; new_context do %>" +
         content +
         "<% end; end %>"
       @builder.add_part(part_name, restore_erb_scriptlets(part_src), element_line_num(el))
@@ -666,7 +666,7 @@ module Dryml
                        elsif is_code_attribute?(merge_params)
                          merge_params[1..-1]
                        else
-                         merge_param_names = merge_params.split(/\s*,\s*/).*.gsub("-", "_").*.to_sym
+                         merge_param_names = merge_params.split(/\s*,\s*/).map { |name| name.gsub("-", "_").to_sym }
                          "all_parameters & #{merge_param_names.inspect}"
                        end
         "merge_parameter_hashes({#{param_items}}, (#{extra_params}) || {})"
@@ -843,7 +843,7 @@ module Dryml
       elsif is_code_attribute?(merge_attrs)
         "(#{merge_attrs[1..-1]})"
       else
-        merge_attr_names = merge_attrs.split(/\s*,\s*/).*.gsub("-", "_").*.to_sym
+        merge_attr_names = merge_attrs.split(/\s*,\s*/).map { |name| name.gsub("-", "_").to_sym }
         "(all_attributes & #{merge_attr_names.inspect})"
       end
     end

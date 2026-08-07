@@ -72,9 +72,9 @@ def underize(s)
 end
 %>
   <set empty="&this.empty?"/>
-  <% template ||= this.try.new_candidate || this.member_class.new -%>
+  <% template ||= this.try(:new_candidate) || this.member_class.new -%>
   <% minimum ||= 0 ; minimum = minimum.to_i -%>
-  <% skip ||= this.proxy_association.reflection.klass.reflect_on_all_associations.detect {|p| p.foreign_key==this.proxy_association.reflection.foreign_key}.try.name.to_s if this.respond_to? :proxy_association -%>
+  <% skip ||= this.proxy_association.reflection.klass.reflect_on_all_associations.detect {|p| p.foreign_key==this.proxy_association.reflection.foreign_key}.try(:name).to_s if this.respond_to? :proxy_association -%>
   <% skip += ",#{more_skip}" if more_skip -%>
   <% js_attrs = all_attributes.slice(:minimum, :add_hook, :remove_hook, :hide, :show) %>
   <% js_attrs[:prefix] = param_name_for_this %>

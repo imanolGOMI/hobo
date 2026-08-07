@@ -121,11 +121,11 @@ module Generators
         # Returns an array of model classes and an array of table names
         # that generation needs to take into account
         def models_and_tables
-          ignore_model_names = Migrator.ignore_models.*.to_s.*.underscore
+          ignore_model_names = Migrator.ignore_models.map { |model| model.to_s.underscore }
           all_models = table_model_classes
-          hobo_models = all_models.select { |m| m.try.include_in_migration && m.name.underscore.not_in?(ignore_model_names) }
+          hobo_models = all_models.select { |m| m.try(:include_in_migration) && m.name.underscore.not_in?(ignore_model_names) }
           non_hobo_models = all_models - hobo_models
-          db_tables = connection.tables - Migrator.ignore_tables.*.to_s - non_hobo_models.reject { |t| t.try.hobo_shim? }.*.table_name
+          db_tables = connection.tables - Migrator.ignore_tables.map(&:to_s) - non_hobo_models.reject { |t| t.try(:hobo_shim?) }.map(&:table_name)
           [hobo_models, db_tables]
         end
 
@@ -161,7 +161,7 @@ module Generators
         def extract_column_renames!(to_add, to_remove, table_name)
           if renames
             to_rename = {}
-            column_renames = renames._?[table_name.to_sym]
+            column_renames = renames[table_name.to_sym]
             if column_renames
               # A hash of table renames has been provided
 
@@ -291,8 +291,8 @@ module Generators
           key_missing = db_columns[model.primary_key].nil? && model.primary_key
           db_columns -= [model.primary_key]
 
-          model_column_names = model.field_specs.keys.*.to_s
-          db_column_names = db_columns.keys.*.to_s
+          model_column_names = model.field_specs.keys.map(&:to_s)
+          db_column_names = db_columns.keys.map(&:to_s)
 
           to_add = model_column_names - db_column_names
           to_add += [model.primary_key] if key_missing && model.primary_key
@@ -343,7 +343,7 @@ module Generators
               change_spec[:scale]     = spec.scale     unless spec.scale.nil?
               change_spec[:null]      = spec.null      unless spec.null && col.null
               change_spec[:default]   = spec.default   unless spec.default.nil? && col.default.nil?
-              change_spec[:comment]   = spec.comment   unless spec.comment.nil? && col.try.comment.nil?
+              change_spec[:comment]   = spec.comment   unless spec.comment.nil? && col.try(:comment).nil?
 
               changes << "change_column :#{new_table_name}, :#{c}, " +
                 ([":#{spec.sql_type}"] + format_options(change_spec, spec.sql_type, true)).join(", ")

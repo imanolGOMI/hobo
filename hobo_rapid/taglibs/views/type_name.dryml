@@ -14,7 +14,7 @@
 
 -->
 <def tag="type-name" attrs="plural, lowercase, dasherize"><%=
-  type ||= (this if this.is_a?(Class)) || this.try.member_class || this.class
+  type ||= (this if this.is_a?(Class)) || this.try(:member_class) || this.class
 
   name = type.respond_to?(:model_name) ? type.model_name.human : type.name
   name = dasherize ? name.underscore.dasherize : name.titleize

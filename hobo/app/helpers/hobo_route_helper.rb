@@ -21,14 +21,14 @@ module HoboRouteHelper
 
 
     def subsite
-      params[:controller]._?.match(/([^\/]+)\//)._?[1]
+      params[:controller]&.match(/([^\/]+)\//)&.[](1)
     end
 
     IMPLICIT_ACTIONS = [:index, :show, :create, :update, :destroy]
 
     def object_url_new(obj, *args)
       options = args.extract_options!
-      action = args.first._?.to_sym
+      action = args.first&.to_sym
       options, params = options.partition_hash([:subsite, :method, :format])
       options[:subsite] ||= self.subsite
 
@@ -39,7 +39,7 @@ module HoboRouteHelper
                  else if obj.is_a?(Class) || obj.respond_to?(:length)
                         :index
                       else
-                        if obj.try.new_record?
+                        if obj.try(:new_record?)
                           return nil
                         else
                           :show
@@ -153,7 +153,7 @@ module HoboRouteHelper
     end
 
     def current_page_url
-      request.fullpath.match(/^([^?]*)/)._?[1]
+      request.fullpath.match(/^([^?]*)/)&.[](1)
     end
 
     # Login url for a given user record or user class

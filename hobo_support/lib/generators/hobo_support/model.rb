@@ -31,7 +31,7 @@ module Generators
       end
 
       def max_attribute_length
-        attributes.*.name.*.length.max
+        attributes.map { |attribute| attribute.name.length }.max
       end
 
       def field_attributes
@@ -39,15 +39,15 @@ module Generators
       end
 
       def accessible_attributes
-        field_attributes.*.name + bts.map {|bt| "#{bt}_id"} + bts + hms
+        field_attributes.map(&:name) + bts.map {|bt| "#{bt}_id"} + bts + hms
       end
 
       def hms
-        attributes.select { |a| a.name == "hm" }.*.type
+        attributes.select { |a| a.name == "hm" }.map(&:type)
       end
 
       def bts
-        attributes.select { |a| a.name == "bt" }.*.type
+        attributes.select { |a| a.name == "bt" }.map(&:type)
       end
 
     end

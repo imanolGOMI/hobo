@@ -10,7 +10,7 @@ And the controller action:
 
     def index
       # always validate data given in URL's!!!
-      params[:state]=nil unless Order::Lifecycle.states.include?(params[:state]._?.to_sym)
+      params[:state]=nil unless Order::Lifecycle.states.include?(params[:state]&.to_sym)
       finder = params[:state] ? Order.send(params[:state]) : Order
       hobo_index finder
     end
@@ -99,7 +99,7 @@ or
      %>
   <form action="&request.path" method="get" class="filter-menu" merge-attrs="&attributes"  data-rapid="&data_rapid('filter-menu')" with="&nil">
     <div>
-      <% opt = options.first.kind_of?(Array) ? options.*.last : options
+      <% opt = options.first.kind_of?(Array) ? options.map(&:last) : options
          selected = opt.detect {|o| o.to_s==params[param_name.gsub('-', '_')] }  %>
       <select-menu name="&param_name" options="&options" selected="&selected"
                    first-option="&no_filter" first-value="&first_value" key="&param_name" merge-params/>

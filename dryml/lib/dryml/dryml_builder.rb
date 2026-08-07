@@ -113,7 +113,7 @@ module Dryml
 
       auto_taglibs.each { |t| import_taglib(t) }
 
-      @build_instructions._?.each do |instruction|
+      @build_instructions&.each do |instruction|
         name = instruction[:name]
         case instruction[:type]
         when :eval

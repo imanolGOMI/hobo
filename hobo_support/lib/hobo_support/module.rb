@@ -10,7 +10,7 @@ class Module
   # like alias_method_chain on the class.
   def included_in_class_callbacks(base)
     if base.is_a?(Class)
-      included_modules.each { |m| m.try.included_in_class(base) }
+      included_modules.each { |m| m.try(:included_in_class, base) }
     end
   end
 
@@ -68,12 +68,6 @@ class Module
                      end
                    end)
       set_field_type(n => TrueClass) if respond_to?(:set_field_type)
-    end
-  end
-
-  def alias_class_method_chain(method, feature)
-    meta_eval do
-      alias_method_chain method, feature
     end
   end
 

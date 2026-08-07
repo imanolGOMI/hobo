@@ -277,7 +277,7 @@ module Hobo
           when name == "recent"
             return true if check_only
 
-            if "created_at".in?(@klass.columns.*.name)
+            if "created_at".in?(@klass.columns.map(&:name))
               def_scope do |*args|
                 count = args.first || 6
                 @klass.order("#{@klass.table_name}.created_at DESC").limit(count)
@@ -305,7 +305,7 @@ module Hobo
               else
                 colspec = "#{klass.table_name}.#{field}"
               end
-              @klass.includes(include).order("#{colspec} #{asc._?.upcase}")
+              @klass.includes(include).order("#{colspec} #{asc&.upcase}")
             end
 
           when name == "include"

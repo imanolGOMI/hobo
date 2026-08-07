@@ -21,8 +21,8 @@ The jQuery UI option `update` is used internally to update the order.   If you m
 
   data_rapid_options = { :options => options, :events => events }
 %>
-  <% template ||= this.try.new_candidate || this.member_class.new %>
-  <% position_column ||= template.try.position_column -%>
+  <% template ||= this.try(:new_candidate) || this.member_class.new %>
+  <% position_column ||= template.try(:position_column) -%>
   <input-many merge class="sortable-input-many" template="&template" more-skip="&position_column" data-rapid="&data_rapid('sortable-input-many', data_rapid_options)">
     <default: replace>
         <div class="ordering-handle" param="handle" if="&can_edit?">&uarr;<br/>&darr;</div>

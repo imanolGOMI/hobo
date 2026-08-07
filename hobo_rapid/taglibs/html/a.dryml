@@ -158,12 +158,12 @@ The standard AJAX attributes are supported.
 
       content = name if content.blank?
 
-      href = object_url(target, action, params) unless (action.nil? && target.try.new_record?)
+      href = object_url(target, action, params) unless (action.nil? && target.try(:new_record?))
       if href.nil?
         # This target is registered with Hobo::Routes as not linkable
         content
       else
-        css_class = target.try.origin_attribute || target.class.name.underscore.dasherize
+        css_class = target.try(:origin_attribute) || target.class.name.underscore.dasherize
         add_classes!(attributes, "#{css_class}-link")
 
         href.sub!(/\?|$/, ".#{format}\\0") unless format.blank?

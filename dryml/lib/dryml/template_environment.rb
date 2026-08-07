@@ -103,7 +103,7 @@ module Dryml
 
 
     def this_field_reflection
-      this.try.proxy_association._?.reflection ||
+      this.try(:proxy_association)&.reflection ||
         (this_parent && this_field && this_parent.class.respond_to?(:reflections) && this_parent.class.reflections[this_field.to_s])
     end
 
@@ -175,7 +175,7 @@ module Dryml
           object = this
         end
       end
-      id = if (!object.is_a?(ActiveRecord::Relation) && typed_id = object.try.typed_id)
+      id = if (!object.is_a?(ActiveRecord::Relation) && typed_id = object.try(:typed_id))
           typed_id
         else
           "this"
@@ -432,7 +432,7 @@ module Dryml
     def call_tag_parameter_with_default_content(the_tag, attributes, default_content, overriding_content_proc)
       if the_tag.is_one_of?(String, Symbol) && the_tag.to_s.in?(Dryml.static_tags)
         body = if overriding_content_proc
-                 new_context { overriding_content_proc.call(proc { default_content._?.call(nil) }) }
+                 new_context { overriding_content_proc.call(proc { default_content&.call(nil) }) }
                elsif default_content
                  new_context { default_content.call(nil) }
                else
@@ -441,9 +441,9 @@ module Dryml
         element(the_tag, attributes, body)
       else
         d = if overriding_content_proc
-              proc { |default| overriding_content_proc.call(proc { default_content._?.call(default) }) }
+              proc { |default| overriding_content_proc.call(proc { default_content&.call(default) }) }
             else
-              proc { |default| default_content._?.call(default) }
+              proc { |default| default_content&.call(default) }
             end
         send(the_tag, attributes, { :default => d })
       end
@@ -490,7 +490,7 @@ module Dryml
         replacing_proc.call(tag_restore)
 
       else
-        overriding_attributes, overriding_parameters = overriding_proc._?.call
+        overriding_attributes, overriding_parameters = overriding_proc&.call
         override_and_call_tag(the_tag, attributes, parameters, overriding_attributes, overriding_parameters)
       end
     end

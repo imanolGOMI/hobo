@@ -56,7 +56,7 @@ Usage of Ruby 1.8 will result in an undefined tab order.   Ruby 1.9 is recommend
       <% attrs, params = param.call -%>
       <% merge_attrs = attrs - [:id, :href, :name] -%>
       <div id="#{attrs[:id] || param_name}" merge-attrs="&merge_attrs">
-        <%= params[:default]._?.call(nil) %>
+        <%= params[:default]&.call(nil) %>
       </div>
     <% } %>
     <% end.join("").html_safe %>

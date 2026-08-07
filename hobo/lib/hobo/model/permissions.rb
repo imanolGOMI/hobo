@@ -27,7 +27,7 @@ module Hobo
         # what it's new name is
         method_name = method_name.to_sym
         method = klass.instance_method method_name
-        methods = (klass.private_instance_methods + klass.instance_methods).*.to_sym
+        methods = (klass.private_instance_methods + klass.instance_methods).map(&:to_sym)
         new_name = methods.select {|m| klass.instance_method(m) == method }.find { |m| m != method_name }
       end
 
@@ -46,7 +46,7 @@ module Hobo
             r.set_creator user
             yield r if block_given?
             r.user_view(user)
-            r.with_acting_user(user) { r.try.after_user_new }
+            r.with_acting_user(user) { r.try(:after_user_new) }
           end
         end
 

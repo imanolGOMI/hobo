@@ -6,7 +6,7 @@
  - all other attributes are passed on to `<form>`.   You will probably need to set the action attribute:  `action="&user_login_path"`.
  -->
 <def tag="login-form" attrs="user-model">
-  <% user_model ||= self.try.model -%>
+  <% user_model ||= self.try(:model) -%>
   <form action="&request.fullpath" class="login" merge>
   
     <div param="field-list">

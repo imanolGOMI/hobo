@@ -58,15 +58,15 @@ module Hobo
         end
 
         def self.publishable_creators
-          creators.values.where.publishable?
+          creators.values.select(&:publishable?)
         end
 
         def self.publishable_transitions
-          transitions.where.publishable?
+          transitions.select(&:publishable?)
         end
 
         def self.step_names
-          (creators.keys | transitions.*.name).uniq
+          (creators.keys | transitions.map(&:name)).uniq
         end
 
 

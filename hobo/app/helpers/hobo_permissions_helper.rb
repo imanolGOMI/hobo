@@ -5,7 +5,7 @@ module HoboPermissionsHelper
     def current_user
       # simple one-hit-per-request cache
       @current_user ||= begin
-                          id = session._?[:user]
+                          id = session&.[](:user)
                           (id && Hobo::Model.find_by_typed_id(id) rescue nil) || ::Guest.new
                         end
     end
@@ -19,7 +19,7 @@ module HoboPermissionsHelper
     def can_create?(object=this)
       if object.is_a?(Class) and object < ActiveRecord::Base
         object = object.new
-      elsif (refl = object.try.proxy_association._?.reflection) && refl.macro == :has_many
+      elsif (refl = object.try(:proxy_association)&.reflection) && refl.macro == :has_many
         if Hobo.simple_has_many_association?(object)
           new_object = object.build
           new_object.set_creator(current_user)
@@ -58,7 +58,7 @@ module HoboPermissionsHelper
                         [this, args.first]
                       end
 
-      if !field && (origin = object.try.origin)
+      if !field && (origin = object.try(:origin))
         object, field = origin, object.origin_attribute
       end
 
@@ -112,7 +112,7 @@ module HoboPermissionsHelper
           _, _, object = Dryml.get_field_path(object, path[0..-2])
           field = path.last
         end
-      elsif (origin = object.try.origin)
+      elsif (origin = object.try(:origin))
         object, field = origin, object.origin_attribute
       end
 

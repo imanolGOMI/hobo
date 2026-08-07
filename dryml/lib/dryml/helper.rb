@@ -54,7 +54,7 @@ module Dryml::Helper
 
     def first_item?
       if scope.repeat_collection.respond_to? :each_pair
-        this == scope.repeat_collection.first.try.last
+        this == scope.repeat_collection.first.try(:last)
       else
         this == scope.repeat_collection.first
       end
@@ -63,7 +63,7 @@ module Dryml::Helper
 
     def last_item?
       if !scope.repeat_collection.respond_to?(:to_a) && scope.repeat_collection.respond_to?(:each_pair)
-        this == scope.repeat_collection.last.try.last
+        this == scope.repeat_collection.last.try(:last)
       else
         this == scope.repeat_collection.last
       end

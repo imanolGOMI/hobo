@@ -15,7 +15,7 @@ module Hobo
 
       def validate_included_in_save
         if included_in_save
-          included_in_save._?.each_pair do |association, records|
+          included_in_save&.each_pair do |association, records|
             next if self.class.reflections[association.to_s].options[:validate]==false
             added = false
             records.each do |record|
@@ -47,7 +47,7 @@ module Hobo
       end
 
       def clear_included_in_save
-        included_in_save._?.clear
+        included_in_save&.clear
       end
 
     end

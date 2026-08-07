@@ -31,9 +31,9 @@ module Hobo
               @inline_booleans ||= []
             else
               @inline_booleans = if @inline_booleans_args.first == true
-                                   model.columns.select { |c| c.type == :boolean }.*.name
+                                   model.columns.select { |c| c.type == :boolean }.map(&:name)
                                  else
-                                   @inline_booleans_args.*.to_s
+                                   @inline_booleans_args.map(&:to_s)
                                  end
               @inline_booleans_args = nil
               @inline_booleans
@@ -74,7 +74,7 @@ module Hobo
             @sortable ||= defined?(ActiveRecord::Acts::List::InstanceMethods) &&
                           model < ActiveRecord::Acts::List::InstanceMethods &&
                           model.table_exists? &&
-                          model.new.try.scope_condition == "1 = 1"
+                          model.new.try(:scope_condition) == "1 = 1"
           else
             @sortable = arg
           end

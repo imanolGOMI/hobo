@@ -33,50 +33,6 @@ module Enumerable
     self[1..-1] || []
   end
 
-  class MultiSender
-
-    undef_method(*(instance_methods.map{|m| m.to_s} - %w*__id__ __send__ object_id*))
-
-    def initialize(enumerable, method)
-      @enumerable = enumerable
-      @method     = method
-    end
-
-    def method_missing(name, *args, &block)
-      @enumerable.send(@method) { |x| x.send(name, *args, &block) }
-    end
-
-  end
-
-  def *()
-    MultiSender.new(self, :map)
-  end
-
-  def where
-    MultiSender.new(self, :select)
-  end
-
-  def where_not
-    MultiSender.new(self, :reject)
-  end
-
-  unless method_defined?(:drop_while)
-    def drop_while
-      drop = 0
-      drop += 1 while yield(self[drop])
-      self[drop..-1]
-    end
-  end
-
-
-  unless method_defined?(:take_while)
-    def take_while
-      take = 0
-      take += 1 while yield(self[take])
-      self[0..take-1]
-    end
-  end
-
 end
 
 

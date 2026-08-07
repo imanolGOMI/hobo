@@ -322,7 +322,7 @@ module Hobo
         # would be routed to POST /users/signup)
         if model.has_lifecycle?
           (model::Lifecycle.publishable_creators.map { |c| [c.name, "do_#{c.name}"] } +
-           model::Lifecycle.publishable_transitions.map { |t| [t.name, "do_#{t.name}"] }).flatten.*.to_sym
+           model::Lifecycle.publishable_transitions.map { |t| [t.name, "do_#{t.name}"] }).flatten.map(&:to_sym)
         else
           []
         end
@@ -335,7 +335,7 @@ module Hobo
 
 
     def parse_sort_param(*args)
-      _, desc, field = *params[:sort]._?.match(/^(-)?([a-z0-9_]+(?:\.[a-z0-9_]+)?)$/)
+      _, desc, field = *params[:sort]&.match(/^(-)?([a-z0-9_]+(?:\.[a-z0-9_]+)?)$/)
 
       if field
         hash = args.extract_options!
@@ -452,7 +452,7 @@ module Hobo
       do_pagination = options.delete(:paginate) && finder.respond_to?(:paginate)
       finder = Array.wrap(options.delete(:scope)).inject(finder) { |a, v| a.send(*Array.wrap(v).flatten) }
 
-      options[:order] = finder.default_order unless options[:order] || finder.try.order_values.present?
+      options[:order] = finder.default_order unless options[:order] || finder.try(:order_values).present?
 
       if do_pagination
         options.reverse_merge!(:page => params[:page] || 1)
@@ -584,7 +584,7 @@ module Hobo
 
 
     def subtype_for_create
-      model.has_inheritance_column? && (t = params['type']) && t.in?(model.send(:descendants).*.name) and
+      model.has_inheritance_column? && (t = params['type']) && t.in?(model.send(:descendants).map(&:name)) and
         t
     end
 
@@ -773,7 +773,7 @@ module Hobo
     def hobo_completions(attribute, finder, options={})
       options = options.reverse_merge(:limit => 10, :query_scope => "#{attribute}_contains")
       options[:param] ||= [:term, :q, :query].find{|k| !params[k].nil?}
-      finder = finder.limit(options[:limit]) unless finder.try.limit_value
+      finder = finder.limit(options[:limit]) unless finder.try(:limit_value)
 
       begin
         finder = finder.send(options[:query_scope], params[options[:param]])
@@ -845,7 +845,7 @@ module Hobo
 
     def this=(object)
       ivar = if object.is_a?(Array) || object.respond_to?(:member_class)
-               (object.try.member_class || model).name.demodulize.underscore.pluralize
+               (object.try(:member_class) || model).name.demodulize.underscore.pluralize
              else
                object.class.name.demodulize.underscore
              end

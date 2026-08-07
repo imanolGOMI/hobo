@@ -3,7 +3,7 @@
 <def tag="dev-user-changer">
   <set user="&Hobo::Model::UserBase.default_user_model"/>
   <select-menu if="&user && Rails.env.development?"
-               first-option="#{t('hobo.dev_user_changer.guest', {:default=>'Guest'})}" options="&user.first(30).*.login"
+               first-option="#{t('hobo.dev_user_changer.guest', {:default=>'Guest'})}" options="&user.first(30).map(&:login)"
                onchange="location.href = '#{dev_support_path :action=>:set_current_user}?login=' + encodeURIComponent(this.options[this.selectedIndex].value)"
                selected="#{current_user.login}"
                class="dev-user-changer"

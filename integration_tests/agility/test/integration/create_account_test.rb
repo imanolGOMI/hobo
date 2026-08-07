@@ -34,7 +34,7 @@ class CreateAccountTest < ActionDispatch::IntegrationTest
 
   teardown do
     DatabaseCleaner.clean
-    User.all.*.destroy  # the cleaner should do this, but....
+    User.all.each(&:destroy)  # the cleaner should do this, but....
   end
 
   test "create account" do

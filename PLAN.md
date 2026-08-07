@@ -54,6 +54,13 @@ Fecha: 2026-08-07. No volver a discutirlas salvo que aparezca información nueva
     siendo gemas aparte (pieza 17), pero dependerán de una sola.
     Las capas del plan siguen valiendo como **unidades de trabajo**; lo que
     cambia es que el resultado se empaqueta junto.
+12. **La fusión se hace al final, en la capa 7.** Hasta entonces se conservan las
+    fronteras actuales para que el diff de cada capa sea legible. El precio
+    aceptado: el andamiaje (gemspec, Gemfile, Rakefile, `test_helper`) se repite
+    en cada gema y luego se tira.
+13. **El tema por defecto va dentro de la gema única.** Una app recién creada
+    tiene que verse bien sin instalar nada más. Los temas *alternativos* siguen
+    siendo plugins aparte.
 
 ## Reglas absolutas sobre `git push`
 

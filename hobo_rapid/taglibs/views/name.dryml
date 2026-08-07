@@ -21,7 +21,7 @@
       count
     elsif this.is_a?(Class)
       type_name(attributes)
-    elsif (name_attr = this.class.try.name_attribute) && can_view?(this, name_attr)
+    elsif (name_attr = this.class.try(:name_attribute)) && can_view?(this, name_attr)
       view(merge_attrs(attributes, {:field => name_attr}))
     elsif can_view?(this)
       h this.to_s

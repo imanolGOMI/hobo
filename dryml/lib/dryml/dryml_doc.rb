@@ -122,7 +122,7 @@ require 'rexml/xpath'
 
         # An array of the arrtibute names defined by this tag
         def attributes
-          (node.attributes['attrs'] || "").split(/\s*,\s*/).where_not.blank?
+          (node.attributes['attrs'] || "").split(/\s*,\s*/).reject(&:blank?)
         end
 
 
@@ -162,13 +162,13 @@ require 'rexml/xpath'
         # The name of the tag, if any, that this definition merges its parameters into
         # That is, the tag with 'merge' or 'merge-params' declared
         def merge_params
-          REXML::XPath.first(node, ".//*[@merge|@merge-params]")._?.name
+          REXML::XPath.first(node, ".//*[@merge|@merge-params]")&.name
         end
 
         # The name of the tag, if any, that this definition merges its attributes into
         # That is, the tag with 'merge' or 'merge-attrs' declared
         def merge_attrs
-          REXML::XPath.first(node, ".//*[@merge|@merge-attrs]")._?.name
+          REXML::XPath.first(node, ".//*[@merge|@merge-attrs]")&.name
         end
 
       end

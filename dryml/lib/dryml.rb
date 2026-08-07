@@ -190,7 +190,7 @@ module Dryml
     view ||= ActionView::Base.new(ActionController::Base.view_paths, {})
     this = locals.delete(:this) || nil
 
-    renderer_class = Dryml::Template.build_cache[template_path]._?.environment ||
+    renderer_class = Dryml::Template.build_cache[template_path]&.environment ||
       make_renderer_class(template_src, template_path, locals.keys, included_taglibs, imports)
     renderer_class.new(view).render_page(this, locals)
   end
@@ -199,7 +199,7 @@ private
 
   def taglibs_for(controller_path)
     ( subsite_taglibs(controller_path) +
-      ((controller_path.camelize+"Controller").constantize.try.included_taglibs||[])
+      ((controller_path.camelize+"Controller").constantize.try(:included_taglibs)||[])
     ).compact
   end
 
