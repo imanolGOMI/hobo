@@ -216,17 +216,26 @@ end
   tipo rico que hace que la vista pinte `<input type="email">`) — **no está en el
   esquema** y no se puede derivar de él. Es lo que Rails no tiene.
 
-**Dónde está la fricción de verdad** (que es mecánica, no filosófica): si alguien
-escribe a mano una migración que añade una columna que el modelo no declara, el
-siguiente `hobo:migration` propondrá **quitarla**.
+**La máxima de Hobo, dicha por Imanol (2026-08-07):** *los campos se escriben en
+el modelo, y nadie escribe la migración por detrás.*
 
-La solución es cerrar el círculo: además de `fields do → migración`, hace falta
-**`esquema → fields do`**. El primer intento ya lo tenía escrito
-(`declarations_from_schema.rb`, en el tag `intento-1-update`) y **conviene
-rescatarlo**. Con las dos direcciones, ninguna parte es «la verdad»: son dos
-vistas de lo mismo, igual que el `schema.rb` de Rails. Y da una invariante
-preciosa y comprobable con la batería: **`fields do → migración → esquema →
-fields do` tiene que ser un punto fijo.**
+Que al quitar un campo del modelo el siguiente `hobo:migration` genere el `drop`
+**no es un fallo ni una deriva: es la forma de borrar campos en Hobo.** Quitas la
+línea, generas, y ahí están los `remove_column`. Escribir una migración a mano a
+espaldas del modelo es usar la herramienta al revés, no un hueco del diseño.
+
+**Para qué sirve entonces el generador inverso `esquema → fields do`:** no para
+reparar nada, sino como **punto de comparación**. El esquema y el modelo tienen
+que decir lo mismo; poder derivar uno del otro permite **comprobarlo**. Si
+difieren y no hay migración pendiente, algo va mal y se puede detectar en vez de
+descubrirlo en producción.
+
+Da además una invariante comprobable con la batería: **`fields do → migración →
+esquema → fields do` tiene que ser un punto fijo.**
+
+El primer intento ya lo tenía escrito (`declarations_from_schema.rb`, en el tag
+`intento-1-update`) y **conviene rescatarlo** — también lo necesita `hobo:install`
+sobre una app que ya existe, que es de otra fase.
 
 **Decisión (2026-08-07):** se queda. Esta fase es **solo para aplicaciones
 nuevas**, así que lo de las migraciones de **datos** no bloquea; cuando alguien
@@ -267,8 +276,27 @@ los obtiene gratis de Ruby** y **B/C necesitan andamiaje para cada uno**, con
 `<extend>` sin encaje claro. El spike tiene que confirmarlo o desmentirlo con
 código real.
 
-**El spike:** portar tres tags representativos a cada opción candidata —
-`<view>` (polimórfico), `<page>` (30 params) y uno con `<extend>`— y comparar.
+**El spike ya está hecho: `spike/dryml/`.** Se ejecuta con
+`ruby spike/dryml/a_ruby_dsl.rb`. Resultado resumido:
+
+| Propiedad | A · DSL en Ruby | B · ViewComponent + ERB |
+|---|---|---|
+| `param` | Sí, un método con bloque | Slots **declarados en Ruby por adelantado** |
+| `param` anidado | Sí, sale solo | **No**, los slots son una lista plana |
+| `<old-x>` (envolver el defecto) | Sí | **No**, un slot solo sustituye |
+| `<extend>` desde otra gema | `Module#prepend` + `super` | **No** llega a quien ya usa la clase |
+| Polimórfico por tipo | Registro de ~10 líneas | Hay que escribir el mismo registro |
+| Dependencias | **Ninguna** | Rails entero arrancado |
+| Runtime | **~50 líneas** | ViewComponent + ActionView |
+
+**El punto que decide:** en ViewComponent un slot **solo sustituye, no envuelve**
+— y eso es *exactamente* el fallo del primer intento documentado en
+`HALLAZGOS.md`. Elegir B nos devolvería al problema del que veníamos.
+
+**Recomendación: opción A**, con una condición anotada — antes de comprometerse,
+escribir **un tag real y grande** (`<table-plus>` o `<field-list>`) con ese DSL y
+ver si se sostiene. El catálogo son 111 tags y un DSL de Ruby es denso. Eso es lo
+primero que debe hacer la capa 3. **La decisión final es de Imanol.**
 
 ---
 
