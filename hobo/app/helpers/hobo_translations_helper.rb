@@ -43,7 +43,9 @@ en:
         end
         options[:default].unshift("hobo.#{keys.join(".")}".to_sym)
         options[:model] = model_class.model_name.human(:count=>(options[:count] || 1).to_i)
-        translate key.to_sym, options
+        # Rails' `translate` takes keyword arguments; since Ruby 3 a positional
+        # hash is not the same thing, and it arrived as a second argument.
+        translate key.to_sym, **options
       end
       alias_method :ht, :hobo_translate
 

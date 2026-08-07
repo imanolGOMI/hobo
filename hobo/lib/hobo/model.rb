@@ -402,7 +402,7 @@ module Hobo
 
     def to_param
       name_attr = self.class.name_attribute and name = send(name_attr)
-      if name_attr && !name.blank? && id.is_a?(Fixnum)
+      if name_attr && !name.blank? && id.is_a?(Integer)
         readable = name.to_s.downcase.gsub(/[^a-z0-9]+/, '-').remove(/-+$/).remove(/^-+/).split('-')[0..5].join('-')
         @to_param ||= "#{id}-#{readable}"
       else

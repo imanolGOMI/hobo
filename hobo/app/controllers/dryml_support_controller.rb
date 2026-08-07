@@ -7,7 +7,7 @@ class DrymlSupportController < ActionController::Base
       command = dryml_editor.sub(":file", file).sub(":line", params[:line])
       system(command)
     end
-    render :nothing => true
+    head :ok
   end
 
 end

@@ -4,10 +4,15 @@ module Hobo
     module FindFor
 
     def self.included(base)
-      base.alias_method_chain :method_missing, :find_for
+      base.prepend(FindForMethodMissing)
     end
 
-    def method_missing_with_find_for(name, *args, &block)
+    # `comment_for_user`, and friends: an instance method conjured on demand.
+    # It was alias_method_chain; a prepended module reaches the original with
+    # `super` and composes with anything else that prepends method_missing.
+    module FindForMethodMissing
+
+    def method_missing(name, *args, &block)
       if name.to_s =~ /(.*)_by_(.*)/
         # name matches the general form
 
@@ -45,7 +50,9 @@ module Hobo
         end
       end
 
-      method_missing_without_find_for(name, *args, &block)
+      super
+    end
+
     end
 
     class Finder

@@ -5,17 +5,12 @@ module Hobo
     class << self
       def included(base)
         base.class_eval do
-          extend ClassMethods
-
-          class << self
-            alias_method_chain :available_auto_actions, :user_actions
-            alias_method_chain :def_auto_actions, :user_actions
-          end
+          singleton_class.prepend(UserActions)
 
           skip_before_action :login_required, :only => [:login, :signup, :do_signup, :forgot_password, :reset_password, :do_reset_password,
                                                         :accept_invitation, :do_accept_invitation]
 
-          alias_method_chain :hobo_update, :account_flash
+          prepend AccountFlash
         end
 
       end
@@ -23,16 +18,16 @@ module Hobo
 
     end
 
-    module ClassMethods
+    # The actions a user controller adds on top of the seven usual ones. It was
+    # alias_method_chain on the singleton class; a prepended module composes.
+    module UserActions
 
-      def available_auto_actions_with_user_actions
-        available_auto_actions_without_user_actions +
-          [:login, :logout, :forgot_password, :reset_password, :account]
+      def available_auto_actions
+        super + [:login, :logout, :forgot_password, :reset_password, :account]
       end
 
-
-      def def_auto_actions_with_user_actions
-        def_auto_actions_without_user_actions
+      def def_auto_actions
+        super
 
         class_eval do
           def login; hobo_login;                         end if include_action?(:login)
@@ -136,10 +131,15 @@ module Hobo
     end
 
 
-    def hobo_update_with_account_flash(*args)
-      hobo_update_without_account_flash(*args) do
-        flash[:notice] = ht(:"#{model.to_s.underscore}.messages.update.success", :default=>["Changes to your account were saved"]) if valid? && @this == current_user
-        yield if block_given?
+    module AccountFlash
+      def hobo_update(*args)
+        super(*args) do
+          if valid? && @this == current_user
+            flash[:notice] = ht(:"#{model.to_s.underscore}.messages.update.success",
+                                :default => ["Changes to your account were saved"])
+          end
+          yield if block_given?
+        end
       end
     end
 

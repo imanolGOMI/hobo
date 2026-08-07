@@ -541,7 +541,7 @@ module Hobo
     def show_response
       if request.xhr? && params[:render]
         hobo_ajax_response
-        render :nothing => true unless performed?
+        head(:ok) unless performed?
       else
         respond_with(self.this)
       end
@@ -550,7 +550,7 @@ module Hobo
     def index_response
       if request.xhr? && params[:render]
         hobo_ajax_response(:page => :blah)
-        render :nothing => true unless performed?
+        head(:ok) unless performed?
       else
         respond_with(self.this)
       end
@@ -592,8 +592,25 @@ module Hobo
     end
 
 
+    # Strong parameters and Hobo's permissions answer different questions, and
+    # Rails' answer is not the one Hobo needs.
+    #
+    # Rails asks "which keys may be assigned", once, in the controller. Hobo asks
+    # the *model*, at save time: `update_permitted?` looks at what actually
+    # changed -- that is what `only_changed?`, `none_changed?` and `any_changed?`
+    # are for -- and `attr_protected` names the fields nobody may ever assign,
+    # the lifecycle state among them.
+    #
+    # So the allowlist is built from what Hobo already knows: everything except
+    # the protected fields, and then the model decides. Handing the parameters
+    # over raw is not an option either -- Rails has refused that since 4.
     def attribute_parameters
-      params[(this ? this.class : model).name.underscore]
+      klass = this ? this.class : model
+      parms = params[klass.name.underscore]
+      return parms unless parms.respond_to?(:permit)
+
+      protected_names = klass.try(:protected_attributes).to_a.map(&:to_s)
+      parms.except(*protected_names).permit!
     end
 
 
@@ -621,7 +638,7 @@ module Hobo
           hobo_ajax_response
 
           # Maybe no ajax requests were made
-          render :nothing => true unless performed?
+          head(:ok) unless performed?
         else
           errors = @this.errors.full_messages.join('\n')
           message = ht( :"#{this.class.to_s.underscore}.messages.create.error", :errors=>errors,:default=>["Couldn't create the #{this.class.name.titleize.downcase}.\n #{errors}"])
@@ -679,7 +696,7 @@ module Hobo
           hobo_ajax_response
 
           # Maybe no ajax requests were made
-          render :nothing => true unless performed?
+          head(:ok) unless performed?
         else
           errors = @this.errors.full_messages.join('\n')
           message = ht(:"#{@this.class.to_s.underscore}.messages.update.error", :default=>["There was a problem with that change\\n#{errors}"], :errors=>errors)
@@ -712,7 +729,7 @@ module Hobo
 
     def destroy_response(options={})
       if params[:render]
-        hobo_ajax_response || render(:nothing => true)
+        hobo_ajax_response || head(:ok)
       else
         redirect_to destination_after_submit(this, true, options)
       end
@@ -739,7 +756,7 @@ module Hobo
     def do_creator_response(name, options)
       if valid?
         if params[:render]
-          hobo_ajax_response || render(:nothing => true)
+          hobo_ajax_response || head(:ok)
         else
           location = destination_after_submit(options)
           respond_with(self.this) do |wants|
@@ -750,7 +767,7 @@ module Hobo
         this.exempt_from_edit_checks = true
         if params[:render] && params[:render_options] && params[:render_options][:errors_ok]
           hobo_ajax_response
-          render :nothing => true unless performed?
+          head(:ok) unless performed?
         else
           # errors is used by the translation helper, ht, below.
           errors = this.errors.full_messages.join("\n")
@@ -811,7 +828,7 @@ module Hobo
           render :json => items.map {|i| i.send(attribute)}
         end
       else
-        render :text => "<ul>\n" + items.map {|i| "<li>#{i.send(attribute)}</li>\n"}.join + "</ul>"
+        render :plain => "<ul>\n" + items.map {|i| "<li>#{i.send(attribute)}</li>\n"}.join + "</ul>"
       end
     end
 
@@ -823,9 +840,9 @@ module Hobo
           object = model.find(id)
           object.user_update_attributes!(current_user, object.position_column => position+1)
         end
-        hobo_ajax_response || render(:nothing => true)
+        hobo_ajax_response || head(:ok)
       else
-        render :nothing => true
+        head :ok
       end
     end
 
@@ -842,14 +859,18 @@ module Hobo
       else
         respond_to do |wants|
           wants.html do
-            if render :permission_denied, :status => 403
-              # job done
-            else
-              render :text => t("hobo.messages.permission_denied", :default=>["Permission Denied"]), :status => 403
+            # `render` raises when the template is missing, it does not return
+            # something falsy, so the fallback below was unreachable: an
+            # application without a permission_denied template got a 500 where
+            # it should have got a 403.
+            begin
+              render :permission_denied, :status => 403
+            rescue ActionView::MissingTemplate
+              render :plain => t("hobo.messages.permission_denied", :default=>["Permission Denied"]), :status => 403
             end
           end
           wants.js do
-            render :text => t("hobo.messages.permission_denied", :default=>["Permission Denied"]), :status => 403
+            render :plain => t("hobo.messages.permission_denied", :default=>["Permission Denied"]), :status => 403
           end
         end
       end

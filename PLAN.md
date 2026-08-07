@@ -1373,23 +1373,40 @@ queda con el de Hobo, que dice que no a todo. Con prueba.
 > nombre del modelo— y `this` solo llega a una plantilla **por el runtime de
 > tags**, que es de las capas 5 y 6. Anotado para no buscarlo donde no está.
 
-### Lo que queda de la pieza 11
+### Escribir también funciona, y con eso la pieza 11 está
 
-Las 4 `alias_method_chain` de `user_base.rb`, `find_for.rb` y
-`relation_with_origin.rb`, y repasar el resto de acciones (`hobo_create`,
-`hobo_update`, `hobo_destroy`, las de lifecycle) con el mismo par de niveles:
-prueba sin aplicación donde se pueda, y petición de verdad donde no.
+**`create`, `update` y `destroy` van de punta a punta** contra la aplicación de
+pruebas: 302 a `/stories/1-nueva` —el id amistoso de Hobo, funcionando—, el
+registro cambiado, el registro borrado. Y el mismo `create` contra un modelo que
+dice que no da **403 sin escribir nada**: la reescritura de la pieza 4, vista
+desde fuera.
+
+Para llegar ahí hubo que resolver cuatro cosas más:
+
+| Qué | Detalle |
+|---|---|
+| **Parámetros fuertes** | Rails rechaza desde la 4 que le pases los params en crudo. Hobo pregunta otra cosa: `update_permitted?` mira **lo que ha cambiado** (`only_changed?`, `none_changed?`, `any_changed?`) y `attr_protected` nombra lo que nadie puede asignar nunca. Así que la lista se construye con lo que Hobo ya sabe —todo menos los campos protegidos— y **decide el modelo** |
+| **El respaldo del 403 era inalcanzable** | `if render :permission_denied … else …` — `render` **lanza** cuando falta la plantilla, no devuelve falso. Una aplicación sin esa plantilla recibía **500 donde debía recibir 403** |
+| `Fixnum` | Desapareció en Ruby 3.2 |
+| `render :text` y `render :nothing` | Se fueron en Rails 5 → `render :plain` y `head` |
+| `translate key, options` | Rails lo quiere con argumentos con nombre; desde Ruby 3 un hash posicional **es otra cosa**, y llegaba como segundo argumento |
+
+Y las **4 `alias_method_chain`** que quedaban de la pieza pasan a `prepend`:
+`user_base.rb` (3), `find_for.rb` y `relation_with_origin.rb` (2).
+
+**Quedan 5 en toda la gema**, de las 35 del principio, y las cinco son de la
+pieza 12: `active_model/{name,translation}.rb`, `associations/reflection.rb`,
+`extensions/{enumerable,i18n}.rb`.
 
 ### Lo que queda de la capa 4
 
 Por orden, y con lo que ya se sabe:
 
-1. **Pieza 11, segunda mitad**: las acciones, con la decisión de cómo probarlas.
-2. **Pieza 12, router**, con el agravante de la carga ansiosa por `descendants`.
-3. **Pieza 14, subsites**, que es transversal y va la última.
+1. **Pieza 12, router**, con el agravante de la carga ansiosa por `descendants`.
+2. **Pieza 14, subsites**, que es transversal y va la última.
 
-Quedan **10 `alias_method_chain`** —eran 35 al empezar la capa—, repartidos así,
-y cada uno cae con su pieza:
+Quedan **5 `alias_method_chain`** —eran 35 al empezar la capa—, todas de la
+pieza 12:
 
 | Fichero | Cuántos | Pieza |
 |---|---:|---|

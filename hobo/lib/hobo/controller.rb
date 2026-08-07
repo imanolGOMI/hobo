@@ -170,7 +170,7 @@ module Hobo
         tag_renderer.send(tag, options.merge(:with => o))
       end.join
 
-      render :text => results + tag_renderer.part_contexts_storage
+      render :plain => results + tag_renderer.part_contexts_storage
     end
 
 
@@ -190,7 +190,7 @@ module Hobo
         @search_results = all_results
         hobo_ajax_response
       elsif all_results.empty?
-        render :text => "<p>"+ t("hobo.live_search.no_results", :default=>["Your search returned no matches."]) + "</p>"
+        render :plain => "<p>"+ t("hobo.live_search.no_results", :default=>["Your search returned no matches."]) + "</p>"
       else
         # TODO: call one tag that renders all the search results with headings for each model
         render_tags(all_results, :search_card, :for_type => true)

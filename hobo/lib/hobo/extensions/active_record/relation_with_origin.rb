@@ -8,18 +8,19 @@ module ActiveRecord
     end
   end
 
-  module SpawnMethods
-    def merge_with_origin(r)
-      merged = merge_without_origin(r)
-      # LH#1002:  cannot call respond_to? because default_scope ends
-      # up calling merge and we end up with infinite recursion
-      merged.origin = r.origin rescue nil unless merged.instance_variable_defined?("@origin")
-      merged.origin_attribute = r.origin_attribute rescue nil unless merged.instance_variable_defined?("@origin_attribute")
+  # Where a relation came from -- which record and which association -- so the
+  # views can work out what a collection *is*, not just what it holds.
+  module MergeWithOrigin
+    def merge(other, *args)
+      merged = super
+      # LH#1002: cannot call respond_to? because default_scope ends up calling
+      # merge and we end up with infinite recursion
+      merged.origin = other.origin rescue nil unless merged.instance_variable_defined?("@origin")
+      merged.origin_attribute = other.origin_attribute rescue nil unless merged.instance_variable_defined?("@origin_attribute")
       merged
     end
-
-    alias_method_chain :merge, :origin
   end
+  Relation.prepend(MergeWithOrigin)
 
   module Associations
     class CollectionProxy
@@ -34,14 +35,16 @@ module ActiveRecord
       # end
       # alias_method_chain :scoped, :origin
 
-      def method_missing_with_origin(method, *args, &block)
-        res = method_missing_without_origin(method, *args, &block)
+    end
+
+    module ProxyOrigin
+      def method_missing(method, *args, &block)
+        res = super
         res.origin = proxy_association.owner if res.respond_to?(:origin)
         res.origin_attribute = proxy_association.reflection.name if res.respond_to?(:origin_attribute)
         res
       end
-      alias_method_chain :method_missing, :origin
-
     end
+    CollectionProxy.prepend(ProxyOrigin)
   end
 end

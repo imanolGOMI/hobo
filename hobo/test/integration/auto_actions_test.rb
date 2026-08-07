@@ -56,6 +56,51 @@ class AutoActionsIntegrationTest < Minitest::Test
     assert_includes output, "<li>Hello</li>", "el registro no llego a la vista:\n#{output}"
   end
 
+  # The write half: create, update and destroy through real requests, with the
+  # permission checks of piece 4 in the way. `1-nueva` in the redirect is Hobo's
+  # friendly id, working too.
+  def test_the_write_actions_go_through_and_redirect
+    output = run_in_app(<<~RUBY)
+      #{model_and_controller}
+      Rails.application.routes.draw { resources :stories }
+
+      #{caller_helper}
+
+      call(:create, "POST", "/stories", "story" => { "title" => "Nueva" })
+      puts "CREADAS \#{Story.count}"
+
+      story = Story.first
+      call(:update, "PATCH", "/stories/\#{story.id}", "id" => story.id.to_s, "story" => { "title" => "Cambiada" })
+      puts "TITULO \#{Story.first.title}"
+
+      call(:destroy, "DELETE", "/stories/\#{story.id}", "id" => story.id.to_s)
+      puts "QUEDAN \#{Story.count}"
+    RUBY
+
+    assert_includes output, "CREATE 302", output
+    assert_includes output, "CREADAS 1", output
+    assert_includes output, "TITULO Cambiada", output
+    assert_includes output, "QUEDAN 0", output
+    assert_match(%r{CREATE 302 .*/stories/\d+-nueva}, output, "el id amistoso no salio")
+  end
+
+  # And the same request against a model that says no. This is the rewrite of
+  # piece 4 -- the before_create callback -- seen from outside.
+  def test_a_refused_create_answers_403_and_writes_nothing
+    output = run_in_app(<<~RUBY)
+      #{model_and_controller(:create_permitted => false)}
+      Rails.application.routes.draw { resources :stories }
+
+      #{caller_helper}
+
+      call(:create, "POST", "/stories", "story" => { "title" => "Nueva" })
+      puts "CREADAS \#{Story.count}"
+    RUBY
+
+    assert_includes output, "CREATE 403", output
+    assert_includes output, "CREADAS 0", output
+  end
+
   # Nobody logged in, and the application has no Guest model of its own. That
   # used to be a NameError on *every* request, before any action ran: the helper
   # named a bare `::Guest` that only the classic autoloader could resolve.
@@ -81,6 +126,44 @@ class AutoActionsIntegrationTest < Minitest::Test
   end
 
   private
+
+  def model_and_controller(create_permitted: true)
+    <<~RUBY
+      ActiveRecord::Base.connection.create_table(:stories, :force => true) { |t| t.string :title }
+
+      class Story < ActiveRecord::Base
+        include Hobo::Model
+        fields { title :string }
+        def view_permitted?(field) = true
+        def create_permitted?  = #{create_permitted}
+        def update_permitted?  = true
+        def destroy_permitted? = true
+      end
+
+      class StoriesController < ApplicationController
+        include Hobo::Controller::Model
+        auto_actions :all
+      end
+    RUBY
+  end
+
+  # Calls an action straight, without the middleware that swallows exceptions:
+  # a rendered error page looks like an answer, and that is how a NameError
+  # spent a whole session pretending to be a 403.
+  def caller_helper
+    <<~RUBY
+      def call(action, verb, path, params = {})
+        env = Rack::MockRequest.env_for(path, :method => verb, :params => params)
+        status, headers, _body = StoriesController.action(action).call(env)
+        puts "\#{action.to_s.upcase} \#{status} \#{headers['location']}"
+      rescue Hobo::PermissionDeniedError
+        puts "\#{action.to_s.upcase} 403"
+      rescue => e
+        puts "\#{action.to_s.upcase} EXCEPCION \#{e.class}: \#{e.message.lines.first}"
+        puts e.backtrace.select { |l| l =~ /RubymineProjects/ }.first(4)
+      end
+    RUBY
+  end
 
   def run_in_app(script, views = {})
     views.each do |path, content|
