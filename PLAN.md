@@ -382,6 +382,65 @@ el override, Ruby recupera su `Array#*` nativo y los **~23 sitios** de
 `array * ", "` siguen funcionando igual. Es seguro, pero es el borrado que más
 conviene comprobar porque `*` sobre arrays se usa mucho fuera del azúcar.
 
+### Lo que se hizo en la capa 1 — **casi terminada**
+
+`hobo_support` pasa de **1.089 a 691 líneas**. 28 pruebas minitest en verde.
+
+**Primera pasada, lo roto** (commit `8d9abd53`): fuera `methodcall.rb`,
+`methodphitamine.rb` y `blankslate.rb`, y con ellos `.*.`, `._?`, `.try.`,
+`.where.`, `.where_not.` e `it`/`its`. Reescritos los 146 sitios: 62 ficheros
+por codemod y 16 a mano. Fuera también `alias_class_method_chain` y las guardas
+muertas de `drop_while`, `take_while` y `Array.wrap`.
+
+**Segunda pasada, lo redundante** (commit `22e45f08`): ver el registro de mejoras
+más abajo. ~45 sitios más reescritos.
+
+**Queda pendiente: `classy_module` → `ActiveSupport::Concern`.** Ver más abajo.
+
+---
+
+## Registro de mejoras por capa
+
+Se anota, en cada capa, en qué gana Rails y en qué gana Hobo. Las dos
+direcciones cuentan.
+
+### Capa 1
+
+**Rails/Ruby lo hace mejor → fuera** (todo verificado ejecutando):
+
+| Hobo | Nativo | Desde |
+|---|---|---|
+| `Hash#select_hash` | `Hash#select` ya devuelve Hash | Ruby 2.1 |
+| `Hash#map_hash` | `transform_values` | Ruby 2.4 |
+| `hash - [k]` | `except(k)` | Ruby 3.0 |
+| `hash & [k]` | `slice(k)` | Ruby 2.5 |
+| `hash.get(a,b)` | `values_at(a,b)` | siempre |
+| `Hash#compact`/`compact!` | core | Ruby 2.4 |
+| `recursive_update` | `deep_merge!` | Rails 3 |
+| `hash \| otro` | era alias de `merge` | siempre |
+| `metaclass` | `singleton_class` | Ruby 1.9 |
+| `meta_eval` | `singleton_class.instance_eval` | Ruby 1.9 |
+| `metaclass_eval` | `singleton_class.class_eval` | Ruby 1.9 |
+| `meta_def` | `define_singleton_method` | Ruby 1.9 |
+| `Enumerable#map_hash` | `index_with` | Rails 6 |
+| `Enumerable#rest` | `drop(1)` | siempre |
+| `map_with_index` | `map.with_index` | Ruby 1.9 |
+| `build_hash` | `filter_map { }.to_h` | Ruby 2.7 |
+
+**Hobo lo hace mejor → se queda:**
+
+- **`Object#in?` es nil-safe.** El de ActiveSupport lanza `ArgumentError` con
+  `nil`. Y **`not_in?` no existe en Rails**.
+- **`Hash#partition_hash`** (39 usos). `Hash#partition` de Ruby devuelve arrays
+  de pares, **no hashes**. Sin equivalente.
+- **`implies`.** No existe en ningún sitio; lo usan los permisos.
+- **`Array#safe_join`.** El `safe_join` de Rails es un helper de vista, no un
+  método de Array.
+
+**En medio:** `inheriting_cattr_reader` vs `class_attribute`. Rails hereda igual
+de bien, pero `class_attribute` **además define un writer de instancia**, efecto
+que Hobo no quiere. Evitable con `:instance_writer => false`, pero no es gratis.
+
 ### Cómo correr las pruebas
 
 ```sh
