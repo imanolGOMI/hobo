@@ -100,6 +100,15 @@ module HoboRapid
         (fields_of(model) & %w[name title]).first
       end
 
+      # The field a record is *about*: Hobo 2 painted it above the field list,
+      # bigger, because a description is not a row in a table of properties.
+      PRIMARY_CONTENT = %w[description body content profile].freeze
+
+      def description_attribute_of(model)
+        return model.primary_content_attribute.to_s if model.respond_to?(:primary_content_attribute) && model.primary_content_attribute
+        (fields_of(model) & PRIMARY_CONTENT).first
+      end
+
       def children_of(model)
         return [] unless model.respond_to?(:view_hints)
         Array(model.view_hints.children).map(&:to_s)
@@ -174,121 +183,152 @@ module HoboRapid
         end
       end
 
-      # The page for one record: everything it has, plus its children.
+      # The page for one record.
+      #
+      # The shape is Hobo 2's, because two applications built the same way
+      # should look the same: a header panel with the record's name and what you
+      # can do to it, then the description, then the rest of the fields, then a
+      # section per collection with its own "new" link.
+      #
+      # (Hobo 2 painted `<h2>` inside `<content-header class="well">`, which was
+      # Bootstrap 2's grey panel. The panel is a card now; the heading level is
+      # the same.)
       def derive_show_page(model)
         name_attribute = name_attribute_of(model)
-        fields = summary_fields(model)
+        description = description_attribute_of(model)
+        fields = summary_fields(model) - [description].compact
         children = children_of(model)
+        title = title_of(model)
 
         Rapid.define_for(:show_page, model) do
           heading = name_attribute ? this.send(name_attribute).to_s : model.name.demodulize
-          in_page(heading) do
-          tag("article", { :class => "show-page #{model.name.demodulize.underscore}" }, :body) do
-            tag("div", { :class => "page-header d-flex justify-content-between align-items-center" }, :header) do
-              tag("h1", {}, :heading) do
-                if name_attribute
-                  with_field(name_attribute) { call_tag(:view, {}, :as => :name) }
-                else
-                  param(:name) { text this.to_s }
+          in_page("#{title} #{heading}") do
+            tag("article", { :class => "show-page #{model.name.demodulize.underscore}" }, :body) do
+
+              tag("div", { :class => "content-header card p-3 mb-4" }, :content_header) do
+                tag("div", { :class => "d-flex justify-content-between align-items-start" }) do
+                  tag("h2", {}, :heading) do
+                    text "#{title} "
+                    param(:name) do
+                      if name_attribute
+                        with_field(name_attribute) { call_tag(:view, { :no_wrapper => true }, :as => :name_view) }
+                      else
+                        text this.to_s
+                      end
+                    end
+                  end
+                  call_tag(:record_actions, { :style => "buttons" }, :as => :record_actions)
                 end
               end
-              # The old theme put an Edit button here, and the pages had none.
-              call_tag(:record_actions, { :style => "buttons" }, :as => :record_actions)
-            end
 
-            tag("dl", {}, :fields) do
-              fields.each do |field|
-                with_field(field) do
-                  tag("dt", {}, :"#{field}_label") { text HoboRapid::Derivation.label_for(model, field) }
-                  tag("dd", {}, :"#{field}_value") { call_tag(:view, {}, :as => :"#{field}_view") }
+              tag("div", { :class => "content-body" }, :content_body) do
+                if description
+                  with_field(description) do
+                    tag("div", { :class => "description" }, :description) { call_tag(:view, {}, :as => :description_view) }
+                  end
+                end
+
+                tag("dl", { :class => "field-list row" }, :field_list) do
+                  fields.each do |field|
+                    with_field(field) do
+                      tag("dt", { :class => "col-sm-3" }, :"#{field}_label") { text HoboRapid::Derivation.label_for(model, field) }
+                      tag("dd", { :class => "col-sm-9" }, :"#{field}_value") { call_tag(:view, {}, :as => :"#{field}_view") }
+                    end
+                  end
+                end
+
+                children.each do |child|
+                  tag("section", { :class => "collection-section #{child}" }, :"#{child}_section") do
+                    tag("div", { :class => "d-flex justify-content-between align-items-center" }) do
+                      tag("h3", {}, :"#{child}_heading") { text child.humanize }
+                    end
+                    with_field(child) { call_tag(:view, { :force => true }, :as => :"#{child}_collection") }
+                  end
                 end
               end
             end
-
-            children.each do |child|
-              tag("section", { :class => "children #{child}" }, :"#{child}_section") do
-                tag("h2", {}, :"#{child}_heading") { text child.humanize }
-                # `as:` on the way in, so a theme can reach the collection view
-                # and everything inside it. The param contract sweep of layer 3
-                # is what insists on this, and it is right to.
-                with_field(child) { call_tag(:view, { :force => true }, :as => :"#{child}_collection") }
-              end
-            end
-          end
           end
         end
       end
 
-      # The page for the collection: **a table**.
-      #
-      # It was a list of cards here until Imanol pointed out that hobo_bootstrap
-      # painted a table -- `<table class="table table-striped table-bordered">`
-      # with a column per field and an actions column. Cards were hobo_clean's
-      # style, and the theme even documented how to swap one for the other.
-      # `<card>` is still there for anybody who wants the other shape.
+      # The page for the collection: a header panel with the name and the count,
+      # a "new" link, and **a table** -- which is what hobo_bootstrap painted.
       def derive_index_page(model)
         fields = summary_fields(model)
         name_attribute = name_attribute_of(model)
         columns = ([name_attribute] + fields).compact
         plural = plural_of(model)
+        singular = title_of(model)
 
         Rapid.define_for(:index_page, model) do
+          records = Array(this)
           in_page(plural) do
-          tag("div", { :class => "index-page #{model.name.demodulize.underscore.pluralize}" }, :body) do
-            tag("div", { :class => "page-header d-flex justify-content-between align-items-center" }, :header) do
-              tag("h1", {}, :heading) { text plural }
+            tag("div", { :class => "index-page #{model.name.demodulize.underscore.pluralize}" }, :body) do
 
-              new_path = new_path_for(model)
-              if new_path
-                tag("a", { :href => new_path, :class => "btn btn-primary" }, :new_link) do
-                  text "Nuevo #{model.name.demodulize.underscore.humanize.downcase}"
-                end
-              end
-            end
-
-            records = Array(this)
-            if records.empty?
-              tag("p", { :class => "empty" }, :empty) { text "Nada por aqui todavia." }
-            else
-              tag("table", { :class => "table table-striped table-bordered" }, :collection) do
-                tag("thead", {}, :headings) do
-                  tag("tr") do
-                    columns.each do |field|
-                      tag("th", {}, :"#{field}_heading") { text HoboRapid::Derivation.label_for(model, field) }
+              tag("div", { :class => "content-header card p-3 mb-4" }, :content_header) do
+                tag("div", { :class => "d-flex justify-content-between align-items-center" }) do
+                  tag("div") do
+                    tag("h2", {}, :heading) { text plural }
+                    tag("p", { :class => "count text-secondary mb-0" }, :count) do
+                      text(records.length == 1 ? "1 #{singular.downcase}" : "#{records.length} #{plural.downcase}")
                     end
-                    tag("th", { :class => "actions" }, :actions_heading) { text "Acciones" }
+                  end
+
+                  new_path = new_path_for(model)
+                  if new_path
+                    tag("a", { :href => new_path, :class => "btn btn-primary" }, :new_link) do
+                      text "Nuevo #{singular.downcase}"
+                    end
                   end
                 end
+              end
 
-                tag("tbody", {}, :rows) do
-                  records.each do |record|
-                    with_this(record) do
-                      tag("tr", {}, :row) do
-                        columns.each_with_index do |field, index|
-                          tag("td", {}, :"#{field}_cell") do
-                            # The first column is what the record is called, and
-                            # it is the way in.
-                            if index.zero?
-                              path = path_for(this)
-                              if path
-                                tag("a", { :href => path }, :name_link) { call_tag(:name_view, {}, :as => :name_view) }
-                              else
-                                call_tag(:name_view, {}, :as => :name_view)
+              tag("div", { :class => "content-body" }, :content_body) do
+                with_actions = records.any? { |record| with_this(record) { editable_here? || destroyable_here? } }
+
+                if records.empty?
+                  tag("p", { :class => "empty text-secondary" }, :empty) { text "Nada por aqui todavia." }
+                else
+                  tag("table", { :class => "table table-striped table-bordered" }, :collection) do
+                    tag("thead", {}, :headings) do
+                      tag("tr") do
+                        columns.each do |field|
+                          tag("th", {}, :"#{field}_heading") { text HoboRapid::Derivation.label_for(model, field) }
+                        end
+                        tag("th", { :class => "actions" }, :actions_heading) { text "Acciones" } if with_actions
+                      end
+                    end
+
+                    tag("tbody", {}, :rows) do
+                      records.each do |record|
+                        with_this(record) do
+                          tag("tr", {}, :row) do
+                            columns.each_with_index do |field, index|
+                              tag("td", {}, :"#{field}_cell") do
+                                if index.zero?
+                                  path = path_for(this)
+                                  if path
+                                    tag("a", { :href => path }, :name_link) { call_tag(:name_view, {}, :as => :name_view) }
+                                  else
+                                    call_tag(:name_view, {}, :as => :name_view)
+                                  end
+                                else
+                                  with_field(field) { call_tag(:view, {}, :as => :"#{field}_view") }
+                                end
                               end
-                            else
-                              with_field(field) { call_tag(:view, {}, :as => :"#{field}_view") }
+                            end
+
+                            if with_actions
+                              tag("td", { :class => "actions" }, :actions) { call_tag(:record_actions, {}, :as => :record_actions) }
                             end
                           end
                         end
-
-                        tag("td", { :class => "actions" }, :actions) { call_tag(:record_actions, {}, :as => :record_actions) }
                       end
                     end
                   end
                 end
               end
             end
-          end
           end
         end
       end

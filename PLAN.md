@@ -2106,6 +2106,124 @@ funciona, la portación está hecha.**
 
 Va **después** del empaquetado en una gema.
 
+---
+
+# ESTADO AL RETOMAR (2026-08-07, fin de sesión)
+
+**Lee esto primero.** Es dónde estábamos exactamente y qué hacer a continuación.
+
+## Lo que funciona hoy
+
+Una aplicación Rails 8 generada con `hobo new`:
+
+- **Portada del primer usuario**: sin usuarios, ofrece crearlo («Register
+  Administrator»), lo crea, inicia sesión y redirige. Verificado de punta a punta.
+- **Índice** derivado: panel de cabecera con nombre y contador, botón «Nuevo X»,
+  **tabla** `table table-striped table-bordered`, primera columna enlazando a la
+  ficha, columna de acciones (solo si hay algo que ofrecer).
+- **Ficha** derivada: panel de cabecera con «Modelo «nombre»» y botón Editar,
+  contenido principal aparte, lista de campos, y una sección por colección hija.
+- **Formulario** derivado en `new`/`edit`, con el control que pide cada tipo.
+- **Tema Bootstrap 5** servido por el engine, más `hobo.css`.
+- **Rutas** con `hobo_routes`, subsites, permisos de la pieza 4 aplicados.
+
+**Pruebas: 190+ en las gemas + suite de conformidad en navegador.**
+
+## La aplicación de pruebas viva
+
+```
+/tmp/hobo_luz          generada con `hobo new`, apunta al arbol de trabajo
+http://localhost:3007  arrancada con: cd /tmp/hobo_luz && setsid nohup env HOBODEV=/home/imanol/RubymineProjects/hobo bin/rails server -p 3007 -b 0.0.0.0 >> log/server.log 2>&1 < /dev/null & disown
+usuario: admin@example.com   contrasena: test1234
+```
+
+⚠ **Los puertos 3000 (`miapp`) y 3001 (`amenti_v3`) son de Imanol. No tocarlos.**
+El 3002 es `amenti_v2` (Hobo 2, Ruby 1.9.3).
+
+## La app de referencia en Hobo 2: dónde se quedó
+
+Para comparar pantalla a pantalla hace falta **la misma aplicación en Hobo 2**.
+Montado hasta aquí:
+
+```
+/tmp/hobo2             git worktree de master (Hobo 2.2.6 intacto)
+                       + hobo_bootstrap/_ui y hobo_jquery/_ui traidos con
+                         `git archive 53022e7c ... | tar -x -C /tmp/hobo2`
+                         (no estan en master: se vendorizaron en la rama)
+/tmp/videoteca2_app    `hobo new` de Hobo 2, Ruby 2.5.9, Rails 4.2.11.3, MySQL
+```
+
+**Lo que hizo falta para llegar ahí** (anotado para no repetirlo):
+
+| Problema | Solución |
+|---|---|
+| `sqlite3` no compila: no hay `libsqlite3-dev` | **MySQL**, que sí está: `mysql2 0.4.10` instalado para 2.5.9, servidor en 3306, `root` / `ubQuahk2eiGolfi1620` (sacada de `amenti_v2/config/database.yml`) |
+| `ffi` moderno exige Ruby ≥ 3 | Pinchar `gem "ffi", "~> 1.15.5"` |
+| `hobo new` de Hobo 2 escribe un Gemfile de Rails 5 | Reescribir a `rails 4.2.11.3`, `coffee-rails ~> 4.1.0`, `jbuilder ~> 2.0`, sin `puma` ni `therubyracer` |
+| `responders` duplicado | El wizard ya lo pone; quitar el añadido |
+| **`blankslate` no existe** | `gem "blankslate"` — es el primer fallo que documentó la capa 0 |
+
+**Donde se quedó, con el error exacto:**
+
+```
+rails generate hobo:setup_wizard --default
+-> /tmp/hobo2/dryml/lib/dryml/parser/base_parser.rb:9
+   uninitialized constant Dryml::Parser::BaseParser::NAME_STR (NameError)
+```
+
+`NAME_STR` es de **REXML**, y el `rexml` que resuelve el bundle no lo tiene.
+**Siguiente paso: pinchar una versión de `rexml` que sí lo defina** (probar
+`gem "rexml", "3.1.9"`, que es la que traía Ruby 2.5 de serie, o mirar en qué
+versión desapareció la constante). Con eso el asistente debería terminar.
+
+## La prueba de aceptación: la videoteca
+
+Decidida por Imanol. **La misma aplicación en Hobo 2 y en Hobo 3**, para
+comparar pantalla a pantalla:
+
+- **Modelos**: `Pelicula` (título, año, sinopsis), `Categoria`, `Genero`
+- **Asociaciones**: película pertenece a categoría; película tiene muchos géneros
+- **Pantallas**: listado con **filtros**, ficha, alta y edición
+- **Formularios anidados**: crear una categoría o un género **desde** la película
+  — que es lo que Hobo hacía con `input-many` y `select-one-or-new`
+
+**Si la videoteca se construye sin escribir vistas, funciona, y se parece a la de
+Hobo 2, la portación está hecha.**
+
+## Decisiones tomadas en esta sesión
+
+16. **Un solo diseño por defecto: Bootstrap.** Nada de mantener `hobo_clean` en
+    paralelo. Otros temas (Tailwind, etc.) serán una opción de `hobo new` más
+    adelante; ahora no.
+17. **Un controlador de Hobo deja pasar la petición y pregunta al registro.**
+    El generador de autenticación de Rails 8 pone `require_authentication` en
+    todos, y eso **impide que los permisos de Hobo lleguen a preguntarse**: un
+    índice público se convierte en un muro de login. Los controladores de Hobo
+    hacen `allow_unauthenticated_access` y deciden los permisos del modelo.
+
+## Lo siguiente, por orden
+
+1. **Terminar la app de referencia en Hobo 2** (el `rexml` de arriba), generar la
+   videoteca en ella, y **comparar pantalla a pantalla** con capturas.
+2. **La videoteca en Hobo 3**, con lo que falte: filtros y formularios anidados.
+3. **La fusión en una sola gema** (decisión 11), que sigue pendiente.
+4. **El contrato de plugin** (pieza 17): con los tags en Ruby, definir un tag ya
+   es registrarlo, así que el contrato se encoge — falta escribirlo y probarlo.
+
+## Cómo mirar la aplicación con el navegador
+
+Hay Firefox y `geckodriver`. El guion de auditoría que se usó:
+
+```ruby
+# inicia sesion, recorre las pantallas y guarda capturas
+Capybara.app_host = "http://localhost:3007"
+page.visit("/session/new"); page.fill_in("email_address", ...); page.click_button("Sign in")
+page.visit("/stories"); page.save_screenshot("...png")
+```
+
+**Y hay que mirarlas**: los cuatro fallos más gordos de la sesión se vieron en una
+captura, no en una prueba.
+
 ## Reglas de trabajo
 
 - **Nunca hacer push.** Ni a este repo ni a ninguno. Solo commits locales.

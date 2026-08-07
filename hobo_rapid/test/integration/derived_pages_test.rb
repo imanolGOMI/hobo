@@ -59,12 +59,12 @@ class DerivedPagesTest < Minitest::Test
     assert_includes output, %(<article class="show-page story">), output
     assert_includes output, "La luz de Hobo"
     # Each field painted by its type, with a label nobody wrote.
-    assert_includes output, "<dt>Body</dt>"
+    assert_includes output, %(<div class="description">), "el contenido principal va arriba y aparte"
     assert_includes output, %(<span class="view story-published-on">2026-08-07</span>)
     # The boolean as a tick, not as "true".
     assert_includes output, "&#10004;"
     # And the children in a section of their own, because `children :tasks` said so.
-    assert_includes output, %(<section class="children tasks">)
+    assert_includes output, %(<section class="collection-section tasks">)
     assert_includes output, "Portar el catalogo"
   end
 
@@ -76,7 +76,7 @@ class DerivedPagesTest < Minitest::Test
     RUBY
 
     assert_includes output, %(<div class="index-page stories">), output
-    assert_includes output, "<h1>Stories</h1>"
+    assert_includes output, "<h2>Stories</h2>"
     assert_includes output, %(<table class="table table-striped table-bordered">)
     assert_equal 3, output.scan("<tr>").length, "dos filas y una cabecera"
   end

@@ -94,16 +94,20 @@ class DerivationTest < Minitest::Test
   def test_a_card_lists_the_other_fields_with_their_labels
     html = render(:card, story)
 
-    assert_includes html, "<dt>Body</dt>"
     assert_includes html, "El cuerpo"
     assert_includes html, "<dt>Published on</dt>"
   end
 
   # --- the show page ----------------------------------------------------------
 
-  def test_a_show_page_leads_with_the_name
-    assert_includes render(:show_page, story), "<h1>"
-    assert_includes render(:show_page, story), "Primera historia"
+  # "Story <name>", in a header panel -- the shape Hobo 2 painted, so two
+  # applications built the same way look the same.
+  def test_a_show_page_leads_with_the_model_and_the_name
+    html = render(:show_page, story)
+
+    assert_includes html, "<h2>Story "
+    assert_includes html, "Primera historia"
+    assert_includes html, %(class="content-header)
   end
 
   # The type decides how each field is painted, all the way down.
@@ -114,8 +118,8 @@ class DerivationTest < Minitest::Test
   def test_the_children_get_a_section_of_their_own
     html = render(:show_page, story)
 
-    assert_includes html, %(<section class="children tasks">)
-    assert_includes html, "<h2>Tasks</h2>"
+    assert_includes html, %(<section class="collection-section tasks">)
+    assert_includes html, "<h3>Tasks</h3>"
     assert_includes html, "Una tarea"
   end
 

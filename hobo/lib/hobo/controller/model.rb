@@ -41,6 +41,17 @@ module Hobo
 
           respond_to :html
 
+          # Rails 8's authentication generator puts `require_authentication` on
+          # every controller, and that fights Hobo: with it, **no request ever
+          # reaches the permission check**, so `view_permitted?` never gets to
+          # say anything and a public index becomes a login wall.
+          #
+          # In Hobo the model decides who sees what, so a Hobo controller lets
+          # the request through and asks the record. An application that wants a
+          # login wall as well says so in its own controller -- that is one line
+          # and it is theirs to write.
+          allow_unauthenticated_access if respond_to?(:allow_unauthenticated_access)
+
           prepend HoboModelRender
 
         end
@@ -544,8 +555,18 @@ module Hobo
     def show_response
       # `new` and `edit` want a form, not a read-only page. Which one it is is
       # something the action already knows.
-      page = action_name.in?(%w[new edit]) ? :form_page : :show_page
-      render_derived_or(page) { respond_with(self.this) }
+      if action_name.in?(%w[new edit])
+        # And a form nobody may send is not a form: it used to come out as a
+        # page of labels with no inputs, because <input> falls back to showing
+        # the value when the field cannot be edited. Refusing says what is
+        # actually going on.
+        allowed = action_name == "new" ? this.try(:creatable_by?, current_user) : this.try(:editable_by?, current_user)
+        raise Hobo::PermissionDeniedError, "#{this.class.name}##{action_name}" if allowed == false
+
+        return render_derived_or(:form_page) { respond_with(self.this) }
+      end
+
+      render_derived_or(:show_page) { respond_with(self.this) }
     end
 
     def index_response
@@ -896,7 +917,12 @@ module Hobo
     def render_derived_or(tag_name)
       return yield if template_exists_for_this_action? || !derived_tag?(tag_name)
 
-      painted = Rapid.render(tag_name, {}, :this => this)
+      # Through the bridge, not straight to the runtime: `rapid_tag` is what
+      # hands the acting user, the forgery token and the flash to the tags.
+      # Calling Rapid.render directly skipped all three, so every derived page
+      # was painted as if nobody were logged in -- a form with no inputs, and
+      # no actions anywhere.
+      painted = rapid_tag(tag_name, this)
 
       # A theme paints the whole document -- `<html>`, `<head>`, the lot -- so
       # wrapping it in the application layout as well gives a page with two of
