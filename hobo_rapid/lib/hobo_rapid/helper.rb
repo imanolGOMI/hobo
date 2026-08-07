@@ -19,6 +19,13 @@ module HoboRapid
       # back nil and every form Hobo painted got 422.
       token = send(:form_authenticity_token) if respond_to?(:form_authenticity_token, true)
       user = send(:current_user) if respond_to?(:current_user, true)
+
+      # Hobo's `current_user` never answers nil: it answers a `Guest`, an object
+      # that says no to everything. That is right for the model layer, which
+      # asks it questions -- and wrong here, because a generated model says
+      # `acting_user.present?`, and a Guest **is present**. So a stranger was
+      # offered an edit and a delete on every row. For the tags, nobody is nil.
+      user = nil if user.respond_to?(:guest?) && user.guest?
       messages = flash.to_h.symbolize_keys if respond_to?(:flash, true) && flash
 
       HoboRapid.with_request(token, user, messages || {}) do

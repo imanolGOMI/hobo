@@ -112,4 +112,38 @@ class StructureTest < Minitest::Test
     assert_every_param_overridable(:transition_buttons, { :name => "con transiciones", :this => Article.new(%i[publish]) })
   end
 
+  # --- quien esta usando la aplicacion ----------------------------------------
+
+  # Hobo's `current_user` never answers nil: it answers a Guest, an object that
+  # says no to everything. That is right for the model layer, which asks it
+  # questions, and wrong for the tags -- a generated model says
+  # `acting_user.present?`, and **a Guest is present**, so a stranger was
+  # offered an edit and a delete on every row.
+  class Guestish
+    def guest? = true
+    def id = nil
+  end
+
+  def test_a_guest_is_nobody
+    painted = HoboRapid.with_request(nil, Guestish.new) do
+      Rapid.render(:session_links)
+    end
+
+    refute_includes painted, "Logged in as"
+  end
+
+  def test_somebody_is_somebody
+    user = Struct.new(:id, :email_address).new(1, "imanol@example.com")
+
+    painted = HoboRapid.with_request(nil, user) { Rapid.render(:session_links) }
+
+    assert_includes painted, "Logged in as imanol@example.com"
+  end
+
+  # The user changer is a way to become anybody. Outside development it must not
+  # exist -- not hidden, not disabled: absent.
+  def test_the_user_changer_paints_nothing_outside_development
+    assert_empty Rapid.render(:dev_user_changer).strip
+  end
+
 end

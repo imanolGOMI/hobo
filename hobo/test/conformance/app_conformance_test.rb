@@ -53,8 +53,24 @@ class AppConformanceTest < Minitest::Test
       end
       Capybara.app_host = ENV["HOBO_APP_URL"] || "http://localhost:3007"
       Capybara.run_server = false
-      Capybara::Session.new(:hobo_conformance)
+      sign_in(Capybara::Session.new(:hobo_conformance))
     end
+  end
+
+  # The suite used to browse as a stranger, and it passed: Hobo's `current_user`
+  # answers a `Guest` rather than nil, a Guest **is present**, and a generated
+  # model says `acting_user.present?`. So a stranger was shown a form to fill in
+  # and buttons to press. Now that nobody is nil, this has to say who it is --
+  # which is what it should have said all along, because a form is for somebody.
+  def self.sign_in(page)
+    page.visit("/session/new")
+    return page unless page.has_field?("email_address", :wait => 2)
+
+    page.fill_in("email_address", :with => ENV["HOBO_APP_USER"] || "admin@example.com")
+    page.fill_in("password", :with => ENV["HOBO_APP_PASSWORD"] || "test1234")
+    page.click_button("Sign in")
+    page.has_no_field?("password", :wait => 5)
+    page
   end
 
   Minitest.after_run { @session&.driver&.quit }
@@ -142,6 +158,27 @@ class AppConformanceTest < Minitest::Test
 
     started = @page.evaluate_script("!!(window.Stimulus || document.querySelector('script[type=importmap]'))")
     assert started, "la pagina derivada no carga el javascript de la aplicacion"
+  end
+
+  # An application that cannot tell you who you are, or let you stop being them,
+  # is missing the one thing every application has. Rails owns the session
+  # (piece 15); saying so on screen is Hobo's.
+  def test_the_bar_says_who_you_are_and_offers_a_way_out
+    @page.visit("/stories")
+
+    bar = @page.find("nav.navbar", :visible => :all).text
+    assert_match(/Logged in as|Log in/, bar, "la barra no dice quien eres: #{bar.inspect}")
+  end
+
+  # The developer's user changer: become somebody else in one click, which is
+  # what makes writing `view_permitted?` worth it -- you declare it and then you
+  # *look*, as each person. It was in Hobo 2's bar and it is used today, in
+  # other projects, out of a gem.
+  def test_the_user_changer_is_there_in_development
+    @page.visit("/stories")
+
+    assert @page.has_css?("form.dev-user-changer select", :visible => :all),
+           "falta el selector de usuario en la barra"
   end
 
   # --- you can get around ------------------------------------------------------

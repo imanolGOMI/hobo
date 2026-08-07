@@ -90,7 +90,7 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
       # on white and the application looked like it had no chrome at all. The
       # old theme got it from `navbar-inner`, which Bootstrap 5 dropped.
       tag("nav", { :class => "navbar navbar-expand-lg bg-body-tertiary border-bottom mb-4" }, :navbar) do
-        tag("div", { :class => "container" }, :navbar_container) do
+        tag("div", { :class => "container-fluid px-4" }, :navbar_container) do
           tag("div", {}, :app_name) do
             tag("a", { :class => "navbar-brand", :href => "#{base_url}/" }) { call_tag(:app_name, {}, :as => :app_name_link) }
           end
@@ -183,9 +183,17 @@ Rapid.define(:main_nav, :attrs => [:current, :class]) do
   end
 end
 
+# The right-hand side of the bar. What goes in it is RAPID's (piece 13a): that
+# an application says who you are and lets you stop being them is not a matter
+# of taste. This decides where it sits and what it looks like.
 Rapid.define(:account_nav) do
-  tag("ul", { :class => "navbar-nav ms-auto" }, :items) do
-    param(:session_links)
+  tag("ul", { :class => "navbar-nav ms-auto align-items-center gap-2" }, :items) do
+    param(:session_links) do
+      tag("li", { :class => "nav-item" }, :dev_user_changer) do
+        call_tag(:dev_user_changer, {}, :as => :changer)
+      end
+      call_tag(:session_links, {}, :as => :links)
+    end
   end
 end
 

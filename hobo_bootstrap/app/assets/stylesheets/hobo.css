@@ -75,6 +75,15 @@
 }
 
 .page-header { margin-bottom: 1.5rem; }
+
+/* The headings carry the page. The old theme's were noticeably heavier than
+   Bootstrap 5's default, and next to it ours read as captions. */
+.content-header h2, .show-page > h1, .index-page h1, .form-page h1 { font-weight: 700; }
+.content-header .count { font-size: .95rem; }
+.navbar-brand { font-weight: 700; }
+
+/* The user changer sits in the bar, so it has to be bar-sized. */
+.dev-user-changer .form-select { width: auto; display: inline-block; }
 .record-actions { display: flex; gap: .5rem; align-items: center; }
 .record-actions form { display: inline; margin: 0; }
 .record-actions .action-edit,

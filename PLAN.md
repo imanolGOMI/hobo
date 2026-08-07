@@ -2133,18 +2133,63 @@ Una aplicación Rails 8 generada con `hobo new`:
   de su dueño, con `+` y `−`, y las filas se renumeran solas.
 - **Crear desde el formulario**: una asociación con `:accessible => true` deja
   elegir uno de los que hay o hacer uno nuevo ahí mismo.
+- **La barra**: quién eres, cómo salir, y el **selector de usuario** de
+  desarrollo para mirar la aplicación como cualquiera.
 
-**Pruebas: 371 en las gemas, todas en verde, + la suite de conformidad en
+**Pruebas: 376 en las gemas, todas en verde, + la suite de conformidad en
 navegador (`cd hobo && HOBO_APP=/tmp/hobo_luz rake test`). `/tmp/hobo_luz` se
 regeneró con el `hobo new` de hoy: el banco tiene que ser lo que sale del
 generador, no lo que salía hace tres commits.**
 
+## Cómo correr las cosas (para retomar en frío)
+
+```sh
+# toda la suite de las gemas
+rake test
+
+# la suite de conformidad, en navegador, contra una aplicacion arrancada
+cd hobo && HOBO_APP=/tmp/hobo_luz rake test
+#   entra sola como admin@example.com / test1234
+#   HOBO_APP_URL cambia el puerto (por defecto 3007)
+#   HOBO_APP_USER / HOBO_APP_PASSWORD cambian el usuario
+
+# la prueba de `hobo new`, que genera una aplicacion entera (tarda minutos)
+HOBO_TEST_NEW=1 rake test
+
+# el banco de navegador de los controladores Stimulus
+cd hobo_rapid && rake test        # los de test/browser van dentro
+
+# generar una aplicacion nueva contra el arbol de trabajo
+HOBODEV=/home/imanol/RubymineProjects/hobo hobo/bin/hobo new /tmp/loquesea
+```
+
+**Al tocar una gema hay que reiniciar el servidor**: Rails recarga el código de
+la aplicación, no el de las gemas, aunque sean `path:`. Más de una vez en esta
+sesión pareció que un arreglo no funcionaba y era esto.
+
+```sh
+kill $(pgrep -f "puma.*3009"); sleep 2
+cd /tmp/videoteca3 && setsid nohup env HOBODEV=/home/imanol/RubymineProjects/hobo \
+  bin/rails server -p 3009 -b 0.0.0.0 >> log/server.log 2>&1 < /dev/null &
+```
+
 ## La aplicación de pruebas viva
 
 ```
-/tmp/hobo_luz          generada con `hobo new`, apunta al arbol de trabajo
-http://localhost:3007  arrancada con: cd /tmp/hobo_luz && setsid nohup env HOBODEV=/home/imanol/RubymineProjects/hobo bin/rails server -p 3007 -b 0.0.0.0 >> log/server.log 2>&1 < /dev/null & disown
-usuario: admin@example.com   contrasena: test1234
+/tmp/hobo_luz          el banco de conformidad. Regenerado con el `hobo new` de
+http://localhost:3007  hoy: tiene que ser lo que sale del generador, no lo que
+                       salia hace tres commits. Un modelo Story, un usuario.
+
+/tmp/videoteca3        la videoteca en Hobo 3 (Rails 8.1, Ruby 3.4.6, sqlite)
+http://localhost:3009  Movie / Category / Genre / MovieGenre
+
+/tmp/videoteca2_app    la MISMA videoteca en Hobo 2.2.6 (Rails 4.2, Ruby 2.5.9)
+http://localhost:3008  para comparar pantalla a pantalla
+
+usuarios en las tres:  admin@example.com / test1234
+                       videoteca3 tiene ademas lector@example.com, para el
+                       selector de usuario
+capturas:              /tmp/shots_hobo2/ y /tmp/shots_hobo3/, mismos nombres
 ```
 
 ⚠ **Los puertos 3000 (`miapp`) y 3001 (`amenti_v3`) son de Imanol. No tocarlos.**
@@ -2320,6 +2365,67 @@ barra en blanco, sin fondo, y el icono de borrar mal. Las dos causas:
 | La barra superior, blanca sobre blanco | Una `navbar` de Bootstrap 5 es **transparente** salvo que se le diga otra cosa. El tema viejo lo sacaba de `navbar-inner`, que Bootstrap 5 se llevó. Ahora `bg-body-tertiary border-bottom`, y las cabeceras de página igual |
 | El borrar salía como un botón azul enorme | Una regla de `hobo.css` escrita **para las páginas que pinta Rails** (`.container form button:not(.btn)`) alcanzaba el formulario de borrado de Hobo, que también es un formulario y cuyo botón tampoco es `.btn`. Y a los `+`/`−` de `<input-many>` igual. **Una regla escrita para el marcado de otro tiene que decir dónde para** |
 
+### La barra de navegación, y el selector de usuario — **hecho** (2026-08-07)
+
+Imanol: *«esa funcionalidad de Hobo de poder cambiar entre usuarios con ese
+selector era clave y fue portada a una gema que a día de hoy utilizo en otros
+proyectos»*. Está.
+
+**`<session-links>`** — quién eres y cómo dejar de serlo. Va en RAPID, no en el
+tema (pieza 13a): *que* una aplicación diga quién eres no es cuestión de gusto.
+El «Log out» es un **formulario**, no un enlace, porque en Rails es un DELETE y
+porque un enlace que cierra la sesión lo siguen todos los rastreadores y
+precargadores que hay.
+
+**`<dev-user-changer>`** — el selector. Es la herramienta que hace que valga la
+pena escribir `view_permitted?`: lo declaras y luego **miras**, como cada
+persona, en un clic. Comprobar permisos entrando y saliendo es comprobarlos una
+vez y nunca más.
+
+- Es un **formulario GET con un select que se envía solo**, reutilizando
+  `rapid_autosubmit_controller` de la capa 5. Sin JavaScript en línea, así que
+  no hay excepción que hacer en la política de contenido — el `onchange="..."`
+  de Hobo 2 hoy no pasaría.
+- **Tres cerrojos, y ninguno sobra**: la ruta no se dibuja en producción, hace
+  falta `config.hobo.developer_features`, y el controlador vuelve a comprobarlo.
+  Una forma de convertirse en cualquier usuario tiene que ser imposible de
+  encender sin querer.
+- La primera opción es **Guest**, que es como miras tu aplicación como la ve un
+  extraño.
+- El controlador usa `start_new_session_for` de Rails 8 si existe, y el
+  `current_user=` de Hobo si no. Ni una cosa ni la otra están escritas a fuego.
+
+Verificado en navegador: admin → lector → Guest, quedándose en `/movies`, y con
+las acciones de la tabla apareciendo y desapareciendo.
+
+### Y de paso, el fallo que el selector destapó: **un invitado no es nadie**
+
+Al mirar la aplicación como Guest seguían saliendo los botones de editar y
+borrar. La causa, que es de las buenas:
+
+> El `current_user` de Hobo **nunca contesta nil**: contesta un `Guest`, un
+> objeto que dice que no a todo. Eso está bien para la capa de modelo, que le
+> hace preguntas. Y está mal para los tags, porque un modelo generado dice
+> `acting_user.present?` — y **un Guest está presente**.
+
+Así que un extraño veía un formulario para rellenar y botones que pulsar. El
+puente (`rapid_tag`) normaliza ahora: **para los tags, nadie es nil**.
+
+**Y eso rompió una prueba, con razón:** la suite de conformidad navegaba como
+extraño y pasaba, porque un Guest contaba como alguien. Ahora **entra como
+usuario** (`HOBO_APP_USER` / `HOBO_APP_PASSWORD`, por defecto
+`admin@example.com` / `test1234`), que es lo que debió hacer siempre: un
+formulario es para alguien.
+
+### El diseño, segunda pasada
+
+Más cosas que Imanol vio comparando 3008 y 3009:
+
+| Qué | Arreglo |
+|---|---|
+| El menú no ocupaba todo el ancho | `container-fluid px-4` en la barra, en vez de `container`, que la encogía a 1140px |
+| Las cabeceras, menos marcadas que las de Hobo 2 | `font-weight: 700` en las cabeceras de página y en la marca |
+
 ### Lo que la comparación deja pendiente
 
 Visto en las capturas, ordenado por lo que más se nota:
@@ -2331,8 +2437,8 @@ Visto en las capturas, ordenado por lo que más se nota:
    inglés**, y esto es cadena de interfaz: va en inglés, y luego i18n.
 3. **Un `belongs_to` no enlaza**: Hobo 2 pinta «Drama» como enlace a la
    categoría; Hobo 3 pinta el texto.
-4. En la barra de navegación no hay **buscador** ni **menú de usuario** («Logged
-   in as…», «Log out»). Lo de la sesión es de Rails; lo de enseñarlo, de Hobo.
+4. **El buscador de la barra** (`<live-search>` de Hobo 2, contra `/search`).
+   El menú de usuario ya está; el buscador no.
 
 ## Decisiones tomadas en esta sesión
 
@@ -2357,20 +2463,72 @@ Visto en las capturas, ordenado por lo que más se nota:
     derivado sigue sin filtros. Se mantiene la comparación pantalla a pantalla.
 19. **`<select-one-or-new>` va en línea, no en un modal.** Ver arriba: el modal
     de Hobo 2 exigía tocar el controlador de cada aplicación.
+20. **Para los tags, nadie es `nil`.** El `current_user` de Hobo contesta un
+    `Guest`, que **está presente**, y los modelos generados dicen
+    `acting_user.present?`. El puente lo normaliza. Si alguna vez vuelve un
+    modelo al estilo Hobo 2 que llame a `acting_user.administrator?`, este es el
+    sitio donde mirar.
+21. **El selector de usuario se queda, y con tres cerrojos.** Imanol lo usa hoy
+    en otros proyectos y es lo que hace útiles los permisos. Ruta no dibujada en
+    producción + `config.hobo.developer_features` + comprobación en el
+    controlador.
 
 ## Lo siguiente, por orden
 
 Orden acordado con Imanol: cerrar el criterio de aceptación, luego empaquetar,
 y los textos al final.
 
-1. **Los filtros** del listado (decisión 18): los tags `<search-filter>` y
-   `<filter-menu>`, y el controlador pasando la colección por Ransack. Es lo
-   único del criterio de aceptación que falta entero.
-2. **La fusión en una sola gema** (decisión 11), que sigue pendiente.
-3. **El contrato de plugin** (pieza 17): con los tags en Ruby, definir un tag ya
-   es registrarlo, así que el contrato se encoge — falta escribirlo y probarlo.
-4. **Las cadenas de interfaz a inglés**, y detrás i18n. Al final a propósito:
-   es lo más mecánico y lo que menos se aprende haciendo.
+### 1. Los filtros del listado (decisión 18)
+
+Lo único del criterio de aceptación que falta entero. **No hay que derivar
+nada**: el índice sigue como está. Lo que hay que escribir son dos tags y una
+línea en el controlador.
+
+- **`<search-filter>`** — un formulario GET con un `<input type="search"
+  name="q">` y un botón. El de Hobo 2 está en
+  `/tmp/hobo2/hobo_rapid/taglibs/plus/search_filter.dryml`, son 14 líneas, y
+  lleva además un botón de **limpiar** que aparece solo si hay búsqueda, y
+  campos ocultos para no perder el resto de la query.
+- **`<filter-menu>`** — un `<select>` que se envía solo. **Ya está medio hecho**:
+  usa `rapid_autosubmit_controller` igual que `<dev-user-changer>`, que es el
+  patrón a copiar (mirar `Rapid.define(:dev_user_changer)` en
+  `hobo_rapid/lib/hobo_rapid/tags/structure.rb`).
+- **El controlador**: en `hobo_index` (o donde se arme la colección), pasarla
+  por Ransack — `model.ransack(params[:q]).result` — respetando los permisos que
+  ya se aplican. Falta añadir `ransack` a `hobo.gemspec`.
+- **Ojo con el nombre del parámetro**: Ransack usa `params[:q]`, y Hobo 2 usaba
+  `params[:search]`. Elegir el de Ransack y anotarlo.
+
+### 2. La fusión en una sola gema (decisión 11)
+
+`hobo_support`, `hobo_fields`, `dryml`, `hobo` y `hobo_rapid` pasan a ser una
+sola gema `hobo`. Lo que hay que tener en cuenta:
+
+- **El tema por defecto va dentro** (decisión 13): `hobo_bootstrap` también se
+  funde. Los temas *alternativos* siguen siendo gemas aparte.
+- Se tiran los andamiajes repetidos: cinco gemspec, cinco Gemfile, cinco
+  Rakefile, cinco `test_helper` (decisión 12 los daba por aceptados «hasta la
+  capa 7», y esto es la capa 7).
+- `classy_module` sigue en `hobo_support/lib/hobo_support/fixes/module.rb`
+  esperando a que caiga su último uso: **6 generadores de Thor** y
+  `hobo_support/lib/generators/hobo_support/{model,eval_template}.rb`. Esta es
+  la capa que los toca.
+- `dryml/lib/dryml/` entero (el compilador y su parser) **se conserva**: es el
+  front-end del actualizador de plantillas (decisión 6). No es código muerto.
+- Cuidado con `app_template.rb` y con `TestApp::GEMS` en
+  `hobo/test/prepare_testapp.rb`: los dos enumeran las gemas.
+
+### 3. El contrato de plugin (pieza 17)
+
+Con los tags en Ruby, **definir un tag ya es registrarlo**, así que el contrato
+se encoge muchísimo: un plugin es un Engine que requiere sus ficheros de tags y
+añade sus assets. Falta escribirlo y probarlo con uno de verdad.
+
+### 4. Las cadenas de interfaz a inglés, y detrás i18n
+
+Al final a propósito: es lo más mecánico y lo que menos se aprende haciendo.
+Están en `hobo_rapid/lib/hobo_rapid/derivation.rb` («Nuevo», «Editar», «Crear»,
+«Guardar», «Acciones», «Borrar», «Seguro?») y en `structure.rb`.
 
 ## Cómo mirar la aplicación con el navegador
 

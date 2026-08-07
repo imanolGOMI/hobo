@@ -1,25 +1,90 @@
-class DevController < ActionController::Base
+# Become somebody else, in development, in one click.
+#
+# This is the other half of the user changer in the navigation bar, and it is
+# the tool that makes Hobo's permissions worth writing: you declare
+# `view_permitted?` and then you *look*, as each person, without logging out and
+# in again. Checking permissions by logging in and out is checking them once.
+#
+# It is guarded three times over, and none of the three is redundant:
+#
+#   1. the route is not drawn in production (hobo/config/routes.rb),
+#   2. nor unless `config.hobo.developer_features` is on,
+#   3. and this checks again before doing anything.
+#
+# A way to become any user is a developer's tool. It has to be impossible to
+# switch on by accident, and hard to switch on on purpose.
+class DevController < (defined?(::ApplicationController) ? ::ApplicationController : ActionController::Base)
 
-  hobo_controller
+  # Rails 8's authentication generator puts `require_authentication` on every
+  # controller, and being sent to the login page is the one thing this must not
+  # do -- it exists precisely to change who is logged in.
+  allow_unauthenticated_access if respond_to?(:allow_unauthenticated_access)
 
   before_action :developer_modes_only
+  # ...and skipping that filter also skips reading the cookie, because Rails 8
+  # resumes the session *inside* it. Without this, "be nobody" had nothing to
+  # end: `terminate_session` went looking for `Current.session` and found nil.
+  # The same trap the model controllers fell into, one controller further on.
+  before_action :resume_session_if_any
 
   def set_current_user
-    model = params[:model] || Hobo::Model::UserBase.default_user_model
-    self.current_user = if params[:login]
-                          model.where(model.login_attribute => params[:login]).first
-                        else
-                          model.find(params[:id])
-                        end
-    redirect_to(request.env["HTTP_REFERER"] ? :back : home_page)
+    # A blank choice means "be nobody", which is the first option in the menu
+    # and how you look at your own application as a stranger sees it.
+    become(find_user)
+    redirect_back(:fallback_location => "/")
   end
 
   private
 
   def developer_modes_only
-    # Belt and braces. In addition to this check, the routes only get
-    # defined when developer_features is true
-    render :text => "Permission Denied", :status => 403 unless Rails.application.config.hobo.developer_features
+    return if !Rails.env.production? && Rails.application.config.hobo.developer_features
+    head :forbidden
+  end
+
+  def resume_session_if_any
+    send(:resume_session) if respond_to?(:resume_session, true)
+  rescue StandardError
+    nil
+  end
+
+  def user_model
+    %w[User Account].filter_map { |name| Object.const_get(name) rescue nil }.first
+  end
+
+  # Found by whatever the application calls the thing people log in with, the
+  # same list the first-user page uses.
+  def find_user
+    model = user_model
+    return nil if model.nil?
+    return model.find_by(:id => params[:id]) if params[:id].present?
+
+    field = (%w[email_address email login name] & model.column_names).first
+    return nil if field.nil?
+    value = params[field]
+    return nil if value.blank?
+    model.find_by(field => value)
+  end
+
+  # Whichever session the application has. Rails 8's generator gives
+  # `start_new_session_for`; an application on Hobo's own user model has
+  # `current_user=` instead. A blank choice means "be nobody", which is how you
+  # look at your own application as a stranger sees it.
+  def become(user)
+    if user.nil?
+      terminate
+    elsif respond_to?(:start_new_session_for, true)
+      send(:start_new_session_for, user)
+    elsif respond_to?(:current_user=, true)
+      self.current_user = user
+    end
+  end
+
+  def terminate
+    if respond_to?(:terminate_session, true)
+      send(:terminate_session)
+    elsif respond_to?(:current_user=, true)
+      self.current_user = nil
+    end
   end
 
 end
