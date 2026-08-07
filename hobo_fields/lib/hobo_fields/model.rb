@@ -83,23 +83,19 @@ module HoboFields
     end
 
 
-    # Extend belongs_to so that it creates a FieldSpec for the foreign key
-    def self.belongs_to_with_field_declarations(name, *args, &block)
-      if args.size == 0 || (args.size == 1 && args[0].kind_of?(Proc))
-          options = {}
-          args.push(options)
-      elsif args.size == 1
-          options = args[0]
-      else
-          options = args[1]
-      end
+    # Extend belongs_to so that it creates a FieldSpec for the foreign key.
+    #
+    # Since Rails 5 the signature is belongs_to(name, scope = nil, **options):
+    # options are keyword arguments, not a positional hash. Passing the hash
+    # positionally makes Rails take it for the scope and ask it for its arity.
+    def self.belongs_to_with_field_declarations(name, scope = nil, **options, &block)
       column_options = {}
       column_options[:null] = options.delete(:null) if options.has_key?(:null)
       column_options[:comment] = options.delete(:comment) if options.has_key?(:comment)
 
       index_options = {}
       index_options[:name] = options.delete(:index) if options.has_key?(:index)
-      bt = belongs_to_without_field_declarations(name, *args, &block)
+      bt = belongs_to_without_field_declarations(name, scope, **options, &block)
       refl = reflections[name.to_s]
       fkey = refl.foreign_key
       declare_field(fkey.to_sym, :integer, column_options)

@@ -7,7 +7,6 @@ require "test_helper"
 class ApiTest < Minitest::Test
 
   def setup
-    connection = ActiveRecord::Base.connection
     connection.drop_table(:adverts, :if_exists => true)
     connection.create_table :adverts do |t|
       t.string :title
@@ -18,18 +17,15 @@ class ApiTest < Minitest::Test
 
   # A fresh named class per test, so declarations never leak between them.
   def advert_class(&block)
-    klass = Class.new(ActiveRecord::Base) do
+    define_model(:Advert) do
       self.table_name = "adverts"
+      class_eval(&block) if block
     end
-    Object.const_set(:Advert, klass)
-    @advert_defined = true
-    klass.class_eval(&block) if block
-    klass
   end
 
   def teardown
-    Object.send(:remove_const, :Advert) if @advert_defined && Object.const_defined?(:Advert)
-    ActiveRecord::Base.connection.drop_table(:adverts, :if_exists => true)
+    super
+    connection.drop_table(:adverts, :if_exists => true)
   end
 
   def basic_advert

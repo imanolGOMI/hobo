@@ -3,11 +3,11 @@ GEMS_ROOT = File.expand_path('../')
 
 # Gems whose suite has already been ported to minitest. Each layer of the plan
 # adds its own gem here once its suite is green; see PLAN.md.
-PORTED_GEMS = %w[hobo_support]
+PORTED_GEMS = %w[hobo_support hobo_fields]
 
 # Gems still carrying the pre-2026 suites (rubydoctest / irt / cucumber), not
 # yet runnable on Ruby 3.4. Listed so the gap stays visible.
-PENDING_GEMS = %w[hobo_fields dryml hobo]
+PENDING_GEMS = %w[dryml hobo]
 
 desc "Run the test suite of every ported gem"
 task :test do |t|

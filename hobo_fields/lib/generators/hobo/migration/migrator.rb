@@ -75,8 +75,12 @@ module Generators
         attr_accessor :renames
 
 
+        # The generator has to see every model, and with Zeitwerk a model that
+        # has not been referenced yet is simply not loaded. Outside a Rails
+        # application -- a console, a test -- there is nothing to eager load,
+        # and whatever is already defined is all there is.
         def load_rails_models
-          Rails.application.eager_load!
+          Rails.application.eager_load! if defined?(Rails) && Rails.application
         end
 
 
@@ -84,7 +88,10 @@ module Generators
         # ActiveRecord::Base, excluding anything in the CGI module
         def table_model_classes
           load_rails_models
-          ActiveRecord::Base.send(:descendants).reject {|c| (c.base_class != c) || c.name.starts_with?("CGI::") }
+          ActiveRecord::Base.descendants.reject do |c|
+            # Anonymous classes have no name at all, so ask about the name last.
+            c.base_class != c || c.name.nil? || c.name.starts_with?("CGI::")
+          end
         end
 
 
@@ -94,8 +101,10 @@ module Generators
         def connection; self.class.connection; end
 
 
+        # adapter_name is the adapter's own public answer; the class name is
+        # not, and Rails has moved the adapter classes around more than once.
         def self.fix_native_types(types)
-          case connection.class.name
+          case connection.adapter_name
           when /mysql/i
             types[:integer][:limit] ||= 11
           end
@@ -289,7 +298,7 @@ module Generators
 
           db_columns = model.connection.columns(current_table_name).index_by{|c|c.name}
           key_missing = db_columns[model.primary_key].nil? && model.primary_key
-          db_columns -= [model.primary_key]
+          db_columns = db_columns.except(model.primary_key)
 
           model_column_names = model.field_specs.keys.map(&:to_s)
           db_column_names = db_columns.keys.map(&:to_s)
@@ -297,7 +306,9 @@ module Generators
           to_add = model_column_names - db_column_names
           to_add += [model.primary_key] if key_missing && model.primary_key
           to_remove = db_column_names - model_column_names
-          to_remove = to_remove - [model.primary_key.to_sym] if model.primary_key
+          # to_remove holds strings, so the primary key has to be compared as
+          # one -- subtracting a symbol here never removed anything.
+          to_remove = to_remove - [model.primary_key.to_s] if model.primary_key
 
           to_rename = extract_column_renames!(to_add, to_remove, new_table_name)
 
@@ -402,9 +413,15 @@ module Generators
         end
 
 
+        # The schema dumper has to come from the adapter, not from
+        # ActiveRecord::SchemaDumper.new: dumping a table calls
+        # column_spec_for_primary_key, which lives in the adapter's own dumper
+        # subclass. Built by hand it is missing, and since Rails 8 that does not
+        # raise -- it writes a comment into the migration instead, so the whole
+        # `down` came out without column types and only failed when run.
         def revert_table(table)
           res = StringIO.new
-          ActiveRecord::SchemaDumper.send(:new, ActiveRecord::Base.connection).send(:table, table, res)
+          connection.create_schema_dumper({}).send(:table, table, res)
           res.string.strip.gsub("\n  ", "\n")
         end
 

@@ -469,6 +469,58 @@ direcciones cuentan.
 de bien, pero `class_attribute` **además define un writer de instancia**, efecto
 que Hobo no quiere. Evitable con `:instance_writer => false`, pero no es gratis.
 
+### Capa 2
+
+**Rails 8 lo hace mejor → fuera:**
+
+| Hobo | Nativo | Nota |
+|---|---|---|
+| Sobreescribir `_read_attribute` y `define_method_attribute=` | **Attributes API** (`attribute name, TypeObject`) | Desde Rails 4.2. Se van 47 líneas de parches. Y los dos parches estaban **rotos**: `define_method_attribute=` cambió a `(canonical_name, owner:, as:)`, y la versión de Hobo de `_read_attribute` **se comía el bloque** que Rails le pasa |
+| `BlankSlate` | `BasicObject` | Existe justo para esto |
+| `case connection.class.name` | `connection.adapter_name` | La clase del adaptador ha cambiado de sitio varias veces |
+| `ActiveRecord::Base.send(:descendants)` | `descendants` es **público** | |
+| `ActiveRecord::SchemaDumper.new` a mano | `connection.create_schema_dumper({})` | Fallo nº1 de `HALLAZGOS.md`, reproducido en vivo |
+
+**Hobo lo hace mejor → se queda:** ver «¿Merece la pena `hobo_fields` en 2026?».
+
+### Lo que se hizo en la capa 2
+
+`hobo_fields` **carga y funciona sobre Ruby 3.4 y Rails 8.1**. **50 pruebas
+minitest, 116 aserciones, en verde** (3 *skip* por `kramdown` y `RedCloth`, que
+no están instaladas).
+
+**Roturas de carga arregladas:** `FieldDeclarationDsl` heredaba de `BlankSlate`
+(borrado en la capa 1) → `BasicObject`, con sus constantes ancladas en la raíz
+porque `BasicObject` no tiene `Object` en su cadena. Los tipos se requerían por
+orden alfabético, así que `html_string` cargaba antes que su padre
+`raw_html_string`. `sanitize_html` no requería `action_view`.
+
+**Fallos reales encontrados y corregidos:**
+
+| Dónde | Qué |
+|---|---|
+| `migrator.rb` `revert_table` | El fallo nº1 de HALLAZGOS, **reproducido**: con el volcador construido a mano, Rails 8 no lanza, escribe un comentario — y el `down` salía **sin tipos de columna**, con `add_column :adverts, :body,` a medias |
+| `migrator.rb` `load_rails_models` | `Rails.application.eager_load!` sin guarda: fuera de una app Rails no arrancaba |
+| `migrator.rb` `table_model_classes` | `c.name.starts_with?` revienta con clases anónimas, que tienen `name` a `nil` |
+| `migrator.rb:309` | `to_remove - [primary_key.to_sym]` sobre un array de **cadenas**: no quitaba nada nunca |
+| `model.rb` `belongs_to` | Desde Rails 5 la firma es `(name, scope = nil, **options)`. Hobo pasaba el hash **posicionalmente**, así que Rails lo tomaba por el scope y le pedía `arity` |
+| `model.rb:65` | `public` sin argumentos dentro de un método: desde Ruby 3.0 no hace nada |
+| Dos `.try.` **sin receptor** | Se escaparon de la capa 1 porque el regex exigía un punto delante |
+| `migrator.rb:301` | `db_columns -= [...]` sobre un **Hash**: baja de la poda de la capa 1 |
+
+**La batería de la Deuda 1 existe.** `migration_generator_test.rb` no compara
+texto: **ejecuta** el `up`, comprueba que el esquema cambió, **ejecuta** el
+`down` y comprueba que vuelve exactamente al estado anterior — comparando
+nombre, tipo, `limit`, `default`, `null`, `precision`, `scale` e índices.
+
+**Aislamiento entre pruebas:** quitar la constante de un modelo **no basta**. El
+`DescendantsTracker` sigue guardando la clase, y el generador recorre
+`descendants`. Sin `ActiveSupport::DescendantsTracker.clear`, un modelo definido
+en un fichero de pruebas aparece en todos los siguientes.
+
+Quedan sin portar `generators.rdoctest` e `interactive_primary_key.rdoctest`:
+necesitan generadores de Rails y una app de verdad, así que van a la **capa 7**.
+
 ### Cómo correr las pruebas
 
 ```sh
