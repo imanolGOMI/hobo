@@ -1,5 +1,10 @@
+require_relative 'hobo_helper_base'
+
 module HoboRouteHelper
-  include Rails.application.routes.url_helpers
+  # `include Rails.application.routes.url_helpers` used to be here, which meant
+  # this file could not even be *loaded* without a booted application. It is not
+  # needed: the module is mixed into controllers, and a controller already has
+  # the application's url helpers.
   extend HoboHelperBase
     def object_url(obj, *args)
       new_ = object_url_new(obj, *args)

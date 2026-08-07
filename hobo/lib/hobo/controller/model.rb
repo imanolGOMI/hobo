@@ -1,3 +1,9 @@
+# Bundler only requires the gems an application lists itself, not the ones its
+# gems depend on -- so a gem has to require what it uses. `respond_to` and
+# `respond_with` at class level came out of Rails core in 5.0.
+require 'responders'
+require 'hobo/controller'
+
 module Hobo
   module Controller
     module Model
@@ -459,7 +465,9 @@ module Hobo
     # automatic `order_by` scope instead, and that scope is gone (piece 6). It
     # is applied here now, with the relation's own `order`.
     def find_or_paginate(finder, options)
-      options = options.reverse_merge(:paginate => request_requires_pagination?)
+      # Only ask the request when the caller has not already decided: this is
+      # otherwise the one line that makes the method need a live request.
+      options[:paginate] = request_requires_pagination? unless options.key?(:paginate)
       do_pagination = options.delete(:paginate) && finder.respond_to?(:paginate)
       finder = Array.wrap(options.delete(:scope)).inject(finder) { |a, v| a.send(*Array.wrap(v).flatten) }
 

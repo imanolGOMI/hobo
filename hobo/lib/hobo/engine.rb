@@ -20,7 +20,14 @@ module Hobo
     end
 
     ActiveSupport.on_load(:action_controller) do
+      require 'hobo/controller'
       require 'hobo/extensions/action_controller/hobo_methods'
+    end
+
+    # This was hooked on :action_controller, which meant it ran whenever a
+    # controller loaded -- and its first line is `ActionMailer::Base.send
+    # :include`, so it blew up wherever ActionMailer had not been loaded too.
+    ActiveSupport.on_load(:action_mailer) do
       require 'hobo/extensions/action_mailer/helper'
     end
 
@@ -49,7 +56,13 @@ module Hobo
       require 'hobo/undefined'
       HoboFields.never_wrap(Hobo::Undefined)
       h = config.hobo
-      Dryml::DrymlGenerator.enable([h.rapid_generators_path], h.auto_taglibs_path)
+      # The auto-taglib generator belongs to the old DRYML compiler, which is no
+      # longer loaded (see dryml/lib/dryml.rb). Generating the views is layers 5
+      # to 7, on the new runtime; until then an application boots without it
+      # rather than not booting at all.
+      if defined?(Dryml::DrymlGenerator)
+        Dryml::DrymlGenerator.enable([h.rapid_generators_path], h.auto_taglibs_path)
+      end
     end
 
     initializer 'hobo.i18n' do |app|
@@ -59,7 +72,7 @@ module Hobo
     initializer 'hobo.routes' do |app|
       h = app.config.hobo
       # generate at first boot, so no manual generation is required
-      unless File.exists?(h.routes_path)
+      unless File.exist?(h.routes_path)
         raise Hobo::Error, "No #{h.routes_path} found!" if h.read_only_file_system
         Rails::Generators.invoke('hobo:routes', %w[-f -q])
       end
@@ -69,11 +82,13 @@ module Hobo
       end
     end
 
+    # Regenerating the auto taglibs on every reload belongs to the old DRYML
+    # compiler, which is not loaded any more. Layers 5 to 7 bring this back on
+    # the new runtime; until then an application boots without it.
     initializer 'hobo.dryml' do |app|
+      next unless defined?(Dryml::DrymlGenerator)
       unless app.config.hobo.read_only_file_system
-        app.config.to_prepare do
-          Dryml::DrymlGenerator.run
-        end
+        app.config.to_prepare { Dryml::DrymlGenerator.run }
       end
     end
 

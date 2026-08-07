@@ -1,3 +1,5 @@
+require_relative 'hobo_helper_base'
+
 module HoboPermissionsHelper
   extend HoboHelperBase
   protected

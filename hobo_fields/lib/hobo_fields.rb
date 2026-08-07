@@ -1,7 +1,14 @@
 require 'hobo_support'
 
-ActiveSupport::Dependencies.autoload_paths |= [ File.dirname(__FILE__) ]
-ActiveSupport::Dependencies.autoload_once_paths |= [ File.dirname(__FILE__) ]
+# This used to put the gem's own lib/ into ActiveSupport::Dependencies so the
+# classic autoloader would resolve HoboFields::Model and friends. That
+# autoloader is gone; what survives of autoload_paths is the list Rails hands to
+# **Zeitwerk**, so the line no longer autoloaded anything -- it registered lib/
+# as a Zeitwerk root, and Zeitwerk refused to start the application because the
+# same tree was claimed twice.
+#
+# It only showed up inside a real Rails application, which is what the test app
+# of layer 4 is for. The gem says what it needs, below.
 
 module Hobo
   # Empty class to represent the boolean type.

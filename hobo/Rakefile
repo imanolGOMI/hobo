@@ -6,6 +6,14 @@ Rake::TestTask.new(:test) do |t|
   t.warning = false
 end
 
+namespace :test do
+  desc "Build the Rails test application in tmp (force=1 to rebuild)"
+  task :app do
+    require_relative "test/prepare_testapp"
+    TestApp.build(:force => !ENV["force"].nil?)
+  end
+end
+
 task :default => :test
 
 # The pre-2026 suites are kept, not run: test/doctest (rubydoctest) and

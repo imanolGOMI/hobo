@@ -1,3 +1,5 @@
+require 'hobo/controller/model'
+
 require 'generators/hobo_support/eval_template'
 
 module Hobo

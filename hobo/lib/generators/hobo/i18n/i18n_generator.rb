@@ -13,7 +13,7 @@ module Hobo
 
     def check_supported_locales
       locales.each do |l|
-        unless File.exists?(File.join(self.class.source_root, "hobo.#{l}.yml") )
+        unless File.exist?(File.join(self.class.source_root, "hobo.#{l}.yml") )
           say "The locale '#{l}' is not supported by Hobo!"
           exit
         end

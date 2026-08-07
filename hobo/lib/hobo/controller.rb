@@ -1,3 +1,15 @@
+# The helpers live in app/, which in a Rails application Zeitwerk manages -- but
+# these are named from lib/ while a controller class is being defined, before
+# any of that has happened. Naming them out loud is what the classic autoloader
+# used to do behind our backs.
+helpers = File.expand_path('../../../app/helpers', __FILE__)
+require File.join(helpers, 'hobo_route_helper')
+require File.join(helpers, 'hobo_translations_helper')
+require File.join(helpers, 'hobo_translations_normalizer_helper')
+require File.join(helpers, 'hobo_permissions_helper')
+require 'hobo/controller/authentication_support'
+require 'hobo/controller/cache'
+
 module Hobo
 
   module Controller
@@ -15,6 +27,7 @@ module Hobo
 
       def included_in_class(klass)
         klass.extend(ClassMethods)
+        klass.extend(HiddenActions)
         klass.class_eval do
           before_action :login_from_cookie
           prepend ObjectUrlRedirect
@@ -36,6 +49,26 @@ module Hobo
       end
 
     end
+
+    # What `hide_action` used to do: keep the helper methods a controller mixes
+    # in from becoming actions anybody can request.
+    module HiddenActions
+
+      def hobo_hidden_action_methods
+        @hobo_hidden_action_methods ||=
+          if superclass.respond_to?(:hobo_hidden_action_methods)
+            superclass.hobo_hidden_action_methods.dup
+          else
+            Set.new
+          end
+      end
+
+      def action_methods
+        super - hobo_hidden_action_methods
+      end
+
+    end
+
 
     module ClassMethods
 

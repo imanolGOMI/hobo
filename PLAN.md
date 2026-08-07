@@ -946,7 +946,13 @@ rake test              # todas las gemas ya portadas
 rake test_integration  # agility_bootstrap (no arrancara hasta la capa 5-6)
 cd hobo_support && rake test
 cd dryml         && rake test   # runtime de tags y contrato de params
+cd hobo          && rake test:app && rake test   # con aplicacion Rails de verdad
 ```
+
+La aplicación de pruebas de la capa 4 se monta en `/tmp/hobo_testapp` con
+`rake test:app` (o `rake test:app force=1` para rehacerla). Sin ella, las pruebas
+de `hobo/test/integration/` **saltan diciendo cómo montarla**; nunca pasan en
+silencio.
 
 ---
 
@@ -1285,14 +1291,73 @@ cadena de Rails** en vez de renombrarla.
 > la lista blanca**, así que es donde toca decir que la cadena es deliberada, en
 > vez de depender de hacia dónde se incline Rails cada año.
 
+## Cómo se prueban los controladores: los dos niveles (2026-08-07)
+
+Decidido por Imanol: **las dos cosas**. Pruebas que no necesitan aplicación
+siempre que se pueda, **y** una aplicación Rails de verdad en `tmp` para
+verificar lo que solo se ve arrancando.
+
+### Nivel 1 — sin aplicación
+
+`hobo/test/hobo/controller_test.rb`, **15 pruebas**. Un controlador se define,
+declara sus `auto_actions` y contesta a `parse_sort_param` y `find_or_paginate`
+sin que exista ninguna aplicación.
+
+**Hasta hoy eso era imposible**, y por un motivo concreto:
+`app/helpers/hobo_route_helper.rb` hacía `include
+Rails.application.routes.url_helpers` **en la primera línea del módulo**, así que
+el fichero no se podía ni cargar sin una aplicación arrancada. No hacía falta: el
+módulo se mezcla en controladores, y un controlador ya tiene los helpers de rutas
+de su aplicación.
+
+Ahí apareció además que **`hide_action` desapareció en Rails 5**, y sí importaba:
+todo lo público que un controlador recibe es una acción enrutable, así que sin
+sustituto **`object_url` y compañía quedaban accesibles por HTTP**. Se recoge la
+lista de nombres al mezclar cada helper y se resta en `action_methods`. Hay
+prueba, y de la herencia también.
+
+### Nivel 2 — con una aplicación de verdad
+
+```sh
+cd hobo && rake test:app     # la monta en /tmp/hobo_testapp
+cd hobo && rake test         # las de integracion dejan de saltar
+```
+
+Es una aplicación **Rails 8 pelada** con las cuatro gemas apuntando al árbol de
+trabajo. `hobo new` es de la capa 7, y esto tiene que funcionar antes que aquello.
+
+**Cuando no está montada, las pruebas saltan diciendo cómo montarla.** Nunca
+pasan en silencio: es la misma regla que puso la capa 2 con los adaptadores de
+base de datos.
+
+Va fuera del árbol de la gema a propósito: una aplicación anidada dentro del
+directorio del engine **hace que Zeitwerk se niegue a arrancar**, porque el mismo
+árbol queda reclamado dos veces.
+
+### Y encontró cinco cosas que ninguna prueba unitaria podía ver
+
+| Qué | Dónde |
+|---|---|
+| **`gem "dryml"` no cargaba en ninguna aplicación.** `Bundler.require` carga el punto de entrada de cada gema, y el de `dryml` seguía siendo el compilador viejo, que pide `erubis` | Ahora `lib/dryml.rb` carga el runtime de la capa 3; el compilador se muda a `lib/dryml/legacy.rb` y **solo se carga a propósito** |
+| **`hobo_fields` impedía arrancar cualquier aplicación.** Metía su `lib/` en `autoload_paths`, que en Rails 8 es la lista que lee **Zeitwerk**: registraba el árbol dos veces y Zeitwerk se plantaba. **La capa 2 dio esta gema por terminada y solo una aplicación real podía verlo** | Fuera, con `require` explícitos, como se hizo en `hobo` |
+| La extensión de **ActionMailer** colgaba del gancho `on_load(:action_controller)`, y su primera línea es `ActionMailer::Base.send :include` | A `on_load(:action_mailer)` |
+| **`File.exists?`** ya no existe en Ruby 3.4 | `File.exist?`, en 2 ficheros |
+| Un gema **debe requerir lo que usa**: Bundler solo requiere lo que la aplicación lista, no las dependencias de sus gemas | `responders` y `ransack`, ahora requeridas por Hobo |
+
+Y tres sitios más donde faltaban `require` por el autocargador clásico:
+`hobo/controller.rb`, los cuatro helpers de `app/helpers`, y el generador de rutas.
+
+Los dos inicializadores que llaman al compilador viejo de DRYML quedan **guardados
+con `defined?`**: una aplicación arranca sin generar taglibs, en vez de no
+arrancar. Vuelven en las capas 5 a 7 sobre el runtime nuevo.
+
 ### Lo que queda de la pieza 11
 
-Lo hecho es la mitad de abajo: la que se puede probar sin levantar una petición.
-Falta la de arriba —las acciones automáticas de verdad (`hobo_index`,
-`hobo_show`, `hobo_create`…), `auto_actions`, y las 4 `alias_method_chain` de
-`user_base.rb`, `find_for.rb` y `relation_with_origin.rb`— y para eso hay que
-**decidir cómo se prueban los controladores**: hoy no hay ni una aplicación de
-Rails en el banco de esta gema. Es la primera pregunta de la próxima sesión.
+**Una petición ya recorre la pila entera de Hobo y recibe respuesta: 403.** Es
+una respuesta de verdad —la comprobación de permisos la deniega—, no un 500, y
+está fijada en la prueba de integración. **Hacer que un índice conteste 200 es el
+siguiente paso.** Después, las 4 `alias_method_chain` de `user_base.rb`,
+`find_for.rb` y `relation_with_origin.rb`.
 
 ### Lo que queda de la capa 4
 

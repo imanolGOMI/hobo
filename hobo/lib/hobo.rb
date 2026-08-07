@@ -8,6 +8,9 @@ require 'hobo_fields'
 # (Dryml.page, .get, .empty, .precompile, Dryml::DrymlGenerator). They belong to
 # layers 5 to 7 and will fail loudly when reached, which is what we want.
 require 'rapid'
+# Ransack answers what the automatic scopes of piece 6 used to: see
+# Hobo::Model.ransackable_attributes and hobo_completions.
+require 'ransack'
 begin
   gem 'hobo_will_paginate'
 rescue Gem::LoadError => e
@@ -95,6 +98,7 @@ module Hobo
 end
 
 require 'hobo/model'
+require 'hobo/routes'
 require 'hobo/engine'
 
 
