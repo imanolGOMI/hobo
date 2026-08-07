@@ -18,6 +18,11 @@ module Hobo
           end
 
           def lifecycle(*args, &block)
+            # With no block this is a reader, not a declaration. It used to fall
+            # through to `dsl.instance_eval(&nil)` and die with an ArgumentError
+            # about instance_eval, which told nobody anything.
+            return has_lifecycle? ? self::Lifecycle : nil if block.nil?
+
             options = args.extract_options!
             options = options.reverse_merge(:state_field => :state,
                                             :key_timestamp_field => :key_timestamp,
@@ -123,3 +128,13 @@ module Hobo
     end
   end
 end
+
+# At the end, not the top: the files below reopen Hobo::Model::Lifecycles, and
+# ModelExtensions only names Lifecycle and DeclarationDSL when it runs. Until
+# Rails 7 the classic autoloader brought them in on first reference; that is
+# gone, so the file says what it needs.
+require 'hobo/model/lifecycles/actions'
+require 'hobo/model/lifecycles/state'
+require 'hobo/model/lifecycles/transition'
+require 'hobo/model/lifecycles/creator'
+require 'hobo/model/lifecycles/lifecycle'

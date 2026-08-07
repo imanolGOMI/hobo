@@ -61,23 +61,30 @@ module Hobo
           end
         end
 
-        def paginate?(arg=nil)
-          if arg.nil?
-            @paginate ||= !sortable?
-          else
-            @paginate = arg
-          end
+        # `||=` cannot tell "nobody said" from "somebody said false", so
+        # `paginate? false` used to be overwritten by the default the very next
+        # time anybody asked: **pagination could not be turned off**. Same for
+        # `sortable?`. The check is against nil now.
+
+        def paginate?(arg = nil)
+          return @paginate = arg unless arg.nil?
+          @paginate = !sortable? if @paginate.nil?
+          @paginate
         end
 
-        def sortable?(arg=nil)
-          if arg.nil?
-            @sortable ||= defined?(ActiveRecord::Acts::List::InstanceMethods) &&
-                          model < ActiveRecord::Acts::List::InstanceMethods &&
-                          model.table_exists? &&
-                          model.new.try(:scope_condition) == "1 = 1"
-          else
-            @sortable = arg
-          end
+        def sortable?(arg = nil)
+          return @sortable = arg unless arg.nil?
+          @sortable = acts_as_list_model? if @sortable.nil?
+          @sortable
+        end
+
+        # acts_as_list is not a dependency, so this has to answer false when the
+        # gem is not there rather than blow up.
+        def acts_as_list_model?
+          defined?(ActiveRecord::Acts::List::InstanceMethods) &&
+            model < ActiveRecord::Acts::List::InstanceMethods &&
+            model.table_exists? &&
+            model.new.try(:scope_condition) == "1 = 1"
         end
 
         def _name

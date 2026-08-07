@@ -334,6 +334,25 @@ module Hobo
       end
 
 
+      # The fields the user may never assign, whatever the permissions say: the
+      # lifecycle's state field, the authentication fields. It is the small part
+      # of the old protected_attributes gem that Hobo actually used, and it is
+      # asked about a *field*, by the form builder, before any parameters exist
+      # -- which is why strong parameters do not answer it.
+      def attr_protected(*names)
+        protected_attributes.merge(names.map(&:to_s))
+      end
+
+      def protected_attributes
+        @protected_attributes ||=
+          if superclass.respond_to?(:protected_attributes)
+            superclass.protected_attributes.dup
+          else
+            Set.new
+          end
+      end
+
+
       def view_hints
         class_name = "#{name}Hints"
         class_name.safe_constantize or Object.class_eval("class #{class_name} < Hobo::Model::ViewHints; end; #{class_name}")

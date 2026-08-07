@@ -1187,26 +1187,73 @@ apaño con métodos singleton porque **Rails no tiene gancho de lectura**. No es
 deuda nueva; es la que ya estaba anotada. Funciona, y se decide qué hacer con
 ello cuando la capa 5 enseñe cuánto se usa de verdad.
 
+## Piezas 5 y 7 hechas: lifecycles y view hints (2026-08-07)
+
+**44 pruebas minitest en verde** en `hobo` (15 de permisos, 16 de view hints,
+13 de lifecycles). Las dos piezas se quedan tal cual decía el veredicto; el
+trabajo ha sido **hacerlas funcionar en Rails 8 y dejarlas escritas**.
+
+### Pieza 7, view hints: un fallo que las inutilizaba a medias
+
+`paginate?` y `sortable?` guardaban su valor con `@x ||= …`, que **no distingue
+«nadie lo ha dicho» de «alguien ha dicho `false`»**. Así que
+`view_hints.paginate? false` se quedaba puesto hasta que alguien preguntaba, y
+entonces el valor por defecto lo pisaba: **la paginación no se podía apagar.**
+Comprobado con una prueba antes de arreglarlo.
+
+Lo demás está sano y ahora está descrito: la clase de hints se fabrica bajo
+demanda, `children` se resuelve **en la lectura y no en la declaración** —para no
+forzar la carga del modelo hijo mientras el padre se está cargando—, declarar los
+hijos le enseña al hijo quién es su padre sin pisar el que ya tuviera, y
+`inline_booleans true` significa «todas las columnas booleanas».
+
+Los cuatro métodos de traducción siguen lanzando `NotImplementedError` con la
+clave de i18n que hay que usar en su lugar, que es la forma correcta de retirar
+algo.
+
+### Pieza 5, lifecycles: `attr_protected` y un lector que no existía
+
+Lo que rompía era **`attr_protected`**, que Rails se llevó a la gema
+`protected_attributes` en Rails 4 y que está sin mantener desde 2016. Lo usan el
+campo de estado del lifecycle, su `key_timestamp` y los campos de autenticación.
+
+`attribute_protected?` de los permisos colgaba de eso mismo, más de
+`accessible_attributes` y `attributes_protected_by_default`.
+
+**La respuesta de Rails son los parámetros fuertes, y no sirve aquí**: la
+pregunta no la hace el controlador sobre unos parámetros, la hace **el
+constructor de formularios sobre un campo**, antes de que exista ningún
+parámetro. Así que Hobo se queda con su propia lista —`Hobo::Model.attr_protected`
+y `protected_attributes`, heredable— que es la parte pequeña de aquella gema que
+de verdad usaba.
+
+Y `Model.lifecycle` **sin bloque** no era un lector: caía en
+`dsl.instance_eval(&nil)` y moría con un `ArgumentError` sobre `instance_eval`
+que no le decía nada a nadie. Ahora devuelve la clase `Lifecycle`, que es lo que
+cualquiera espera al escribirlo.
+
+Los ficheros de `lifecycles/` tampoco se requerían entre sí: otra víctima del
+autocargador clásico.
+
 ### Lo que queda de la capa 4
 
 Por orden, y con lo que ya se sabe:
 
-1. **Piezas 5 y 7**, lifecycles y view hints, que son las más independientes.
-2. **Pieza 11, auto-actions** (`controller/model.rb`, 889 líneas), donde hay que
+1. **Pieza 11, auto-actions** (`controller/model.rb`, 889 líneas), donde hay que
    sustituir los dos scopes automáticos por Ransack.
 3. **Pieza 12, router**, con el agravante de la carga ansiosa por `descendants`.
-4. **Pieza 14, subsites**, que es transversal y va la última.
+3. **Pieza 14, subsites**, que es transversal y va la última.
 
 Quedan **13 `alias_method_chain`**, repartidos así, y cada uno cae con su pieza:
 
 | Fichero | Cuántos | Pieza |
 |---|---:|---|
 | `controller/user_base.rb` | 3 | 11 |
-| `extensions/active_record/relation_with_origin.rb` | 2 | 5 y 7 |
+| `extensions/active_record/relation_with_origin.rb` | 2 | 11 |
 | `controller.rb`, `controller/model.rb` | 2 | 11 |
 | `extensions/active_model/{name,translation}.rb` | 2 | 7 |
 | `extensions/{enumerable,i18n}.rb` | 2 | 7 |
-| `extensions/active_record/associations/reflection.rb` | 1 | 5 |
+| `extensions/active_record/associations/reflection.rb` | 1 | 11 |
 | `model/find_for.rb` | 1 | 11 |
 
 ## Lo que ya se sabía antes de empezar la capa 4

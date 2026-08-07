@@ -233,20 +233,25 @@ module Hobo
       end
 
 
+      # Whether the user is allowed nowhere near this attribute, whatever the
+      # permissions say. It is what keeps the lifecycle's state field, and the
+      # authentication fields, out of the generated forms.
+      #
+      # This used to lean on `attr_protected`, `accessible_attributes` and
+      # `attributes_protected_by_default`, all of which Rails moved out to the
+      # protected_attributes gem in Rails 4 and which has been unmaintained
+      # since 2016. Rails' answer is strong parameters, in the controller -- but
+      # the question here is asked by the *form builder*, about a field, before
+      # any parameters exist. So Hobo keeps its own list, which is all it ever
+      # used of that gem. See `attr_protected` in Hobo::Model::ClassMethods.
       def attribute_protected?(attribute)
         return false if attribute.nil?
         attribute = attribute.to_s
 
-        return true if self.class.send(:attributes_protected_by_default).include? attribute
-
-        if !self.class.accessible_attributes.empty?
-          return true if !self.class.accessible_attributes.include?(attribute)
-        elsif self.class.protected_attributes
-          return true if self.class.protected_attributes.include?(attribute)
-        end
+        return true if self.class.protected_attributes.include?(attribute)
 
         # Readonly attributes can be set on creation but not thereafter
-        return self.class.readonly_attributes.include?(attribute) if !new_record? && self.class.readonly_attributes
+        return self.class.readonly_attributes.include?(attribute) unless new_record?
 
         false
       end
