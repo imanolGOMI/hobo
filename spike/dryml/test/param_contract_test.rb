@@ -120,6 +120,15 @@ module Fixtures
     call_tag(:page, { :title => attributes[:title] }, :as => :page)
   end
 
+  # The fixture of dryml/features/cookbook/06_pseudo_parameters.feature, so the
+  # tests below can be read against the specification.
+  Rapid.define(:pseudo_page, :attrs => [:title]) do
+    tag("body") do
+      tag("h1", {}, :heading) { text attributes[:title] }
+      tag("div", {}, :content)
+    end
+  end
+
   Rapid.define(:view) { text this.to_s }
   Rapid.define_for(:view, Integer) { text "##{this}" }
   Rapid.define_for(:view, String)  { text this.upcase }
@@ -362,6 +371,89 @@ class TablePlusContractTest < Minitest::Test
 
     refute_includes without, %(<th class="controls">)
     assert_includes with, %(<th class="controls">)
+  end
+
+end
+
+
+# --- the pseudo-parameters ----------------------------------------------------
+#
+# The scenarios of dryml/features/cookbook/06_pseudo_parameters.feature, which
+# is the specification. `append-` and `prepend-` go *inside*, around the
+# content; `before-` and `after-` go *outside*, around the whole element.
+
+class PseudoParameterTest < Minitest::Test
+  include ParamContract::Assertions
+
+  def page(**params) = Rapid.render(:pseudo_page, { :title => "A Blog Post" }, **params)
+
+  def test_append_adds_after_the_content_inside_the_element
+    assert_includes page(:append_heading => Rapid.markup { text " -- The Hobo Blog" }),
+                    "<h1>A Blog Post -- The Hobo Blog</h1>"
+  end
+
+  def test_prepend_adds_before_the_content_inside_the_element
+    assert_includes page(:prepend_heading => Rapid.markup { text "The Hobo Blog -- " }),
+                    "<h1>The Hobo Blog -- A Blog Post</h1>"
+  end
+
+  def test_before_adds_outside_the_element
+    assert_includes page(:before_heading => Rapid.markup { tag("h1") { text "The Hobo Blog" } }),
+                    "<h1>The Hobo Blog</h1><h1>A Blog Post</h1>"
+  end
+
+  def test_after_adds_outside_the_element
+    assert_includes page(:after_heading => Rapid.markup { tag("h1") { text "The Hobo Blog" } }),
+                    "<h1>A Blog Post</h1><h1>The Hobo Blog</h1>"
+  end
+
+  def test_without_takes_the_extension_point_away
+    output = Rapid.render(:pseudo_page, { :title => "A Blog Post", :without_heading => true })
+
+    assert_equal "<body><div></div></body>", output
+  end
+
+  # ...and `without-x` is consumed, so it never reaches the markup.
+  def test_without_is_not_written_out_as_an_attribute
+    refute_includes Rapid.render(:pseudo_page, { :title => "x", :without_heading => true }),
+                    "without"
+  end
+
+  def test_a_replace_parameter_with_no_content_also_takes_the_element_away
+    output = page(:heading => Rapid.parameter(:replace => true))
+
+    assert_equal "<body><div></div></body>", output
+  end
+
+  # The pseudo-parameters do not need the param itself to have been supplied,
+  # which is the whole point of them.
+  def test_they_combine_with_an_override_of_the_param_itself
+    output = page(:heading => Rapid.parameter(:attributes => { :class => "big" }) { text "Mine" },
+                  :prepend_heading => Rapid.markup { text "[" },
+                  :append_heading => Rapid.markup { text "]" })
+
+    assert_includes output, %(<h1 class="big">[Mine]</h1>)
+  end
+
+  def test_a_bare_param_takes_them_too
+    output = Rapid.render(:panel, { :title => "Stories" },
+                          :append_heading_text => Rapid.markup { text "!" })
+
+    assert_includes output, "<h1>Stories!</h1>"
+  end
+
+  # Reached by nesting, like any other parameter of a tag one calls.
+  def test_they_are_reached_through_nesting
+    output = Rapid.render(:page, { :title => "Stories" },
+                          :panel => Rapid.parameter(
+                            :params => { :append_heading_text => Rapid.markup { text "!" } }))
+
+    assert_includes output, "<h1>Stories!</h1>"
+  end
+
+  # Declaring them does not make the params they hang off unreachable.
+  def test_the_contract_still_holds_with_pseudo_parameters_around
+    assert_every_param_overridable(:pseudo_page, { :name => "pagina", :attributes => { :title => "x" } })
   end
 
 end

@@ -497,12 +497,52 @@ que declara **un param por campo con nombre calculado**.
    notaba; con `<form>`, que tiene `default` y `default > default`, sí.
    **La prueba de contrato tenía ella misma el fallo que persigue.**
 
+### Los pseudo-params (2026-08-07) — **hechos**
+
+Los cinco, contra los escenarios de
+`dryml/features/cookbook/06_pseudo_parameters.feature`:
+
+| DRYML | Dónde cae |
+|---|---|
+| `<before-x:>` | **fuera**, antes del elemento o de la llamada entera |
+| `<prepend-x:>` | **dentro**, antes del contenido |
+| `<append-x:>` | **dentro**, después del contenido |
+| `<after-x:>` | **fuera**, después |
+| `without-x` | **quita el punto de extensión**; es un atributo, y se consume |
+
+Lo importante es que **no hacen falta si el param no se ha sobreescrito**: un
+`<append-heading:>` suelto tiene que añadirse al encabezado por defecto, y eso es
+justo para lo que sirven.
+
+**Dónde cae «dentro» depende del tipo de sitio**, y ahí estaba la miga:
+
+- **param pelado** y **elemento**: dentro del contenido, y en el elemento, dentro
+  de la etiqueta.
+- **llamada a otro tag**: dentro del **contenido que se le pasa a la llamada**,
+  o sea su param `default`. Es lo que hace que el `<append-decorated-help:>` del
+  `.feature` acabe **dentro** del `<a>` y no detrás.
+
+Cuando el que llama no le pasó contenido a la llamada, el envoltorio se apoya en
+`old`, que alcanza el defecto que declare el tag llamado. Y si ese tag **no pinta
+nunca el contenido que le dan** —`<submit>` es así—, un `append` **lanza un
+error** en vez de desaparecer. Es un modo de fallo asumido a conciencia: puede
+saltar en un tag que pinte su contenido solo bajo condición, y aun así se
+prefiere a perderlo en silencio.
+
+**Dos fallos más, encontrados al escribir las pruebas:**
+
+1. **`<x: replace/>` sin contenido no quitaba el elemento**, se quedaba el
+   original. El `.feature` dice que desaparece.
+2. **`merge-params` aplicaba el pseudo-param dos veces.** `<form>` reenvía sus
+   params al `<form>` base, que declara un param con **el mismo nombre**, así
+   que el `append` caía en los dos niveles. Se arregla **consumiéndolos donde se
+   escribieron**. Es otra vez la ambigüedad nombre/dirección, la misma que se
+   comió el `default > default` del grabador.
+
 ### Lo que queda de la sintaxis de parámetros
 
 Sin hacer, y anotado para no confundirlo con lo que sí está:
 
-- **Pseudo-params**: `<append-x:>`, `<prepend-x:>`, `<before-x:>`, `<after-x:>`
-  y `without-x`.
 - **`<x: param>` / `<x: param="otro">`** — que un tag reexponga con otro nombre
   un param del tag al que llama. Es lo que hace `<linked-card>` en los
   `.feature`.
@@ -930,10 +970,12 @@ orden:
 4. ~~Portar un segundo tag grande.~~ **HECHO el 2026-08-07:** `<form>`, base y
    generado, con su barrido. Ver «El segundo tag grande» más arriba. Destapó
    tres fallos, uno de ellos en la propia prueba de contrato.
-5. Sacar el runtime del directorio `spike/` y convertirlo en la gema. La prueba
-   de contrato se muda con él sin cambios. Antes de eso conviene decidir qué se
-   hace con lo que queda de la sintaxis de parámetros (lista abajo): los
-   pseudo-params son los que más se usan en los temas.
+5. ~~Pseudo-params.~~ **HECHOS el 2026-08-07**, los cinco. Ver «Los pseudo-params»
+   más arriba.
+6. Sacar el runtime del directorio `spike/` y convertirlo en la gema. La prueba
+   de contrato se muda con él sin cambios. Lo que queda de la sintaxis de
+   parámetros (lista abajo) ya no bloquea: reexponer con otro nombre es lo único
+   que usan los temas de verdad, y `<table-plus>` y `<form>` pasan sin ello.
 
 **No empezar por portar tags en masa.** Primero el runtime correcto y la prueba
 de contrato; si no, se repite el primer intento.

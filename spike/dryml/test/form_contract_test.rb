@@ -167,3 +167,72 @@ class FormContractTest < Minitest::Test
   end
 
 end
+
+
+# The pseudo-parameters against the real port, where the params sit behind tag
+# calls rather than elements.
+class FormPseudoParameterTest < Minitest::Test
+
+  def new_story = FormSpike::Story.new(:title => "")
+
+  # `<append-default:>` on a tag call goes *inside* the content the call was
+  # handed -- inside the <form>, after the standard body -- which is the
+  # "append parameter uses the default parameter" scenario of the feature.
+  def test_append_on_a_tag_call_goes_inside_the_content_it_was_given
+    output = Rapid.render(:form, {}, :this => new_story,
+                          :append_default => Rapid.markup { tag("p") { text "Small print" } })
+
+    assert_includes output, "<p>Small print</p></form>"
+  end
+
+  def test_prepend_on_a_tag_call_goes_before_the_content
+    output = Rapid.render(:form, {}, :this => new_story,
+                          :prepend_default => Rapid.markup { tag("p") { text "Heads up" } })
+
+    assert_includes output, %(<p>Heads up</p><fieldset class="field-list">)
+  end
+
+  # It is applied once, not once per level: <form> forwards its params to the
+  # base <form>, which declares a param of the same name.
+  def test_it_is_applied_once_even_though_the_params_are_forwarded
+    output = Rapid.render(:form, {}, :this => new_story,
+                          :append_default => Rapid.markup { text "ONCE" })
+
+    assert_equal 1, output.scan("ONCE").length
+  end
+
+  def test_before_and_after_go_outside_the_whole_call
+    output = Rapid.render(:form, {}, :this => new_story,
+                          :before_submit => Rapid.markup { text "[" },
+                          :after_submit => Rapid.markup { text "]" })
+
+    assert_includes output, %([<input type="submit" value="Save">])
+  end
+
+  def test_without_removes_a_tag_call
+    output = Rapid.render(:form, { :without_submit => true }, :this => new_story)
+
+    refute_includes output, %(<input type="submit")
+    assert_includes output, "Cancel"
+  end
+
+  def test_they_are_reached_through_nesting_too
+    output = Rapid.render(:form, {}, :this => new_story,
+                          :field_list => Rapid.parameter(
+                            :params => { :append_title_label => Rapid.markup { text " *" } }))
+
+    assert_includes output, "<label>Title *</label>"
+  end
+
+  # <submit> renders <input type="submit"> and never paints the content it is
+  # given, so appending to it cannot work. Saying so beats dropping it.
+  def test_appending_to_a_tag_that_ignores_its_content_is_refused
+    error = assert_raises(ArgumentError) do
+      Rapid.render(:form, {}, :this => new_story,
+                   :append_submit => Rapid.markup { text "!" })
+    end
+
+    assert_includes error.message, "no pinta el contenido"
+  end
+
+end

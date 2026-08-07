@@ -114,6 +114,11 @@ module Rapid
     attr_reader :param_path
 
     def initialize(attributes = {}, params = {}, path: nil)
+      # `without-x` is an attribute that takes an extension point away, so it is
+      # consumed here and never reaches the markup -- as DRYML does.
+      without, attributes = attributes.partition { |name, _| name.to_s.start_with?("without_") }
+                                      .map(&:to_h)
+      @without = without
       @attributes = attributes
       @all_attributes = attributes.dup.freeze
       @params = params
@@ -133,8 +138,8 @@ module Rapid
     # `<do param="x">default</do>`. The name may be computed at render time,
     # which is what `param="#{scope.field_name}-heading"` needs.
     def param(name, &default)
-      parameter = parameter_for(name, :bare)
-      parameter ? render_content(parameter, default) : default&.call
+      return nil if without?(name)
+      around(name) { render_content(name, parameter_for(name, :bare), &default) }
       nil
     end
 
@@ -158,17 +163,26 @@ module Rapid
     # Filling it in keeps the element and replaces its content, merging the
     # parameter's attributes; `replace` takes the element away as well, and then
     # `old` emits the whole original element -- DRYML's `<x: restore/>`.
-    def tag(name, attrs = {}, param_name = nil, &body)
-      parameter = param_name && param_name != :none ? parameter_for(param_name, :element) : nil
-      whole_element = proc { emit_element(name, attrs, &body) }
+    def tag(element, attrs = {}, param_name = nil, &body)
+      param_name = nil if param_name == :none
 
-      if parameter.nil?
-        whole_element.call
-      elsif parameter.replace?
-        render_content(parameter, whole_element)
-      else
-        emit_element(name, merge_attributes(attrs, parameter.attributes)) do
-          render_content(parameter, body)
+      if param_name.nil?
+        emit_element(element, attrs, &body)
+        return nil
+      end
+      return nil if without?(param_name)
+
+      parameter = parameter_for(param_name, :element)
+
+      around(param_name) do
+        if parameter&.replace?
+          # `<x: replace/>` with no content takes the element away and puts
+          # nothing in its place.
+          original = parameter.content? ? proc { emit_element(element, attrs, &body) } : nil
+          render_content(param_name, parameter, &original)
+        else
+          merged = parameter ? merge_attributes(attrs, parameter.attributes) : attrs
+          emit_element(element, merged) { render_content(param_name, parameter, &body) }
         end
       end
       nil
@@ -187,8 +201,11 @@ module Rapid
       params = @params.merge(params) if merge_params
 
       exposed_as = as && as != :none ? as : nil
+      return nil if exposed_as && without?(exposed_as)
+
       parameter = exposed_as ? parameter_for(exposed_as, :call) : nil
       path = exposed_as && @param_path ? @param_path + [exposed_as] : nil
+      reached = nil
 
       if parameter && !parameter.replace?
         attributes = merge_attributes(attributes, parameter.attributes)
@@ -196,7 +213,23 @@ module Rapid
         # is the whole point of exposing the call as a param: without it the
         # params of the tag being called would be unreachable from outside.
         params = params.merge(parameter.params)
-        params = params.merge(:default => shadowing_default(parameter, params[:default])) if parameter.content?
+      end
+
+      # Content given to a tag-call param, and any prepend/append around it, act
+      # on the *content the call is handed* -- its :default param. That is how
+      # `<append-decorated-help:>` ends up inside the <a> and not after it.
+      # Whatever the caller hung around this call is consumed *here*. Without
+      # this, `merge_params` would forward it to the tag being called and a
+      # param of the same name one level down would apply it a second time.
+      params = params.except(*PSEUDO.map { |prefix| :"#{prefix}_#{exposed_as}" }) if exposed_as
+
+      if exposed_as && !parameter&.replace? && (parameter&.content? || inner_pseudo?(exposed_as))
+        reached = [false] if inner_pseudo?(exposed_as)
+        supplied = call_default(parameter, params[:default])
+        params = params.merge(:default => Parameter.new do
+          reached[0] = true if reached
+          render_content(exposed_as, parameter, &supplied)
+        end)
       end
 
       # `from:` is what makes `<form>` inside `<def tag="form" for="Story">`
@@ -207,7 +240,20 @@ module Rapid
         raw Rapid.render(name, attributes,
                          :this => this, :path => path, :from => self.class, **params)
       end
-      parameter&.replace? ? render_content(parameter, whole_call) : whole_call.call
+
+      around(exposed_as) do
+        if parameter&.replace?
+          original = parameter.content? ? whole_call : nil
+          render_content(exposed_as, parameter, &original)
+        else
+          whole_call.call
+        end
+      end
+
+      if reached && !reached[0]
+        raise ArgumentError, "prepend-#{exposed_as} / append-#{exposed_as} no llegaron a ninguna " \
+                             "parte: <#{name}> no pinta el contenido que se le pasa"
+      end
       nil
     end
 
@@ -261,27 +307,61 @@ module Rapid
       parameter
     end
 
+    # --- the pseudo-parameters ------------------------------------------------
+    #
+    #   before-x   outside, before the whole element or call
+    #   prepend-x  inside, before the content
+    #   append-x   inside, after the content
+    #   after-x    outside, after the whole element or call
+    #
+    # They work whether or not the caller also supplied the param itself, which
+    # is the point: `<append-heading:>` alone has to add to the default heading.
+
+    PSEUDO = %i[before prepend append after].freeze
+
+    def pseudo(name, prefix)
+      value = @params[:"#{prefix}_#{name}"]
+      value && Parameter.wrap(value).content
+    end
+
+    def inner_pseudo?(name) = !!(pseudo(name, :prepend) || pseudo(name, :append))
+
+    def around(name)
+      return (yield; nil) if name.nil?
+      pseudo(name, :before)&.call
+      yield
+      pseudo(name, :after)&.call
+      nil
+    end
+
+    # `<page without-heading>` -- the extension point goes away entirely, and so
+    # does anything the caller hung around it.
+    def without?(name) = !!@without[:"without_#{name}"]
+
     # The parameter's content replaces the default, and the default is what
     # `old` reaches. A parameter with no content of its own -- one that only
     # carries attributes or nested params -- leaves the default alone.
-    def render_content(parameter, default)
-      if parameter.content?
+    def render_content(name, parameter, &default)
+      pseudo(name, :prepend)&.call
+      if parameter&.content?
         Context.with(:old_stack => Context.old_stack + [default]) { parameter.content.call }
       else
         default&.call
       end
+      pseudo(name, :append)&.call
       nil
     end
 
-    # Content given to a tag-call param becomes that call's default content. If
-    # the tag was already supplying some, that is what `old` reaches.
-    def shadowing_default(parameter, shadowed)
-      return parameter.content unless shadowed
-      # `merge_params` can hand a tag its own parameter back. Shadowing it with
+    # What a tag-call param wraps around: the content the call was already
+    # given, or `old` -- which reaches whatever default the tag being called
+    # declares for it.
+    def call_default(parameter, supplied)
+      return proc { old } unless supplied
+      supplied = Parameter.wrap(supplied)
+      # `merge_params` can hand a tag its own parameter back. Wrapping it around
       # itself would make `old` call the override again, for ever.
-      shadowed = Parameter.wrap(shadowed)
-      return parameter.content if shadowed.content.equal?(parameter.content)
-      Parameter.new { render_content(parameter, shadowed.content) }
+      return proc { old } if supplied.content.equal?(parameter&.content)
+      supplied.content
     end
 
     # DRYML merges the class attribute rather than overwriting it, which is how

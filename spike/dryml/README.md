@@ -283,8 +283,38 @@ campo con nombre calculado**.
 
 ---
 
+---
+
+# Los pseudo-params
+
+Los cinco, contra `dryml/features/cookbook/06_pseudo_parameters.feature`:
+
+| DRYML | Dónde cae |
+|---|---|
+| `<before-x:>` | **fuera**, antes del elemento o de la llamada |
+| `<prepend-x:>` | **dentro**, antes del contenido |
+| `<append-x:>` | **dentro**, después del contenido |
+| `<after-x:>` | **fuera**, después |
+| `without-x` | **quita** el punto de extensión; es atributo, y se consume |
+
+No hace falta haber sobreescrito el param: un `<append-heading:>` suelto se añade
+al encabezado por defecto, que es para lo que sirven.
+
+**«Dentro» depende del tipo de sitio.** En un param pelado o un elemento, dentro
+del contenido. En una **llamada a otro tag**, dentro del **contenido que se le
+pasa** —su param `default`—, que es lo que hace que el `<append-decorated-help:>`
+del `.feature` acabe dentro del `<a>` y no detrás. Si no se le pasó contenido, el
+envoltorio se apoya en `old`. Y si el tag llamado **nunca pinta el contenido que
+le dan** —`<submit>`—, un `append` **lanza un error** en vez de desaparecer.
+
+## Dos fallos más que salieron con ellos
+
+1. **`<x: replace/>` sin contenido no quitaba el elemento.**
+2. **`merge-params` aplicaba el pseudo-param dos veces**, porque `<form>` reenvía
+   sus params al `<form>` base, que declara uno con el mismo nombre. Se
+   consumen donde se escribieron. Es otra vez la ambigüedad nombre/dirección.
+
 ## Lo que falta de la sintaxis de parámetros
 
-Pseudo-params (`append-`, `prepend-`, `before-`, `after-`, `without-`), `<x:
-param>` para reexponer con otro nombre, `merge-params="lista"`, y el nombre del
-param como clase CSS.
+`<x: param>` para reexponer con otro nombre, `merge-params="lista"`, y el nombre
+del param como clase CSS.
