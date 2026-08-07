@@ -1,0 +1,235 @@
+# Plan de trabajo — Hobo 2027, segundo intento
+
+> **Si retomas la sesión, lee este fichero primero y no reconstruyas nada de la
+> conversación.** Aquí está el estado, las decisiones ya tomadas y lo que queda
+> abierto. El complemento es `HALLAZGOS.md`, que cuenta lo que salió mal en el
+> primer intento y no hay que repetir.
+
+---
+
+## Dónde estamos
+
+| | |
+|---|---|
+| Rama | `hobo_2027_v2` |
+| Punto de partida | `master` = Hobo 2.2.6 (Rails 4.2), **intacto** |
+| Objetivo | Rails 8.1 / Ruby 3.4 |
+| Primer intento | rama `hobo_2027`, tag **`intento-1-update`**. Descartado, se conserva |
+| Método | De abajo arriba, por capas. **Parar, probar y preguntar en cada capa** |
+
+En el repo hay ahora, además de las gemas de siempre:
+
+- `hobo_bootstrap/` y `hobo_bootstrap_ui/` — copias de los repos externos
+  (no submódulos), cada una con su `ORIGEN.md`. Faltaban y son piezas clave.
+
+---
+
+## Decisiones tomadas
+
+Fecha: 2026-08-07. No volver a discutirlas salvo que aparezca información nueva.
+
+1. **Empezar de cero** sobre `master`, no continuar el primer intento.
+2. **De abajo arriba, por capas**, no en rebanada vertical. Con parada, prueba y
+   preguntas al final de cada capa.
+3. **Objetivo de la primera fase: solo aplicación nueva.** `hobo new` tiene que
+   dejar una app Rails 8 que arranque, con su modelo, su CRUD y su login.
+   Actualizar aplicaciones viejas es **otra fase y otra rama**.
+4. **La compatibilidad va por ramas, no por condicionales**: `master` para lo
+   nuevo, una rama por versión antigua (`2.1`, etc.). Mezclar las dos cosas fue
+   una de las causas del lío anterior.
+5. **DRYML: se migra a Ruby, con remix.** Se conserva la *semántica*, no el
+   lenguaje. Ver «La duda abierta» más abajo: falta elegir el sustrato.
+6. **El parser de DRYML no se tira**: se reutiliza como front-end del
+   actualizador que migrará las plantillas de las apps existentes.
+7. **`will_paginate` no se toca** al actualizar. Pagy no parchea nada y convive.
+8. **Se conserva el pipeline de assets que la app tenga.** Propshaft fue un error.
+
+---
+
+## Las 17 piezas y su veredicto
+
+★ irrenunciable · ⚠ deuda permanente · ✎ corregido tras mirar el código
+
+| # | Pieza | Veredicto | Nota |
+|---|---|---|---|
+| 1 | `fields do` | Se queda | Fuente única de verdad en el modelo |
+| 2 | Generador de migraciones | Se queda ⚠ | Ver «Deuda 1» |
+| 3 | Tipos ricos | Se queda ★ | Reconstruir sobre `ActiveRecord::Type` |
+| 4 | Permisos | Reimplementar ⚠ | Ver «Deuda 2» |
+| 5 | Lifecycles | Se queda, propia ✎ | Ninguna gema de estados da lo que hace falta |
+| 6 | Scopes automáticos | Se delega → Ransack | 429 líneas, solo 3 consumidores reales |
+| 7 | View hints | Se queda y crece ★ | No existe en Rails ni en el ecosistema |
+| 8 | DRYML | Semántica sí, lenguaje no | Falta elegir sustrato |
+| 9 | RAPID (catálogo) | Se reduce poco ✎ | Fuera ~15 envoltorios triviales, no 70 |
+| 10 | Motor de derivación | Se queda ★ | *El* motivo de usar Hobo |
+| 11 | Auto-actions | Se queda | Como *concern* legible, no `method_missing` |
+| 12 | Router | Se queda, sin fichero ✎ | Fuera `config/hobo_routes.rb` |
+| 13a | Tags estructurales del tema | **Mover a RAPID** ✎ | login, nav, flash, errores, transiciones |
+| 13b | Tema (Bootstrap) | Se queda, redefinido ★ | Contrato de params **con prueba** |
+| 14 | Subsites | Se queda tal cual ✎ | Eje transversal de 4 subsistemas |
+| 15 | Usuario / auth | Se delega → Rails 8 | `generate authentication` ya existe |
+| 16 | `hobo_support` | Se reduce ✎ | ~230 líneas fuera de 1.089, no «casi entero» |
+| 17 | Contrato de plugin | Se queda | Engine + Railtie + taglibs + assets. 8 repos lo usan |
+
+Sobreviven unas **11.000-12.000 líneas de 17.700**, la mitad reescritas.
+
+---
+
+## Las dos deudas permanentes
+
+### Deuda 1 — El generador de migraciones (`hobo_fields`, 442 líneas)
+
+**Es un peaje, no un error.** Para tener `fields do` con migraciones automáticas
+hay que saber del esquema lo mismo que sabe Rails, y Rails nunca hizo pública esa
+parte. Lo que toca hoy:
+
+| Línea | Qué | Estado |
+|---|---|---|
+| 407 | `ActiveRecord::SchemaDumper.send(:new, …)` | Constructor **privado** |
+| 87, 113 | `ActiveRecord::Base.send(:descendants)` | Privado; con Zeitwerk **solo ve lo cargado** |
+| 98 | `case connection.class.name` | Ramifica sobre el nombre del adaptador |
+| 106 | `connection.native_database_types` | Cambia por adaptador y versión |
+| 22 | `ActiveRecord::Migration.table_exists?` | Camino obsoleto |
+| 290, 389 | `connection.columns`, `index_name_length` | API en migración a *pool/lease* |
+
+**Plan:** aceptarla y blindarla con una batería que **ejecute** las migraciones
+generadas, `up` **y** `down`, contra sqlite, postgres y mysql. El fallo nº1 de
+`HALLAZGOS.md` existió porque las pruebas generaban el `down` y no lo corrían.
+Alternativa anotada por si el peaje sale caro: introspeccionar la base de datos
+en vez de Rails.
+
+**Agravante compartido:** `descendants` con Zeitwerk exige carga ansiosa. El
+router (pieza 12) tiene el mismo problema. Son dos piezas que necesitan lo mismo.
+
+### Deuda 2 — Los permisos (`hobo`, 449 líneas)
+
+**Es mayormente autoinfligida**, y casi toda se puede quitar.
+
+```
+:10-12  alias_method_chain :_create_record / :_update_record / :destroy
+:14-16  alias_method_chain :has_many / :has_one / :belongs_to
+:383    metaclass.class_eval   → unknownify_attribute
+```
+
+- `alias_method_chain` **no existe desde Rails 5.1**. Bloqueo desde el minuto uno.
+- `_create_record` / `_update_record` son **privados** de ActiveRecord.
+- Reescribir las macros de asociación hace que *toda* declaración de *todo*
+  modelo pase por Hobo.
+
+| Lo que hace hoy | Equivalente público |
+|---|---|
+| `_create_record` / `_update_record` | `before_create` / `before_update` |
+| `destroy` envuelto | `before_destroy` |
+| Envolver `has_many`/`has_one`/`belongs_to` | Existe solo para que `:dependent => :destroy` respete permisos → `before_destroy` en el padre |
+
+Queda **una** cosa genuinamente difícil: los permisos de **lectura** por campo,
+porque Rails no tiene gancho de lectura.
+
+---
+
+## La duda abierta: el sustrato de DRYML
+
+**Esta es la decisión más grande y está sin tomar.** Se decide al empezar la
+capa 3, con un spike, no antes.
+
+Ojo con no confundir dos cosas: *dónde se declaran* los permisos (en el modelo —
+eso no está en juego) y *dónde se aplican los de lectura* (la pregunta estrecha).
+Que «los formularios se construyan solos según los permisos» funciona igual en
+cualquier opción, porque el formulario le **pregunta al modelo**
+(`editable_by?`, `viewable_by?`).
+
+### Lo que hay que conservar de DRYML pase lo que pase
+
+1. **`param`** — puntos de extensión declarados **en el marcado**, sin API
+   previa. Es el mecanismo entero del contrato de temas.
+2. **`<extend>` / `<old-x>`** — extender un tag desde otra gema sin saber de qué
+   clase hereda. Es lo que permite apilar temas.
+3. **Despacho polimórfico por tipo** (`for="date"`).
+4. **El contexto implícito `this`** — sin él, el actualizador baja del ~95% al ~70%.
+
+### Las opciones
+
+| | Sustrato | `param` | `<extend>` | Coste |
+|---|---|---|---|---|
+| **A** | DSL en Ruby puro (estilo Phlex) | Método con bloque y valor por defecto | `prepend` + `super`, nativo | Todo el mundo escribe Ruby, no marcado |
+| **B** | Encima de ERB (estilo ViewComponent) | Slots, pero **hay que declararlos en Ruby por adelantado** | **Sin equivalente limpio** | Familiar, pero un tema no puede añadir un param que la base no declaró |
+| **C** | Encima de Slim/Haml | Igual que B | Igual que B | Añade otra sintaxis de la que depender |
+| **D** | Conservar DRYML | Ya lo tiene | Ya lo tiene | Sin resaltado, sin LSP, curva de entrada; 3.600 líneas propias |
+
+**La pregunta que decide** no es cuál se lee mejor, sino: *¿cuál puede expresar
+`param` y `<extend>` sin inventarse un parser?* Hoy la respuesta parece que **A
+los obtiene gratis de Ruby** y **B/C necesitan andamiaje para cada uno**, con
+`<extend>` sin encaje claro. El spike tiene que confirmarlo o desmentirlo con
+código real.
+
+**El spike:** portar tres tags representativos a cada opción candidata —
+`<view>` (polimórfico), `<page>` (30 params) y uno con `<extend>`— y comparar.
+
+---
+
+## El plan por capas
+
+Estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho
+
+| | Capa | Qué | Piezas |
+|---|---|---|---|
+| `[~]` | **0** | **Banco de pruebas**: app Rails 8 mínima donde montar las gemas y verificar de verdad | — |
+| `[ ]` | **1** | `hobo_support`: quitar ~230 líneas de azúcar, codemod de 113 sitios, `classy_module` → `Concern` | 16 |
+| `[ ]` | **2** | `hobo_fields`: `fields do`, tipos ricos, migraciones **+ batería que ejecute `up` y `down`** | 1, 2, 3 |
+| `[ ]` | **3** | **El remix de DRYML** (empieza por el spike) | 8 |
+| `[ ]` | **4** | `hobo`: permisos, lifecycles, view hints, auto-actions, router | 4, 5, 7, 11, 12, 14 |
+| `[ ]` | **5** | `hobo_rapid` + motor de derivación | 9, 10 |
+| `[ ]` | **6** | Separar `hobo_bootstrap` en tags estructurales (→ RAPID) y tema | 13a, 13b |
+| `[ ]` | **7** | `hobo new`, generadores, contrato de plugin | 17 |
+
+**Riesgo asumido conscientemente:** de abajo arriba no se ve una página hasta la
+capa 6. Imanol lo acepta a cambio de hacerlo bien. El spike de la capa 3 es lo
+que evita que ese riesgo se convierta en el desastre del primer intento.
+
+---
+
+## Dónde está cada cosa
+
+| Qué | Dónde |
+|---|---|
+| Lo que salió mal la primera vez | `HALLAZGOS.md` |
+| El código del primer intento | rama `hobo_2027`, tag `intento-1-update` |
+| El tema Bootstrap (vendorizado) | `hobo_bootstrap/`, con `ORIGEN.md` |
+| Los widgets jQuery del tema | `hobo_bootstrap_ui/`, con `ORIGEN.md` |
+| Contrato de `<page>` (30 params) | `hobo_bootstrap/taglibs/page.dryml` |
+| La app real de pruebas (2017) | `../amenti` — Ruby 1.9.3 vía rbenv, receta en `HALLAZGOS.md` |
+
+### Los 22 repos de la organización Hobo
+
+Del núcleo: `hobo` (este monorepo). Vendorizados: `hobo_bootstrap`,
+`hobo_bootstrap_ui`.
+
+**No vendorizados**, clonables desde `https://github.com/Hobo/<nombre>`:
+
+| Repo | DRYML | Ruby | Qué es |
+|---|---:|---:|---|
+| `hobo_summary` | 282 | 24 | Tags de diagnóstico: modelos, columnas, asociaciones, gemas |
+| `hobo_mapstraction` | 113 | 41 | Mapas (jQuery) |
+| `select_one_or_new_dialog` | 82 | 26 | Variante en diálogo del de `hobo_bootstrap_ui` |
+| `hobo_data_tables` | 47 | 24 | DataTables.net |
+| `hobo_simple_color` | 43 | 28 | Selector de color |
+| `hobo_tokeninput` | 41 | 24 | Entrada de etiquetas |
+| `hobo_tree_table` | 33 | 24 | Tabla en árbol |
+| `hobo_omniauth` | 22 | 195 | Login con terceros |
+| `hobo_paperclip` | 2 | 46 | Adjuntos (Paperclip muerto → ActiveStorage) |
+
+El resto son tutoriales, ejemplos, documentación y tres forks de `will_paginate`.
+
+**Casi todos tienen exactamente 24 líneas de Ruby**: es el boilerplate del
+contrato de plugin (pieza 17). Sirven de banco de pruebas de ese contrato —
+cualquier decisión sobre DRYML o sobre assets **los rompe a los ocho a la vez**.
+
+---
+
+## Reglas de trabajo
+
+- **Nunca hacer push.** Ni a este repo ni a ninguno. Solo commits locales.
+- **Commits sin mencionar a Claude**, ni `Co-Authored-By` ni referencias.
+- **Código en inglés** (identificadores y comentarios). **Commits y documentación
+  en español.**
+- Parar al final de cada capa: probar, enseñar el resultado y preguntar.
