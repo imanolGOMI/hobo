@@ -1,6 +1,8 @@
 require 'rails/generators/migration'
 require 'rails/generators/active_record'
 require 'generators/hobo_support/thor_shell'
+# The migrator was found by the classic autoloader; it says so now.
+require 'generators/hobo/migration/migrator'
 
 module Hobo
   class MigrationGenerator < Rails::Generators::Base
@@ -91,7 +93,11 @@ module Hobo
   private
 
     def migrations_pending?
-      pending_migrations = ActiveRecord::Migrator.new(:up, ActiveRecord::Migrator.migrations('db/migrate')).pending_migrations
+      # `ActiveRecord::Migrator.migrations` and that three-argument constructor
+      # went away years ago. Which migrations are pending is something the
+      # connection pool's migration context answers now, and it is the only
+      # public way to ask.
+      pending_migrations = ActiveRecord::Base.connection_pool.migration_context.open.pending_migrations
 
       if pending_migrations.any?
         say "You have #{pending_migrations.size} pending migration#{'s' if pending_migrations.size > 1}:"

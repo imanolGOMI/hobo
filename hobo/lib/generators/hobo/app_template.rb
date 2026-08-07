@@ -1,0 +1,56 @@
+# The Rails application template behind `hobo new`.
+#
+#   hobo new blog
+#
+# It is a plain `rails new` with the gems wired in and one worked example, and
+# that is the point: what comes out is a **Rails application**, not a thing that
+# happens to be built on Rails. Everything is where a Rails developer looks.
+#
+# What it no longer does: the old `hobo new` ran an interactive wizard that
+# asked twenty questions and generated a user model, a front controller, an
+# admin subsite and a theme before you had written a line. That made the first
+# five minutes impressive and the next five confusing. This leaves an
+# application you can read in one sitting, and `rails generate` for the rest.
+
+hobo_dev = ENV["HOBODEV"]
+
+gem_line = lambda do |name|
+  hobo_dev ? %(gem "#{name}", path: "#{File.join(hobo_dev, name)}") : %(gem "#{name}")
+end
+
+# With HOBODEV set, every gem comes from the working tree: `hobo` depends on
+# hobo_support, hobo_fields and dryml, and none of those are published while the
+# port is under way. Once they are one gem (decision 11) this is one line.
+gems = hobo_dev ? %w[hobo_support hobo_fields dryml hobo hobo_rapid] : %w[hobo hobo_rapid]
+
+append_to_file "Gemfile", (["", "# Hobo"] + gems.map(&gem_line) + [""]).join("\n")
+
+after_bundle do
+  # Rails 8 brings its own authentication generator, and it is better than the
+  # one Hobo used to carry: piece 15 of PLAN.md is delegated to it.
+  say "Hobo: la sesion la genera Rails con `bin/rails generate authentication`", :green
+
+  # One worked example, so `bin/rails server` shows something on the first run.
+  generate "hobo:resource", "story title:string body:text published_on:date"
+
+  route "hobo_routes"
+  route %(root to: "stories#index")
+
+  generate "hobo:migration", "-n -m" rescue nil
+
+  say [
+    "",
+    "Listo.",
+    "",
+    "  cd #{app_name}",
+    "  bin/rails server",
+    "",
+    "Hay un modelo Story con sus paginas, y no hay ni una vista escrita: las",
+    "deriva Hobo de lo que dice el modelo. Cuando una pagina tenga que ser",
+    "distinta, escribe su plantilla y Hobo se aparta.",
+    "",
+    "  bin/rails generate hobo:resource task title:string done:boolean",
+    "  bin/rails generate authentication",
+    "",
+  ].join("\n"), :green
+end

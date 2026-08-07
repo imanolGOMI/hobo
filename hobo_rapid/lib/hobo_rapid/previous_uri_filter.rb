@@ -1,5 +1,5 @@
 module HoboRapid
-  # this after_filter is useful for the after_submit tag
+  # this after_action is useful for the after_submit tag
   class PreviousUriFilter
     def self.filter(controller)
       if controller.request.get?

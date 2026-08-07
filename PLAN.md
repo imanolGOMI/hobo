@@ -628,9 +628,9 @@ Estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho
 | `[x]` | **2** | `hobo_fields`: `fields do`, tipos ricos, migraciones **+ batería que ejecute `up` y `down`** | 1, 2, 3 |
 | `[x]` | **3** | **El remix de DRYML**: runtime, contrato de params, params anidados, pseudo-params y dos tags grandes portados. Ya es la gema `dryml` | 8 |
 | `[x]` | **4** | `hobo`: permisos, lifecycles, view hints, auto-actions, router, subsites | 4, 5, 6, 7, 11, 12, 14 |
-| `[~]` | **5** | **El JS a Stimulus** (decisión 14), `hobo_rapid` + motor de derivación | 9, 10 |
-| `[ ]` | **6** | Separar `hobo_bootstrap` en tags estructurales (→ RAPID) y tema | 13a, 13b |
-| `[ ]` | **7** | `hobo new`, generadores, contrato de plugin | 17 |
+| `[x]` | **5** | El JS a Stimulus (decisión 14), `hobo_rapid` y el motor de derivación | 9, 10 |
+| `[x]` | **6** | Separado `hobo_bootstrap`: estructura a RAPID, tema en Bootstrap 5 con su contrato probado | 13a, 13b |
+| `[~]` | **7** | `hobo new` y generadores hechos; faltan el contrato de plugin y la fusión en una gema | 17 |
 
 **Riesgo asumido conscientemente:** de abajo arriba no se ve una página hasta la
 capa 6. Imanol lo acepta a cambio de hacerlo bien. El spike de la capa 3 es lo
@@ -1957,6 +1957,63 @@ así que el barrido pedía algo imposible.
 Ahora `parameter_for` distingue `:void_element` de `:element`, y el barrido no
 exige rellenar lo que no se puede. Es la tercera vez que el barrido mejora el
 runtime en vez de solo vigilarlo.
+
+## Capa 7 — `hobo new` (2026-08-07)
+
+**`hobo new blog` deja una aplicación Rails 8 que arranca, tiene un modelo, su
+CRUD y sus páginas — y ni una vista escrita.** Verificado generando una de
+verdad, migrándola y pidiéndole una página:
+
+```
+$ HOBODEV=... hobo new blog
+$ cd blog && bin/rails server
+GET /  ->  200
+<div class="index-page stories"><h1>Stories</h1>
+  <div class="card story"><h3><span class="view story-title">Hobo 2027</span></h3>
+```
+
+### Lo que `hobo new` ya no hace
+
+El de antes lanzaba **un asistente interactivo** que preguntaba veinte cosas y
+generaba un modelo de usuario, un controlador de portada, un subsite de
+administración y un tema **antes de que hubieras escrito una línea**. Eso hacía
+los primeros cinco minutos impresionantes y los cinco siguientes confusos.
+
+Ahora es **un `rails new` con las gemas puestas y un ejemplo**, y lo que sale es
+**una aplicación de Rails**: todo está donde un desarrollador de Rails lo
+buscaría. Para lo demás, `rails generate`.
+
+La plantilla es **un fichero de la gema** (`lib/generators/hobo/app_template.rb`)
+en vez de una cadena que se escribía en un temporal, así que se puede leer,
+revisar y usar suelta con `rails new blog -m ...`.
+
+### `hobo:resource`, deliberadamente pequeño
+
+Escribe **un modelo y un controlador**. Nada más. El de antes escribía además
+cuatro ficheros de vistas y una línea de rutas, y **tres de esas cuatro cosas son
+hoy cosas que Hobo deduce** — un generador que escribe lo que se puede derivar es
+un generador que alguien tiene que mantener en sintonía para siempre.
+
+Y la sesión la genera Rails: `bin/rails generate authentication`. Es la pieza 15,
+delegada, y ahora se puede comprobar que de verdad lo está.
+
+### Cuatro fallos más, todos de los que solo se ven generando una app
+
+| Qué | De qué capa venía |
+|---|---|
+| `ActiveRecord::Migrator.migrations` y su constructor de tres argumentos, en `migrations_pending?` | **Capa 2.** Sus pruebas ejecutaban las migraciones, pero nunca preguntaban si había pendientes |
+| El migrador no se requería a sí mismo (`Generators::Hobo::Migration::Migrator`) | Autocargador clásico, cuarta vez |
+| **El generador ofrecía borrar `ar_internal_metadata`**, que es de Rails y llegó en la 5 — decir que sí rompe `rails db:*` para siempre | Capa 2 |
+| `before_filter` en `hobo_rapid` | Capa 4 lo arregló en `hobo`, pero no miró las otras gemas |
+
+La prueba de `hobo new` **existe pero no corre por defecto**: genera una
+aplicación entera y ejecuta bundler, así que tarda un par de minutos.
+
+```sh
+HOBO_TEST_NEW=1 rake test
+```
+
+Es la única prueba que comprueba **lo primero que hace una persona**.
 
 ## Reglas de trabajo
 

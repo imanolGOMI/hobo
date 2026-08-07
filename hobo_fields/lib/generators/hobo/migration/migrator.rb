@@ -199,7 +199,11 @@ module Generators
             defined?(CGI::Session::ActiveRecordStore::Session) &&
             defined?(ActionController::Base) &&
             ActionController::Base.session_store == CGI::Session::ActiveRecordStore
-          ['schema_info', 'schema_migrations',  sessions_table].compact
+          # `ar_internal_metadata` is Rails' own -- it holds which environment a
+          # database belongs to -- and it arrived in Rails 5, after this list
+          # was written. Without it the generator offers to drop it, and saying
+          # yes breaks `rails db:*` for good.
+          ['schema_info', 'schema_migrations', 'ar_internal_metadata', sessions_table].compact
         end
 
 

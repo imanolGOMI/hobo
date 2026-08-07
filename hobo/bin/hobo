@@ -1,19 +1,39 @@
 #!/usr/bin/env ruby
-require 'fileutils'
+# `hobo new <app>` -- a plain `rails new` with Hobo wired in.
+#
+# It used to build a Rails application template on the fly, in a temp file, from
+# a string. The template is a file in the gem now (lib/generators/hobo/
+# app_template.rb), which means it can be read, reviewed and used on its own:
+#
+#   rails new blog -m $(gem which hobo)/../generators/hobo/app_template.rb
 
-if ENV["HOBODEV"]
-  dev_root = File.expand_path ENV["HOBODEV"], FileUtils.pwd
-  $:.unshift "#{dev_root}/hobo_support/lib"
+require "fileutils"
+
+TEMPLATE = File.expand_path("../lib/generators/hobo/app_template.rb", __dir__)
+
+command = ARGV.shift
+
+case command
+when "new"
+  app = ARGV.shift
+  abort("Falta el nombre de la aplicacion.\n\n  hobo new <app>\n") if app.nil?
+  exec("rails", "new", app, "-m", TEMPLATE, *ARGV)
+when "version", "--version", "-v"
+  puts File.read(File.expand_path("../VERSION", __dir__)).strip
 else
-  require 'rubygems'
-end
+  puts <<~USO
+    Hobo
 
-begin
-  require 'hobo_support/command'
-rescue LoadError
-  puts "The 'hobo_support' gem is not installed.
-You probably need to set the HOBODEV environment variable to your local hobo git-repository path."
-  exit
-end
+      hobo new <app> [opciones de rails new]   Crea una aplicacion
 
-HoboSupport::Command.run(:hobo)
+    Dentro de una aplicacion:
+
+      bin/rails generate hobo:resource <nombre> <campo:tipo>...
+      bin/rails generate hobo:migration
+      bin/rails generate authentication
+
+    Con HOBODEV apuntando a un clon del repositorio, la aplicacion usa las
+    gemas de ahi en vez de las publicadas.
+  USO
+  exit(command.nil? || command =~ /^--help|-h$/ ? 0 : 1)
+end

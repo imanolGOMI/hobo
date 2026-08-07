@@ -1,0 +1,10 @@
+class <%= controller_class_name %> < ApplicationController
+
+  include Hobo::Controller::Model
+
+  # The seven usual actions, each one checking the permissions the model
+  # declares. Take any out by naming the ones you want:
+  #   auto_actions :index, :show
+  auto_actions :all
+
+end
