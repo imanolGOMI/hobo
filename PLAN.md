@@ -158,6 +158,40 @@ porque Rails no tiene gancho de lectura.
 
 ---
 
+## ¿Merece la pena `hobo_fields` en 2026?
+
+Contestado el 2026-08-07, con el código ejecutándose delante.
+
+**Lo que Rails 8 ya hace mejor** está en el registro de mejoras de la capa 2, y
+ya se ha quitado.
+
+**Lo que no tiene equivalente, y es el valor real de la gema:**
+
+1. **`fields do`** — declarar el esquema en el modelo. En Rails el esquema vive
+   en `db/schema.rb`, que es *generado*, y las migraciones son historia: para
+   saber qué campos tiene un modelo hay que abrir otro fichero.
+2. **El generador de migraciones por diferencia.** Rails te da
+   `generate migration AddBodyToAdverts body:text` — **tú** dices el cambio.
+   Hobo lo **deduce** comparando modelo y base de datos. Sin equivalente en
+   Rails ni en el ecosistema.
+3. **Tipos ricos que viajan a la vista.** `contact_address :email_address` es lo
+   que hace que salga un `<input type="email">` sin escribirlo. La Attributes
+   API da el *casting*, pero nada que diga «este tipo se pinta así».
+
+**El coste, medido:** el generador toca **seis API internas de Rails**, y en la
+capa 2 se arreglaron cinco fallos causados justo por eso. **Ese peaje se paga en
+cada versión de Rails, para siempre.** La batería multi-adaptador es lo que lo
+hace asumible: te enteras el primer día.
+
+**La tensión de fondo, dicha en voz alta:** Rails apuesta por *migraciones como
+historia* —dan auditoría y permiten migrar **datos**— y Hobo por *modelo como
+verdad única*, que da un solo sitio donde mirar pero **no puede expresar una
+transformación de datos**.
+
+**Decisión (2026-08-07):** se queda. Esta fase es **solo para aplicaciones
+nuevas**, así que la limitación de las migraciones de datos no bloquea. Cuando
+alguien la necesite, se verá entonces.
+
 ## La duda abierta: el sustrato de DRYML
 
 **Esta es la decisión más grande y está sin tomar.** Se decide al empezar la
@@ -205,8 +239,8 @@ Estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho
 | | Capa | Qué | Piezas |
 |---|---|---|---|
 | `[x]` | **0** | **Banco de pruebas**: andamiaje minitest y corredor de la raíz | — |
-| `[ ]` | **1** | `hobo_support`: quitar ~230 líneas de azúcar, codemod de 113 sitios, `classy_module` → `Concern` | 16 |
-| `[ ]` | **2** | `hobo_fields`: `fields do`, tipos ricos, migraciones **+ batería que ejecute `up` y `down`** | 1, 2, 3 |
+| `[x]` | **1** | `hobo_support`: quitar ~230 líneas de azúcar, codemod de 113 sitios, `classy_module` → `Concern` | 16 |
+| `[x]` | **2** | `hobo_fields`: `fields do`, tipos ricos, migraciones **+ batería que ejecute `up` y `down`** | 1, 2, 3 |
 | `[ ]` | **3** | **El remix de DRYML** (empieza por el spike) | 8 |
 | `[ ]` | **4** | `hobo`: permisos, lifecycles, view hints, auto-actions, router | 4, 5, 7, 11, 12, 14 |
 | `[ ]` | **5** | `hobo_rapid` + motor de derivación | 9, 10 |
@@ -512,6 +546,27 @@ orden alfabético, así que `html_string` cargaba antes que su padre
 texto: **ejecuta** el `up`, comprueba que el esquema cambió, **ejecuta** el
 `down` y comprueba que vuelve exactamente al estado anterior — comparando
 nombre, tipo, `limit`, `default`, `null`, `precision`, `scale` e índices.
+
+**La batería corre contra todos los adaptadores alcanzables.** El generador le
+pide al adaptador los tipos nativos, el volcado de esquema y la introspección de
+columnas, así que **un adaptador contra el que no se prueba es un adaptador que
+no se soporta**. Los 18 casos están escritos una vez, en el módulo
+`MigrationGeneratorBattery`, y se instancia **una clase de prueba por adaptador
+que responda**:
+
+```sh
+rake test                                     # sqlite3, siempre
+HOBO_TEST_POSTGRES_URL=postgres://user:pass@localhost/hobo_fields_test rake test
+HOBO_TEST_MYSQL_URL=mysql2://user:pass@localhost/hobo_fields_test     rake test
+```
+
+Los que no responden **no desaparecen**: salen como *skip* con su motivo
+(`MigrationGeneratorAdapterCoverageTest`), para que un adaptador ausente no se
+confunda nunca con uno que pasa. En la máquina de Imanol solo hay sqlite3.
+
+Las aserciones sobre el **texto** generado son deliberadamente laxas, porque la
+redacción cambia de forma legítima entre adaptadores (límites nativos, comillas).
+La aserción de verdad es `assert_reversible`, que ejecuta.
 
 **Aislamiento entre pruebas:** quitar la constante de un modelo **no basta**. El
 `DescendantsTracker` sigue guardando la clase, y el generador recorre

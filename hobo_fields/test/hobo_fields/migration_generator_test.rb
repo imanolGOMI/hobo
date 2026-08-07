@@ -1,16 +1,27 @@
 require "test_helper"
 require "generators/hobo/migration/migrator"
 
-# Ported from test/migration_generator.rdoctest, with the piece that file never
-# had: the generated migrations are *executed*, up and then down, and the schema
-# is compared before and after. The original only ever compared the generated
-# text, which is why a `down` that could not run went unnoticed for years --
-# see HALLAZGOS.md.
-class MigrationGeneratorTest < Minitest::Test
+# Ported from test/migration_generator.rdoctest, with the two pieces that file
+# never had:
+#
+#   1. The generated migrations are *executed*, up and then down, and the schema
+#      is compared before and after. The original only compared the generated
+#      text, which is why a `down` that could not run went unnoticed for years
+#      -- see HALLAZGOS.md.
+#   2. It runs against every reachable adapter, not just sqlite. The generator
+#      asks the adapter for native types, schema dumping and column
+#      introspection, so an adapter it is not tested against is an adapter it
+#      does not support.
+#
+# Assertions on the generated *text* are deliberately loose, because the wording
+# legitimately differs per adapter (native limits, quoting). The real assertion
+# is assert_reversible.
+module MigrationGeneratorBattery
 
   Migrator = Generators::Hobo::Migration::Migrator
 
   def setup
+    HoboFields::TestDatabases.connect(self.class.adapter)
     drop_all_tables
     Migrator.ignore_tables = []
   end
@@ -46,15 +57,14 @@ class MigrationGeneratorTest < Minitest::Test
 
   # The assertion this whole file exists for.
   def assert_reversible(up, down, message = nil)
+    context = message ? " (#{message})" : ""
     before = schema_snapshot
 
     run_migration(up)
-    after = schema_snapshot
-    refute_equal before, after, "the up migration changed nothing#{" (#{message})" if message}"
+    refute_equal before, schema_snapshot, "the up migration changed nothing#{context}"
 
     run_migration(down)
-    assert_equal before, schema_snapshot,
-                 "the down migration did not undo the up#{" (#{message})" if message}"
+    assert_equal before, schema_snapshot, "the down migration did not undo the up#{context}"
   end
 
   # --- introduction ---------------------------------------------------------
@@ -84,7 +94,7 @@ class MigrationGeneratorTest < Minitest::Test
     up, down = generate
 
     assert_match(/create_table :adverts/, up)
-    assert_match(/t\.string\s+:name, :limit => 250/, up)
+    assert_match(/t\.string\s+:name/, up)
     assert_match(/drop_table :adverts/, down)
     assert_reversible(up, down)
   end
@@ -110,8 +120,8 @@ class MigrationGeneratorTest < Minitest::Test
     connection.create_table(:adverts) { |t| t.string :name, :limit => 250 }
     define_model(:Advert) do
       fields do
-        name :string, :limit => 250
-        body :text
+        name  :string, :limit => 250
+        body  :text
         price :integer
       end
     end
@@ -134,7 +144,9 @@ class MigrationGeneratorTest < Minitest::Test
     up, down = generate
 
     assert_match(/remove_column :adverts, :body/, up)
-    assert_match(/add_column :adverts, :body, :text/, down)
+    # The type has to survive the round trip through the schema dumper: this is
+    # exactly what used to come out empty.
+    assert_match(/add_column :adverts, :body, :\w+/, down)
     assert_reversible(up, down)
   end
 
@@ -147,6 +159,7 @@ class MigrationGeneratorTest < Minitest::Test
     up, down = generate
 
     assert_match(/change_column :adverts, :name/, up)
+    assert_match(/change_column :adverts, :name, :\w+/, down)
     assert_reversible(up, down)
   end
 
@@ -156,7 +169,8 @@ class MigrationGeneratorTest < Minitest::Test
 
     up, down = generate
 
-    assert_match(/change_column :adverts, :name.*:default => "No Name"/, up)
+    assert_match(/change_column :adverts, :name/, up)
+    assert_match(/:default => "No Name"/, up)
     assert_reversible(up, down)
   end
 
@@ -166,7 +180,8 @@ class MigrationGeneratorTest < Minitest::Test
 
     up, down = generate
 
-    assert_match(/change_column :adverts, :name.*:limit => 100/, up)
+    assert_match(/change_column :adverts, :name/, up)
+    assert_match(/:limit => 100/, up)
     assert_reversible(up, down)
   end
 
@@ -213,6 +228,17 @@ class MigrationGeneratorTest < Minitest::Test
     assert_reversible(up, down)
   end
 
+  def test_an_index_added_to_an_existing_table
+    connection.create_table(:adverts) { |t| t.string :name, :limit => 250 }
+    define_model(:Advert) do
+      fields { name :string, :limit => 250 }
+      index :name
+    end
+
+    up, down = generate
+    assert_reversible(up, down)
+  end
+
   # --- associations ---------------------------------------------------------
 
   def test_a_belongs_to_creates_its_foreign_key_and_index
@@ -236,9 +262,10 @@ class MigrationGeneratorTest < Minitest::Test
     up, down = generate
 
     assert_match(/drop_table :adverts/, up)
-    # The down has to be able to recreate it -- this is the case that used to
-    # be generated without column types and only failed when actually run.
+    # The down has to be able to recreate it. This is the case that used to be
+    # generated without column types and only failed when actually run.
     assert_match(/create_table "adverts"/, down)
+    refute_match(/Could not dump table/, down)
     assert_reversible(up, down)
   end
 
@@ -257,7 +284,30 @@ class MigrationGeneratorTest < Minitest::Test
     end
 
     up, down = generate
-    assert_reversible(up, down, "rename, change and add together")
+    assert_reversible(up, down, "change, remove and add together")
   end
 
+end
+
+
+# One test class per reachable adapter.
+HoboFields::TestDatabases.available.each do |adapter|
+  klass = Class.new(Minitest::Test) do
+    include MigrationGeneratorBattery
+    define_singleton_method(:adapter) { adapter }
+  end
+  Object.const_set("MigrationGenerator#{adapter.camelize}Test", klass)
+end
+
+# And a visible skip for the ones that did not answer, so a missing adapter is
+# never mistaken for a passing one.
+unless HoboFields::TestDatabases.unavailable.empty?
+  klass = Class.new(Minitest::Test) do
+    HoboFields::TestDatabases.unavailable.each do |adapter|
+      define_method("test_#{adapter}_was_not_reachable") do
+        skip "#{adapter} is not reachable: the migration battery did not run against it"
+      end
+    end
+  end
+  Object.const_set("MigrationGeneratorAdapterCoverageTest", klass)
 end

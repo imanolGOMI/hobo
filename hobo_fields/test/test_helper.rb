@@ -5,13 +5,65 @@ require "minitest/autorun"
 require "active_record"
 require "hobo_fields"
 
-ActiveRecord::Base.establish_connection(:adapter => "sqlite3", :database => ":memory:")
-
 # Quiet: the schema statements are chatty.
 ActiveRecord::Base.logger = Logger.new(IO::NULL)
 ActiveRecord::Migration.verbose = false
 
 module HoboFields
+
+  # The migration generator talks to the adapter for native types, schema
+  # dumping and column introspection, so it has to be tested against every
+  # adapter it claims to support -- not just sqlite. See PLAN.md, "Deuda 1".
+  #
+  # Whichever databases are reachable get tested; the rest are skipped with a
+  # message. Point them somewhere with:
+  #
+  #   HOBO_TEST_POSTGRES_URL=postgres://user:pass@localhost/hobo_fields_test
+  #   HOBO_TEST_MYSQL_URL=mysql2://user:pass@localhost/hobo_fields_test
+  #
+  module TestDatabases
+
+    DEFAULTS = {
+      "sqlite3" => { "adapter" => "sqlite3", "database" => ":memory:" },
+      "postgresql" => ENV["HOBO_TEST_POSTGRES_URL"],
+      "mysql2" => ENV["HOBO_TEST_MYSQL_URL"],
+    }.freeze
+
+    class << self
+
+      # Names of the adapters that answered, in a stable order.
+      def available
+        @available ||= DEFAULTS.filter_map { |name, config| name if config && reachable?(config) }
+      end
+
+      def unavailable
+        DEFAULTS.keys - available
+      end
+
+      def config_for(name)
+        DEFAULTS[name]
+      end
+
+      def connect(name)
+        ActiveRecord::Base.establish_connection(config_for(name))
+      end
+
+      private
+
+      def reachable?(config)
+        ActiveRecord::Base.establish_connection(config)
+        ActiveRecord::Base.connection.execute("SELECT 1")
+        true
+      rescue Exception
+        false
+      ensure
+        ActiveRecord::Base.remove_connection rescue nil
+      end
+
+    end
+
+  end
+
   module TestHelper
 
     def connection
@@ -49,8 +101,14 @@ module HoboFields
     end
 
   end
+
 end
 
 class Minitest::Test
   include HoboFields::TestHelper
 end
+
+# Probe first -- checking an adapter tears the connection down again -- and only
+# then connect. Everything that is not adapter-specific runs on sqlite.
+HoboFields::TestDatabases.available
+HoboFields::TestDatabases.connect("sqlite3")
