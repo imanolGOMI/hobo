@@ -21,14 +21,16 @@ class AutoActionsIntegrationTest < Minitest::Test
     assert_equal "BOOT OK", run_in_app(%(puts "BOOT OK")).lines.last.to_s.strip
   end
 
-  # Routing, `include Hobo::Controller::Model`, `auto_actions`, the rescue_from
-  # and the permission layer, end to end.
+  # The whole stack, end to end: routing, `include Hobo::Controller::Model`,
+  # `auto_actions`, the permission layer, the finder, and a rendered view with
+  # the record in it.
   #
-  # 403 is the answer today, and it is a real one: the request reaches Hobo's
-  # own permission check and is turned down there. Getting an index to answer
-  # 200 is the next step of piece 11 -- see PLAN.md.
-  def test_a_request_reaches_the_hobo_stack_and_gets_its_answer
-    output = run_in_app(<<~RUBY)
+  # The view is plain ERB and reads `@stories`, which is the contract the
+  # controller side offers: `this=` sets the instance variable named after the
+  # model. `this` itself only reaches a template through the tag runtime, and
+  # that is layers 5 and 6.
+  def test_an_index_answers_200_with_the_record_in_it
+    output = run_in_app(<<~RUBY, "stories/index.html.erb" => "<ul><% @stories.each do |s| %><li><%= s.title %></li><% end %></ul>")
       ActiveRecord::Base.connection.create_table(:stories, :force => true) { |t| t.string :title }
 
       class Story < ActiveRecord::Base
@@ -45,19 +47,48 @@ class AutoActionsIntegrationTest < Minitest::Test
       Rails.application.routes.draw { resources :stories }
       Story.create!(:title => "Hello")
 
-      response = Rack::MockRequest.new(Rails.application).get("/stories")
-      puts "STATUS \#{response.status}"
+      status, _headers, body = StoriesController.action(:index).call(Rack::MockRequest.env_for("/stories"))
+      puts "STATUS \#{status}"
+      puts "BODY \#{body.body.to_s.gsub(/<!--.*?-->/m, '').strip}"
     RUBY
 
-    status = output[/STATUS (\d+)/, 1]
-    refute_nil status, "la peticion no llego a contestar:\n#{output}"
-    refute_equal "500", status, "la peticion revento en vez de contestar:\n#{output}"
-    assert_equal "403", status, "hoy el indice se deniega; si esto cambia, actualiza PLAN.md"
+    assert_includes output, "STATUS 200", output
+    assert_includes output, "<li>Hello</li>", "el registro no llego a la vista:\n#{output}"
+  end
+
+  # Nobody logged in, and the application has no Guest model of its own. That
+  # used to be a NameError on *every* request, before any action ran: the helper
+  # named a bare `::Guest` that only the classic autoloader could resolve.
+  def test_a_request_without_a_user_gets_hobos_own_guest
+    output = run_in_app(<<~RUBY)
+      ActiveRecord::Base.connection.create_table(:stories, :force => true) { |t| t.string :title }
+      class Story < ActiveRecord::Base
+        include Hobo::Model
+        fields { title :string }
+      end
+
+      class StoriesController < ApplicationController
+        include Hobo::Controller::Model
+      end
+
+      controller = StoriesController.new
+      controller.define_singleton_method(:session) { {} }
+      user = controller.send(:current_user)
+      puts "GUEST \#{user.class} \#{user.guest?}"
+    RUBY
+
+    assert_includes output, "GUEST Hobo::Model::Guest true", output
   end
 
   private
 
-  def run_in_app(script)
+  def run_in_app(script, views = {})
+    views.each do |path, content|
+      full = File.join(TestApp::PATH, "app", "views", path)
+      FileUtils.mkdir_p(File.dirname(full))
+      File.write(full, content)
+    end
+
     file = File.join(TestApp::PATH, "tmp", "probe.rb")
     FileUtils.mkdir_p(File.dirname(file))
     File.write(file, script)

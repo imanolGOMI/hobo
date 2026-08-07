@@ -7,6 +7,7 @@ require File.join(helpers, 'hobo_route_helper')
 require File.join(helpers, 'hobo_translations_helper')
 require File.join(helpers, 'hobo_translations_normalizer_helper')
 require File.join(helpers, 'hobo_permissions_helper')
+require 'hobo/model/guest'
 require 'hobo/controller/authentication_support'
 require 'hobo/controller/cache'
 

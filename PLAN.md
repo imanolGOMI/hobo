@@ -1351,13 +1351,34 @@ Los dos inicializadores que llaman al compilador viejo de DRYML quedan **guardad
 con `defined?`**: una aplicación arranca sin generar taglibs, en vez de no
 arrancar. Vuelven en las capas 5 a 7 sobre el runtime nuevo.
 
+### El índice contesta 200 — y el 403 escondía un `NameError`
+
+**`GET /stories` devuelve 200 con el registro pintado en la vista.** Routing,
+`auto_actions`, permisos, buscador y render, de punta a punta, fijado en la
+prueba de integración.
+
+El 403 de antes **no era una denegación**: era un `NameError` disfrazado.
+`current_user`, en `hobo_permissions_helper.rb`, terminaba en `::Guest.new` —una
+constante pelada que **solo el autocargador clásico sabía resolver**— y en una
+aplicación sin modelo `Guest` eso reventaba **en todas las peticiones, antes de
+que ninguna acción llegara a correr**. La página de error salía con 403 y no
+había forma de saberlo desde fuera.
+
+Ahora hay `Hobo::Model::Guest` de respaldo: la aplicación que tenga su propio
+`Guest` lo sigue usando —querrá uno con nombre, o con idioma— y la que no, se
+queda con el de Hobo, que dice que no a todo. Con prueba.
+
+> **Lo que la vista enseñó:** la plantilla lee `@stories`, no `this`. Ese es el
+> contrato del lado del controlador —`this=` pone la variable de instancia con el
+> nombre del modelo— y `this` solo llega a una plantilla **por el runtime de
+> tags**, que es de las capas 5 y 6. Anotado para no buscarlo donde no está.
+
 ### Lo que queda de la pieza 11
 
-**Una petición ya recorre la pila entera de Hobo y recibe respuesta: 403.** Es
-una respuesta de verdad —la comprobación de permisos la deniega—, no un 500, y
-está fijada en la prueba de integración. **Hacer que un índice conteste 200 es el
-siguiente paso.** Después, las 4 `alias_method_chain` de `user_base.rb`,
-`find_for.rb` y `relation_with_origin.rb`.
+Las 4 `alias_method_chain` de `user_base.rb`, `find_for.rb` y
+`relation_with_origin.rb`, y repasar el resto de acciones (`hobo_create`,
+`hobo_update`, `hobo_destroy`, las de lifecycle) con el mismo par de niveles:
+prueba sin aplicación donde se pueda, y petición de verdad donde no.
 
 ### Lo que queda de la capa 4
 
