@@ -10,7 +10,6 @@ module Hobo
       h = config.hobo = ActiveSupport::OrderedOptions.new
       h.app_name = self.class.name.split('::').first.underscore.titleize
       h.developer_features = Rails.env.in?(["development", "test"])
-      h.routes_path = Pathname.new File.expand_path('config/hobo_routes.rb', Rails.root)
       h.rapid_generators_path = Pathname.new File.expand_path('lib/hobo/rapid/generators', Hobo.root)
       h.auto_taglibs_path = Pathname.new File.expand_path('app/views/taglibs/auto', Rails.root)
       h.read_only_file_system = !!ENV['HEROKU_TYPE']
@@ -21,6 +20,9 @@ module Hobo
 
     ActiveSupport.on_load(:action_controller) do
       require 'hobo/controller'
+      # An application's own controllers say `include Hobo::Controller::Model`,
+      # and Zeitwerk loads them without asking anybody first.
+      require 'hobo/controller/model'
       require 'hobo/extensions/action_controller/hobo_methods'
     end
 
@@ -69,17 +71,13 @@ module Hobo
       require 'hobo/extensions/i18n' if app.config.hobo.show_translation_keys
     end
 
+    # The routes used to be generated into config/hobo_routes.rb at boot and fed
+    # to the routes reloader. They are a method an application calls from its own
+    # config/routes.rb now -- see hobo/routes_dsl.rb -- so there is no generated
+    # file, booting does not need a writable disk, and the application decides
+    # where Hobo's routes sit among its own.
     initializer 'hobo.routes' do |app|
-      h = app.config.hobo
-      # generate at first boot, so no manual generation is required
-      unless File.exist?(h.routes_path)
-        raise Hobo::Error, "No #{h.routes_path} found!" if h.read_only_file_system
-        Rails::Generators.invoke('hobo:routes', %w[-f -q])
-      end
-      app.routes_reloader.paths << h.routes_path
-      app.config.to_prepare do
-        Rails::Generators.invoke('hobo:routes', %w[-f -q])
-      end
+      require 'hobo/routes_dsl'
     end
 
     # Regenerating the auto taglibs on every reload belongs to the old DRYML

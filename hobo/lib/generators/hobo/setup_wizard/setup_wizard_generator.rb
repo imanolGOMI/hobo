@@ -285,13 +285,13 @@ STR
         gitignore_auto_generated = options[:gitignore_auto_generated_files]
       end
       if gitignore_auto_generated
-        hobo_routes_rel_path = Hobo::Engine.config.hobo.routes_path.relative_path_from Rails.root
-        append_file '.gitignore', "app/views/taglibs/auto/**/*\n#{hobo_routes_rel_path}\n"
+        # config/hobo_routes.rb is not generated any more: the routes are a
+        # method an application calls from its own config/routes.rb.
+        append_file '.gitignore', "app/views/taglibs/auto/**/*\n"
       end
       git :init
       git :add => '.'
       git :commit => '-m "initial commit"'
-      say("NOTICE: If you change the config.hobo.routes_path, you should update the .gitignore file accordingly.", Color::YELLOW) if gitignore_auto_generated
     end
 
     def finalize

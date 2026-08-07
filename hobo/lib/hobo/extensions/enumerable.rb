@@ -1,14 +1,19 @@
-module Enumerable
-  def group_by_with_metadata(&block)
-    r=group_by_without_metadata(&block)
-    if respond_to?(:origin)
-      r.each do |k,v|
-        v.origin = origin
-        v.origin_attribute = origin_attribute
-        v.member_class = member_class
+# `group_by` on a Hobo collection keeps the collection's metadata -- where it
+# came from and what it holds -- so the views still know what each group *is*.
+module Hobo
+  module GroupByWithMetadata
+    def group_by(&block)
+      groups = super
+      if respond_to?(:origin)
+        groups.each_value do |group|
+          group.origin = origin
+          group.origin_attribute = origin_attribute
+          group.member_class = member_class
+        end
       end
+      groups
     end
-    r
   end
-  alias_method_chain :group_by, :metadata
 end
+
+Enumerable.prepend(Hobo::GroupByWithMetadata)

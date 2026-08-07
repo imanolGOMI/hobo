@@ -101,6 +101,59 @@ class AutoActionsIntegrationTest < Minitest::Test
     assert_includes output, "CREADAS 0", output
   end
 
+  # Piece 12: the routes are drawn by `hobo_routes` in the application's own
+  # config/routes.rb. There is no generated config/hobo_routes.rb any more.
+  def test_hobo_routes_draws_the_routes_of_every_controller
+    output = run_in_app(<<~RUBY)
+      #{model_and_controller}
+      Rails.application.routes.draw { hobo_routes }
+
+      paths = Rails.application.routes.routes.map { |r| "\#{r.verb} \#{r.path.spec}" }
+      puts "RUTAS \#{paths.grep(/stories/).sort.join(' | ')}"
+    RUBY
+
+    assert_includes output, "GET /stories(.:format)", output
+    assert_includes output, "POST /stories(.:format)", output
+    assert_includes output, "GET /stories/:id/edit(.:format)", output
+    assert_includes output, "DELETE /stories/:id(.:format)", output
+  end
+
+  # And a request through those routes reaches the action, which is what the
+  # generated file used to be for.
+  def test_a_request_through_the_drawn_routes_reaches_the_action
+    output = run_in_app(<<~RUBY, "stories/index.html.erb" => "<%= @stories.length %> historias")
+      #{model_and_controller}
+      Rails.application.routes.draw { hobo_routes }
+      Story.create!(:title => "Hello")
+
+      response = Rack::MockRequest.new(Rails.application).get("/stories")
+      puts "STATUS \#{response.status}"
+      puts "BODY \#{response.body.gsub(/<!--.*?-->/m, '').strip}"
+    RUBY
+
+    assert_includes output, "STATUS 200", output
+    assert_includes output, "1 historias", output
+  end
+
+  # The router's real job: find the controllers an application *has*, on disk,
+  # without anyone naming them. That is the piece PLAN.md flagged as the
+  # aggravation of Zeitwerk -- `descendants` sees only what is loaded, so the
+  # router scans app/controllers and lets the autoloader do the rest.
+  def test_hobo_routes_finds_controllers_that_live_in_files
+    output = run_in_app(<<~RUBY, {}, FILES)
+      ActiveRecord::Base.connection.create_table(:stories, :force => true) { |t| t.string :title }
+      Rails.application.routes.draw { hobo_routes }
+
+      paths = Rails.application.routes.routes.map { |r| "\#{r.verb} \#{r.path.spec}" }.grep(/stories/)
+      puts "ENCONTRADAS \#{paths.length}"
+      puts "RUTAS \#{paths.sort.join(' | ')}"
+    RUBY
+
+    assert_includes output, "ENCONTRADAS 8", output
+    assert_includes output, "GET /stories(.:format)", output
+    assert_includes output, "GET /stories/:id/edit(.:format)", output
+  end
+
   # Nobody logged in, and the application has no Guest model of its own. That
   # used to be a NameError on *every* request, before any action ran: the helper
   # named a bare `::Guest` that only the classic autoloader could resolve.
@@ -126,6 +179,24 @@ class AutoActionsIntegrationTest < Minitest::Test
   end
 
   private
+
+  # A model and a controller as an application really has them: files that
+  # nobody requires, found by the autoloader.
+  FILES = {
+    "app/models/story.rb" => <<~RUBY,
+      class Story < ActiveRecord::Base
+        include Hobo::Model
+        fields { title :string }
+        def view_permitted?(field) = true
+      end
+    RUBY
+    "app/controllers/stories_controller.rb" => <<~RUBY,
+      class StoriesController < ApplicationController
+        include Hobo::Controller::Model
+        auto_actions :all
+      end
+    RUBY
+  }.freeze
 
   def model_and_controller(create_permitted: true)
     <<~RUBY
@@ -165,17 +236,32 @@ class AutoActionsIntegrationTest < Minitest::Test
     RUBY
   end
 
-  def run_in_app(script, views = {})
+  # `files` are written under the application and removed afterwards: anything
+  # left in app/ is autoloaded on the *next* boot and quietly changes what the
+  # other tests see.
+  def run_in_app(script, views = {}, files = {})
+    written = []
+
     views.each do |path, content|
-      full = File.join(TestApp::PATH, "app", "views", path)
-      FileUtils.mkdir_p(File.dirname(full))
-      File.write(full, content)
+      written << write_in_app(File.join("app", "views", path), content)
+    end
+    files.each do |path, content|
+      written << write_in_app(path, content)
     end
 
-    file = File.join(TestApp::PATH, "tmp", "probe.rb")
-    FileUtils.mkdir_p(File.dirname(file))
-    File.write(file, script)
+    file = write_in_app(File.join("tmp", "probe.rb"), script)
+    written << file
+
     `cd #{TestApp::PATH} && bin/rails runner #{file} 2>&1`
+  ensure
+    written.each { |path| FileUtils.rm_f(path) }
+  end
+
+  def write_in_app(path, content)
+    full = File.join(TestApp::PATH, path)
+    FileUtils.mkdir_p(File.dirname(full))
+    File.write(full, content)
+    full
   end
 
 end

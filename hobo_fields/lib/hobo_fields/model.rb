@@ -58,16 +58,23 @@ module HoboFields
     # either a class or a symbolic name of a rich type. If this option
     # is given, the setter will wrap values that are not of the right
     # type.
-    def self.attr_accessor_with_rich_types(*attrs)
-      options = attrs.extract_options!
-      type = options.delete(:type)
-      attrs << options unless options.empty?
-      # Since Ruby 3.0 a bare `public` inside a method body does nothing, and
-      # attr_accessor returns the names it defined -- so make them public
-      # explicitly.
-      public(*attr_accessor_without_rich_types(*attrs))
+    # `attr_accessor :foo, :type => Markdown` -- a virtual attribute with a rich
+    # type -- and acts_as_list declaring its position column. Both were
+    # alias_method_chain; layer 4 prepends its own attr_accessor on top, and an
+    # alias chain and a prepend end up calling each other for ever.
+    module RichTypeAccessors
 
-      if type
+      def attr_accessor(*attrs)
+        options = attrs.extract_options!
+        type = options.delete(:type)
+        attrs << options unless options.empty?
+        # Since Ruby 3.0 a bare `public` inside a method body does nothing, and
+        # attr_accessor returns the names it defined -- so make them public
+        # explicitly.
+        public(*super(*attrs))
+
+        return unless type
+
         type = HoboFields.to_class(type)
         attrs.each do |attr|
           declare_attr_type attr, type, options
@@ -80,7 +87,16 @@ module HoboFields
           end
         end
       end
+
+      # acts_as_list is not a dependency: the method only exists when it is there.
+      def acts_as_list(options = {})
+        declare_field(options.fetch(:column, "position"), :integer)
+        default_scope { order("#{table_name}.position ASC") }
+        super
+      end
+
     end
+    singleton_class.prepend(RichTypeAccessors)
 
 
     # Extend belongs_to so that it creates a FieldSpec for the foreign key.
@@ -208,13 +224,6 @@ module HoboFields
 
     # Extended version of the acts_as_list declaration that
     # automatically delcares the 'position' field
-    def self.acts_as_list_with_field_declaration(options = {})
-      declare_field(options.fetch(:column, "position"), :integer)
-      default_scope { order("#{self.table_name}.position ASC") }
-      acts_as_list_without_field_declaration(options)
-    end
-
-
     # Returns the type (a class) for a given field or association. If
     # the association is a collection (has_many or habtm) return the
     # AssociationReflection instead
@@ -242,11 +251,6 @@ module HoboFields
       return unless (@table_exists ||= table_exists?)
       name = name.to_s
       columns.find {|c| c.name == name }
-    end
-
-    class << self
-      alias_method_chain :acts_as_list,  :field_declaration if defined?(ActiveRecord::Acts::List)
-      alias_method_chain :attr_accessor, :rich_types
     end
 
   end

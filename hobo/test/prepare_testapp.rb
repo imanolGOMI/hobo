@@ -46,6 +46,14 @@ module TestApp
         GEMS.each { |gem| f.puts %(gem "#{gem}", :path => "#{File.join(root, gem)}") }
       end
 
+      # Rails blocks requests whose Host it does not recognise, and a request
+      # built with Rack::MockRequest has none it likes. It answers 403 through
+      # the middleware, which looks exactly like a permission denied and is not.
+      File.open(File.join(PATH, "config", "environments", "development.rb"), "a") do |f|
+        f.puts
+        f.puts "Rails.application.configure { config.hosts.clear }"
+      end
+
       Dir.chdir(PATH) { sh "bundle install" }
       puts "aplicacion de pruebas lista en #{PATH}"
     end

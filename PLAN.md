@@ -1398,12 +1398,66 @@ Y las **4 `alias_method_chain`** que quedaban de la pieza pasan a `prepend`:
 pieza 12: `active_model/{name,translation}.rb`, `associations/reflection.rb`,
 `extensions/{enumerable,i18n}.rb`.
 
+## Pieza 12 hecha: el router, sin fichero generado (2026-08-07)
+
+**`config/hobo_routes.rb` ya no existe.** Las rutas son un método que la
+aplicación llama desde su propio `config/routes.rb`:
+
+```ruby
+Rails.application.routes.draw do
+  hobo_routes
+  root :to => "front#index"
+end
+```
+
+El fichero generado tenía tres problemas a la vez, y los tres se van con él:
+
+1. **se escribía durante el arranque**, así que arrancar necesitaba disco de
+   escritura, y un despliegue de solo lectura tenía una bandera propia
+   (`read_only_file_system`) para esquivarlo;
+2. **acababa en el repositorio** con pinta de fichero que se edita, y una nota
+   arriba diciendo que no;
+3. sus rutas se cargaban **en un sitio fijo**, así que una aplicación no podía
+   decidir qué iba antes y qué después.
+
+Lo que decide **qué** rutas hay no ha cambiado: sigue siendo el `Router`, que lee
+de cada controlador sus `auto_actions`, sus asociaciones de propietario, sus
+lifecycles y sus métodos web. Lo que cambia es que su salida se evalúa
+directamente en el *mapper* en vez de dar un rodeo por el disco.
+
+**El agravante de Zeitwerk, resuelto y probado.** El router encuentra los
+controladores **que viven en ficheros**, sin que nadie los nombre: recorre
+`app/controllers` y deja que el autocargador haga el resto. La prueba escribe un
+modelo y un controlador de verdad en la aplicación y comprueba que salen **8
+rutas**. Es lo que `descendants` no podía dar.
+
+> **Y un 403 que no era de Hobo.** Una petición montada con `Rack::MockRequest`
+> no lleva un `Host` que Rails reconozca, y `ActionDispatch::HostAuthorization`
+> la corta con **403 desde el middleware** — idéntico por fuera a un permiso
+> denegado. Ya van dos 403 distintos en esta capa que no eran lo que parecían;
+> el montaje de la aplicación de pruebas ahora hace `config.hosts.clear` y lo
+> deja dicho por escrito.
+
+### Cero `alias_method_chain`
+
+**Eran 35 al empezar la capa y no queda ninguna** en `hobo`, ni en
+`hobo_support`, ni en `hobo_fields`. Las últimas cinco eran extensiones
+(`ActiveModel::Name#human`, `ActiveModel::Translation#human_attribute_name`,
+`AssociationReflection#klass`, `Enumerable#group_by`, `I18n.translate`), y las
+dos de `hobo_fields` —`attr_accessor` con tipos ricos y `acts_as_list`— venían
+aplazadas de la capa 2.
+
+Esa última pareja importaba: **`attr_accessor` era el mismo choque latente que ya
+explotó con `belongs_to`.** La capa 4 prepende su propio `attr_accessor`, y una
+cadena de alias debajo de un `prepend` se llaman en círculo hasta desbordar la
+pila. Estaba esperando a que alguien escribiera `attr_accessor :x, :type => …`.
+
+Las que quedan en el repositorio son las del **compilador viejo de DRYML**
+(`dryml/lib/dryml/legacy.rb` y compañía), que se conserva a propósito.
+
 ### Lo que queda de la capa 4
 
-Por orden, y con lo que ya se sabe:
-
-1. **Pieza 12, router**, con el agravante de la carga ansiosa por `descendants`.
-2. **Pieza 14, subsites**, que es transversal y va la última.
+**Pieza 14, subsites**, que es transversal y va la última.
 
 Quedan **5 `alias_method_chain`** —eran 35 al empezar la capa—, todas de la
 pieza 12:
