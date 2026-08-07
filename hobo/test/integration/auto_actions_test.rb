@@ -13,6 +13,7 @@ class AutoActionsIntegrationTest < Minitest::Test
 
   def setup
     skip TestApp.why_not unless TestApp.built?
+    TestApp.sweep
   end
 
   # Everything layer 4 has fixed so far, in one assertion: the four gems load

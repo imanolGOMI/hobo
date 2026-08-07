@@ -2143,6 +2143,19 @@ navegador (`cd hobo && HOBO_APP=/tmp/hobo_luz rake test`). `/tmp/hobo_luz` se
 regeneró con el `hobo new` de hoy: el banco tiene que ser lo que sale del
 generador, no lo que salía hace tres commits.**
 
+## Una trampa del banco de pruebas, por si vuelve
+
+`hobo` y `hobo_rapid` comparten la aplicación de integración
+(`/tmp/hobo_testapp`). Cada prueba escribe dentro los modelos y las vistas que
+necesita y los quita después, en un `ensure` — que cubre una excepción y **no**
+cubre que maten el proceso. Un `app/models/story.rb` que sobrevive a una tanda
+interrumpida lo autocarga la siguiente, y **lo que falla es la prueba de otra
+gema**, con un mensaje sobre una columna que nadie pidió.
+
+Costó media hora de desconcierto. `TestApp.sweep` barre antes de empezar, y lo
+llaman las tres pruebas de integración. Si vuelve a aparecer un fallo raro y que
+no se repite, mirar ahí primero.
+
 ## Cómo correr las cosas (para retomar en frío)
 
 ```sh

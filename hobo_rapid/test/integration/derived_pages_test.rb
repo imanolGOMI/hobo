@@ -48,6 +48,7 @@ class DerivedPagesTest < Minitest::Test
 
   def setup
     skip TestApp.why_not unless TestApp.built?
+    TestApp.sweep
   end
 
   def test_a_show_page_is_derived_from_the_model

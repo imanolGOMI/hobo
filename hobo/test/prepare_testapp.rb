@@ -25,6 +25,25 @@ module TestApp
 
     def built? = File.exist?(File.join(PATH, "config", "environment.rb"))
 
+    # Two gems' integration tests share this application, and each one writes
+    # the models and views it needs and takes them away afterwards -- in an
+    # `ensure`, which covers an exception and does **not** cover the process
+    # being killed. A leftover `app/models/story.rb` from an interrupted run is
+    # then autoloaded by the next one, and what fails is somebody else's test,
+    # in another gem, with a message about a column that was never asked for.
+    #
+    # That cost a puzzled half hour. Sweeping first is cheaper than reading that
+    # message again.
+    def sweep
+      return unless built?
+      Dir[File.join(PATH, "app", "models", "*.rb")].each do |file|
+        FileUtils.rm_f(file) unless File.basename(file) == "application_record.rb"
+      end
+      FileUtils.rm_rf(File.join(PATH, "app", "views", "stories"))
+      FileUtils.rm_rf(File.join(PATH, "app", "controllers", "admin"))
+      FileUtils.rm_f(File.join(PATH, "tmp", "probe.rb"))
+    end
+
     def why_not
       "no hay aplicacion de pruebas en #{PATH}: montala con `cd hobo && rake test:app`"
     end

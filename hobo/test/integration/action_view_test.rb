@@ -14,6 +14,7 @@ class ActionViewIntegrationTest < Minitest::Test
 
   def setup
     skip TestApp.why_not unless TestApp.built?
+    TestApp.sweep
   end
 
   # `tag` with no arguments is the tag builder, and it is how every helper
