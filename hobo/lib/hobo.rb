@@ -116,6 +116,17 @@ require 'hobo/model'
 require 'hobo/routes'
 require 'hobo/engine'
 
+# The catalogue and the theme, which used to be two more gems (decision 11).
+# They come last because they read what is above: the derivation engine asks
+# Hobo::Model what a model declared, and the theme paints what the catalogue
+# gives it.
+#
+# The theme is *in* here on purpose (decision 13): an application created with
+# `hobo new` has to look right without installing anything else. Alternative
+# themes stay separate gems -- that is what the plugin contract is for.
+require 'hobo_rapid'
+require 'hobo_bootstrap'
+
 
 
 

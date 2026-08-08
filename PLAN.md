@@ -630,7 +630,7 @@ Estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho
 | `[x]` | **4** | `hobo`: permisos, lifecycles, view hints, auto-actions, router, subsites | 4, 5, 6, 7, 11, 12, 14 |
 | `[x]` | **5** | El JS a Stimulus (decisión 14), `hobo_rapid` y el motor de derivación | 9, 10 |
 | `[x]` | **6** | Separado `hobo_bootstrap`: estructura a RAPID, tema en Bootstrap 5 con su contrato probado | 13a, 13b |
-| `[~]` | **7** | `hobo new` y generadores hechos; faltan el contrato de plugin y la fusión en una gema | 17 |
+| `[~]` | **7** | `hobo new`, generadores y **la fusión en una sola gema**, hechos; falta el contrato de plugin | 17 |
 
 **Riesgo asumido conscientemente:** de abajo arriba no se ve una página hasta la
 capa 6. Imanol lo acepta a cambio de hacerlo bien. El spike de la capa 3 es lo
@@ -2138,7 +2138,7 @@ Una aplicación Rails 8 generada con `hobo new`:
 - **Filtros**: `<search-filter>` y `<filter-menu>` sobre Ransack, que suman en
   vez de turnarse.
 
-**Pruebas: 389 en las gemas, todas en verde, + la suite de conformidad en
+**Pruebas: 389 en **una** suite, todas en verde, + la suite de conformidad en
 navegador (`cd hobo && HOBO_APP=/tmp/hobo_luz rake test`). `/tmp/hobo_luz` se
 regeneró con el `hobo new` de hoy: el banco tiene que ser lo que sale del
 generador, no lo que salía hace tres commits.**
@@ -2159,7 +2159,7 @@ no se repite, mirar ahí primero.
 ## Cómo correr las cosas (para retomar en frío)
 
 ```sh
-# toda la suite de las gemas
+# toda la suite: una gema, una suite
 rake test
 
 # la suite de conformidad, en navegador, contra una aplicacion arrancada
@@ -2171,8 +2171,8 @@ cd hobo && HOBO_APP=/tmp/hobo_luz rake test
 # la prueba de `hobo new`, que genera una aplicacion entera (tarda minutos)
 HOBO_TEST_NEW=1 rake test
 
-# el banco de navegador de los controladores Stimulus
-cd hobo_rapid && rake test        # los de test/browser van dentro
+# el banco de navegador de los controladores Stimulus va dentro de la suite
+# (hobo/test/hobo_rapid/browser), y se salta solo si no hay Firefox
 
 # generar una aplicacion nueva contra el arbol de trabajo
 HOBODEV=/home/imanol/RubymineProjects/hobo hobo/bin/hobo new /tmp/loquesea
@@ -2552,7 +2552,44 @@ Visto en las capturas, ordenado por lo que más se nota:
 escribir vistas —salvo tres líneas para decir por dónde se filtra—, funciona, y
 se parece a la de Hobo 2. Lo que queda es empaquetar y pulir.
 
-### 1. La fusión en una sola gema (decisión 11)
+### ~~1. La fusión en una sola gema~~ — **hecha** (2026-08-08)
+
+Cinco gemas y un tema son **una gema `hobo`**. Un `Gemfile` de aplicación pasa
+de seis líneas a una, y `hobo/lib/` tiene dentro `hobo_support`, `hobo_fields`,
+`dryml`, `rapid`, `hobo_rapid` y `hobo_bootstrap`.
+
+**Los espacios de nombres se quedan.** `Hobo`, `HoboFields`, `Rapid`,
+`HoboRapid`, `HoboBootstrap` siguen diciendo de qué es cada cosa; lo que se
+fusiona es el **empaquetado**, no el diseño. Y como todo cuelga de un solo
+`lib/`, **ni un `require` cambió**.
+
+Fuera: cinco gemspec, cinco Gemfile, cinco Rakefile, cinco VERSION y cinco
+`test_helper` (el precio que la decisión 12 aceptó «hasta la capa 7»). El
+`Rakefile` de la raíz tenía tres listas —`PORTED_GEMS`, `PARTIAL_GEMS`,
+`PENDING_GEMS`— que sirvieron para que ninguna capa diera por buena una gema sin
+mirarla; ya no hacen falta.
+
+**A `legacy/` va lo que es especificación y no código**: los 87 escenarios de
+cucumber de DRYML, los `.dryml` originales de RAPID y del tema, el
+`dryml.rdoctest` y los CHANGES de cada gema. Se leen, no se ejecutan, y no
+tienen por qué viajar dentro de la gema.
+
+### Los cuatro fallos que solo aparecen al juntarlo todo
+
+Ninguno se ve mientras cada gema tiene su proceso. Todos son la misma forma:
+**algo global que estaba bien mientras estuviera solo.**
+
+| Qué | Era |
+|---|---|
+| La aplicación no arrancaba: «Invalid route name, already in use: `dryml_support`» | **Tres engines con la misma raíz.** Un engine de Rails dibuja `config/routes.rb` relativo a su raíz, y al fundirse las gemas `Hobo::Engine`, `HoboRapid::Engine` y `HoboBootstrap::Engine` pasaron a compartirla. Ahora hay **un engine**, con los initializers de los otros dos dentro |
+| La barra dejó de decir quién eras — en la prueba de otra suite | El port de `<form>` de la capa 3 hacía `Rapid::Tag.include` de un módulo con `def current_user = nil`. Eso alcanza a **todos** los tags, no solo al port |
+| `<view>`, `<input>`, `<page>`, `<search-filter>` y `<error-messages>` pintaban otra cosa | El registro de tags es **global** —un tag se busca por nombre y una aplicación tiene un catálogo— y los suplentes de la capa 3 se llaman igual que tags que el catálogo ya tiene de verdad. Ganaba el que cargara el último. Los suplentes pasan a `spike_*`, y `<error-messages>` se borra: el catálogo tiene el suyo |
+| El botón «Filtrar» de reserva no se escondía | El controlador de Stimulus estaba en el `<select>`, y su alcance es su propio elemento: el botón es hermano, no hijo. Va en el `<form>` |
+
+> El tercero es el más instructivo: **un suplente que sobrevive a aquello para
+> lo que suplía deja de ser un suplente y pasa a ser un impostor.**
+
+### 1. El contrato de plugin (pieza 17)
 
 `hobo_support`, `hobo_fields`, `dryml`, `hobo` y `hobo_rapid` pasan a ser una
 sola gema `hobo`. Lo que hay que tener en cuenta:
@@ -2571,13 +2608,11 @@ sola gema `hobo`. Lo que hay que tener en cuenta:
 - Cuidado con `app_template.rb` y con `TestApp::GEMS` en
   `hobo/test/prepare_testapp.rb`: los dos enumeran las gemas.
 
-### 2. El contrato de plugin (pieza 17)
-
 Con los tags en Ruby, **definir un tag ya es registrarlo**, así que el contrato
 se encoge muchísimo: un plugin es un Engine que requiere sus ficheros de tags y
 añade sus assets. Falta escribirlo y probarlo con uno de verdad.
 
-### 3. Las cadenas de interfaz a inglés, y detrás i18n
+### 2. Las cadenas de interfaz a inglés, y detrás i18n
 
 Al final a propósito: es lo más mecánico y lo que menos se aprende haciendo.
 Están en `hobo_rapid/lib/hobo_rapid/derivation.rb` («Nuevo», «Editar», «Crear»,

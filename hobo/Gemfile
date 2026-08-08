@@ -1,7 +1,4 @@
 source "https://rubygems.org"
 
-gem "hobo_support", :path => "../hobo_support"
-gem "hobo_fields",  :path => "../hobo_fields"
-gem "dryml",        :path => "../dryml"
 
 gemspec

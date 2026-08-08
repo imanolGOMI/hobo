@@ -1,7 +1,16 @@
+# One gem, one load path, one helper.
+#
+# There used to be five of these, one per gem, each unshifting the other four
+# onto `$LOAD_PATH` -- the andamiaje that decision 12 accepted "until layer 7"
+# so that each layer's diff would stay readable. This is layer 7.
+#
+# What was specific to one suite is next to that suite and required by name:
+#
+#   test/hobo_fields/databases.rb   the multi-adapter battery (Deuda 1)
+#   test/dryml/rapid_fixtures.rb    the ported tags the param contract runs on
+#   test/hobo_rapid/browser_helper.rb   the headless browser bench
+
 $LOAD_PATH.unshift File.expand_path("../lib", __dir__)
-$LOAD_PATH.unshift File.expand_path("../../hobo_support/lib", __dir__)
-$LOAD_PATH.unshift File.expand_path("../../hobo_fields/lib", __dir__)
-$LOAD_PATH.unshift File.expand_path("../../dryml/lib", __dir__)
 
 require "minitest/autorun"
 require "active_record"

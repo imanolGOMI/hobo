@@ -19,7 +19,8 @@ module TestApp
   # hobo/app/* as autoload roots and the application registers its own, and one
   # ends up inside the other.
   PATH = ENV["HOBO_TESTAPP_PATH"] || File.join(Dir.tmpdir, "hobo_testapp")
-  GEMS = %w[hobo_support hobo_fields dryml hobo hobo_rapid].freeze
+  # One gem now (decision 11). This used to list five.
+  GEMS = %w[hobo].freeze
 
   class << self
 
@@ -64,7 +65,7 @@ module TestApp
         f.puts "# The gems under test, straight from the working tree."
         GEMS.each { |gem| f.puts %(gem "#{gem}", :path => "#{File.join(root, gem)}") }
         f.puts
-        f.puts "# The browser bench for the Stimulus controllers (hobo_rapid/test/browser)."
+        f.puts "# The browser bench for the Stimulus controllers (test/hobo_rapid/browser)."
         f.puts %(group :test do)
         f.puts %(  gem "capybara")
         f.puts %(  gem "selenium-webdriver")

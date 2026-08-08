@@ -18,11 +18,11 @@ gem_line = lambda do |name|
   hobo_dev ? %(gem "#{name}", path: "#{File.join(hobo_dev, name)}") : %(gem "#{name}")
 end
 
-# With HOBODEV set, every gem comes from the working tree: `hobo` depends on
-# hobo_support, hobo_fields and dryml, and none of those are published while the
-# port is under way. Once they are one gem (decision 11) this is one line.
-gems = hobo_dev ? %w[hobo_support hobo_fields dryml hobo hobo_rapid hobo_bootstrap]
-                : %w[hobo hobo_rapid hobo_bootstrap]
+# One line, because there is one gem (decision 11). It used to be six: the
+# model layer, the tag runtime, the catalogue and the theme were separate, and
+# an application had to name all of them to get a working application. With
+# HOBODEV set it comes from the working tree instead of from rubygems.
+gems = %w[hobo]
 
 append_to_file "Gemfile", (["", "# Hobo"] + gems.map(&gem_line) + [""]).join("\n")
 

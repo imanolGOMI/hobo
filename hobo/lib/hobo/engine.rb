@@ -4,7 +4,46 @@ require 'rails/generators'
 
 
 module Hobo
+
+  # **One gem, one engine** (decision 11).
+  #
+  # There used to be three -- `Hobo::Engine`, `HoboRapid::Engine` and
+  # `HoboBootstrap::Engine` -- one per gem, each rooted at its own directory.
+  # Merging the gems gave the three of them the *same* root, and a Rails engine
+  # draws `config/routes.rb` relative to its root: the file was drawn three
+  # times and the application died on boot with "Invalid route name, already in
+  # use: 'dryml_support'".
+  #
+  # So the initializers of the other two live here now. What they do has not
+  # changed; where they live has.
   class Engine < Rails::Engine
+
+    # Was HoboRapid::Engine: the Stimulus half of the catalogue, handed to the
+    # application. An engine's `app/javascript` is on nobody's path and its pins
+    # are in nobody's import map unless it says so -- and until it did, none of
+    # the ported controllers ran in any application.
+    initializer "hobo.importmap", :before => "importmap" do |app|
+      app.config.assets.paths << root.join("app/javascript") if app.config.respond_to?(:assets)
+      app.config.importmap.paths << root.join("config/importmap.rb") if app.config.respond_to?(:importmap)
+    end
+
+    # Was HoboBootstrap::Engine: the theme's stylesheets, served from the gem so
+    # an application does not have to copy anything to look like something.
+    initializer "hobo.theme_assets" do |app|
+      next unless app.config.respond_to?(:assets)
+      app.config.assets.paths << root.join("app", "assets", "stylesheets")
+      app.config.assets.precompile += %w[bootstrap.css hobo.css]
+    end
+
+    # Was HoboRapid::Engine: the pages of every model, derived on boot and on
+    # every reload. Declaring the model is the ask; an application should not
+    # have to say it twice.
+    initializer "hobo.derive" do |app|
+      app.config.to_prepare do
+        next unless defined?(Hobo::Model)
+        Hobo::Model.all_models.each { |model| HoboRapid::Derivation.derive(model) }
+      end
+    end
 
     ActiveSupport.on_load(:before_configuration) do
       h = config.hobo = ActiveSupport::OrderedOptions.new
