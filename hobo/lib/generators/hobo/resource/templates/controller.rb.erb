@@ -2,6 +2,13 @@ class <%= controller_class_name %> < ApplicationController
 
   include Hobo::Controller::Model
 
+  # Said out loud, and not guessed from the name of this class. Hobo works it
+  # out with the English inflector, and an application whose models are not in
+  # English gets bitten: `nota` singularises to `Notum`, `categoria` to
+  # `Categorium`. Two words here, and it does not matter what language you name
+  # your models in.
+  self.model = <%= class_name %>
+
   # The seven usual actions, each one checking the permissions the model
   # declares. Take any out by naming the ones you want:
   #   auto_actions :index, :show

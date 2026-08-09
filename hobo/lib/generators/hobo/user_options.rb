@@ -14,10 +14,13 @@ module Hobo
       extend ActiveSupport::Concern
 
       included do
-        class_option :activation_email, :type => :boolean, :default => false,
+        # No `:default`: Thor fills defaults in, and then a generator cannot tell
+        # "you did not say" from "you said the default" -- which is exactly what
+        # the wizard has to know before deciding whether to ask.
+        class_option :activation_email, :type => :boolean,
                      :desc => "El alta crea la cuenta inactiva y manda un correo con la clave para activarla"
 
-        class_option :invite_only, :type => :boolean, :default => false,
+        class_option :invite_only, :type => :boolean,
                      :desc => "No hay alta publica: un administrador invita, y el invitado elige su contrasena"
       end
 

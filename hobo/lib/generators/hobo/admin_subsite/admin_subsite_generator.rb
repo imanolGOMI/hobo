@@ -99,11 +99,15 @@ module Hobo
 
       # The application's own resource controllers, by name: `StoriesController`
       # in app/controllers gives `Stories`.
+      # A resource controller is one that **says so**: `include
+      # Hobo::Controller::Model`. This used to be a list of names to skip
+      # (`front`, `sessions`, `passwords`…), and the day somebody called their
+      # front page `portada` the admin subsite got a controller for the front
+      # page. Reading the file is both shorter and right.
       def models
         Dir[File.join(destination_root, "app", "controllers", "*_controller.rb")].filter_map do |file|
-          name = File.basename(file, "_controller.rb")
-          next if name.in?(%w[application front registrations sessions passwords concerns])
-          name.camelize
+          next unless File.read(file).include?("Hobo::Controller::Model")
+          File.basename(file, "_controller.rb").camelize
         end.sort
       end
 

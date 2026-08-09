@@ -1,319 +1,202 @@
-require 'generators/hobo_support/thor_shell'
-require 'bundler/cli'
+require "rails/generators"
+require "generators/hobo/user_options"
+
 module Hobo
-  class SetupWizardGenerator < Rails::Generators::Base
+  module Generators
 
-    source_root File.expand_path('../templates', __FILE__)
+    # `rails generate hobo:setup_wizard`
+    #
+    # The questions, and doing what they say. **In an application that already
+    # exists**, which is the half that was missing: until now they were only
+    # asked while `hobo new` was building one, and the person who most needs
+    # them is somebody who has just added the gem to an application of their own.
+    #
+    # It is the same wizard Hobo 2 had, minus what made it tiring:
+    #
+    #   - it is **one place that asks**, and `hobo new` calls it too, so the
+    #     questions cannot drift apart from the answers
+    #   - every question is a flag, so a script never stops
+    #   - with no terminal to ask in, every question takes its default
+    #   - and it **does not redo what is already there**: run it twice and the
+    #     second time it says so instead of writing a second front page
+    #
+    # What it does not ask any more is what nothing can configure: the jQuery-UI
+    # themes (there is no jQuery UI), the DRYML-only templates (both kinds work
+    # at once), and whether git should ignore the generated files (nothing is
+    # generated).
+    class SetupWizardGenerator < Rails::Generators::Base
 
-    include Generators::HoboSupport::ThorShell
-    include Generators::Hobo::InviteOnly
-    include Generators::Hobo::ActivationEmail
-    include Generators::Hobo::Taglib
-    include Generators::Hobo::Plugin
+      include UserOptions
 
-    def self.banner
-      "rails generate hobo:setup_wizard [options]"
-    end
+      class_option :theme, :type => :string,
+                   :desc => "clean (por defecto), bootstrap, o none"
+      class_option :admin, :type => :boolean,
+                   :desc => "Un subsitio de administracion"
+      class_option :admin_name, :type => :string,
+                   :desc => "Como se llama el subsitio de administracion"
+      class_option :admin_theme, :type => :string,
+                   :desc => "El tema del subsitio, si quieres otro"
+      class_option :private, :type => :boolean,
+                   :desc => "Todo el sitio detras del login"
+      class_option :locale, :type => :string,
+                   :desc => "El idioma de la aplicacion"
+      class_option :front, :type => :string,
+                   :desc => "Como se llama el controlador de la portada"
+      class_option :wizard, :type => :boolean,
+                   :desc => "Preguntar siempre (--no-wizard: no preguntar nunca)"
 
-    class_option :main_title, :type => :boolean,
-    :desc => "Shows the main title", :default => true
+      # --- the questions --------------------------------------------------------
 
-    class_option :wizard, :type => :boolean,
-    :desc => "Ask instead using options", :default => true
+      def ask_the_questions
+        say "\nHobo\n", :green if interactive?
 
-    class_option :front_controller_name, :type => :string,
-    :desc => "Front Controller Name", :default => 'front'
-
-    class_option :front_theme, :type => :string,
-    :desc => "Front Theme", :default => 'bootstrap'
-
-    class_option :front_ui_theme, :type => :string,
-    :desc => "Front jQuery-UI Theme", :default => 'redmond'
-
-    class_option :add_admin_subsite, :type => :boolean,
-                 :desc => "Add an Admin Subsite"
-
-    class_option :admin_subsite_name, :type => :string,
-                 :desc => "Admin Subsite Name", :default => 'admin'
-
-    class_option :admin_theme, :type => :string,
-                 :desc => "Admin Theme", :default => 'clean'
-
-    class_option :admin_ui_theme, :type => :string,
-                 :desc => "Admin jQuery-UI Theme", :default => 'redmond'
-
-    class_option :invite_only, :type => :boolean,
-                 :desc => "Require invitation to join site"
-
-    class_option :private_site, :type => :boolean,
-                 :desc => "Make the site unaccessible to non-members"
-
-    class_option :migration_generate, :type => :boolean,
-    :desc => "Generate migration only"
-
-    class_option :migration_migrate, :type => :boolean,
-    :desc => "Generate migration and migrate", :default => true
-
-    class_option :default_locale, :type => :string,
-    :desc => "Sets the default locale"
-
-    class_option :locales, :type => :array,
-    :desc => "Choose the locales", :default => %w[en]
-
-    class_option :git_repo, :type => :boolean,
-    :desc => "Create the git repository with the initial commit"
-
-    class_option :gitignore_auto_generated_files, :type => :boolean,
-    :desc => "Add the auto-generated files to .gitignore", :default => true
-
-    class_option :dryml_only_templates, :type => :boolean,
-    :desc => "The application uses only dryml templates",
-    :default => Rails.application.config.hobo.dryml_only_templates
-
-    def startup
-      if wizard?
-        say_title options[:main_title] ? 'Hobo Setup Wizard' : 'Startup'
-        say 'Installing Hobo assets...'
+        @theme = choose_theme
+        @invite_only = yes_or_no?(:invite_only,
+                                  "Solo se entra por invitacion? (un administrador invita; no hay alta publica)", false)
+        @activation_email = @invite_only ? false : yes_or_no?(:activation_email, "El alta tiene que confirmarse por correo?", false)
+        @admin = yes_or_no?(:admin, "Quieres un subsitio de administracion?", false)
+        @admin_name = @admin ? named(:admin_name, "Como se llama el subsitio de administracion?", "admin") : "admin"
+        @private = yes_or_no?(:private, "Todo el sitio detras del login? (si no, cada modelo decide quien ve sus paginas)", false)
+        @locale = named(:locale, "Idioma de la aplicacion?", "en")
+        @front = named(:front, "Como se llama el controlador de la portada?", "front")
       end
-      invoke 'hobo:assets'
-    end
 
-    def user_options
-      if wizard?
-        say_title 'User Resource'
-        @user_resource_name = ask("Choose a name for the user resource: [<enter>=user|<custom_name>]", 'user')
-        @activation_email = @invite_only ? false : yes_no?("Do you want to send an activation email to activate the user?")
-      else
-        @user_resource_name = options[:user_resource_name]
-        @activation_email = options[:activation_email]
+      # --- what the answers mean -------------------------------------------------
+
+      def write_the_configuration
+        say_step "La configuracion"
+        add_to_configuration "config.hobo.theme = #{@theme == "none" ? "false" : ":#{@theme}"}"
+        add_to_configuration "config.hobo.private_site = true" if @private
+        add_to_configuration "config.i18n.default_locale = :#{@locale}" unless @locale == "en"
       end
-    end
 
-    def site_options
-      if wizard?
-        say_title 'Invite Only Option'
-        return unless (@invite_only = yes_no?("Do you want to add the features for an invite only website?"))
-        private_site = yes_no?("Do you want to prevent all access to the site to non-members?\n(Choose 'y' only if ALL your site will be private, choose 'n' if at least one controller will be public)")
-        say( %( If you wish to prevent all access to some controller to non-members, add 'before_action :login_required'
-to the relevant controllers:
+      # The pages Rails renders -- its session form, its password pages -- go
+      # through the application's own layout, and that layout knows nothing
+      # about the theme. Without this half the application looks like two
+      # applications.
+      def dress_the_layout
+        return if @theme == "none"
+        layout = "app/views/layouts/application.html.erb"
+        return say("  (no hay #{layout}: el tema solo vestira las paginas de Hobo)", :yellow) unless
+          File.exist?(File.join(destination_root, layout))
 
-    include Hobo::Controller::AuthenticationSupport
-    before_action :login_required
+        sheets = @theme == "bootstrap" ? %w[bootstrap hobo] : %w[clean]
+        return say("  el layout ya lleva el tema") if File.read(File.join(destination_root, layout)).include?(%(stylesheet_link_tag "#{sheets.first}"))
 
-(note that the include statement is not required for hobo_controllers)
-
-NOTE: You might want to sign up as the administrator before adding this!
-), Color::YELLOW) unless private_site
-      else
-        @invite_only = invite_only?
-        private_site = options[:private_site]
+        links = sheets.map { |s| %(<%= stylesheet_link_tag "#{s}" %>) }.join("\n\\1")
+        gsub_file layout, /^(\s*)<%= stylesheet_link_tag :app.*%>$/, "\\1#{links}\n\\0"
+        gsub_file layout, /<%= yield %>/, "<div class=\"container\">\n      <%= yield %>\n    </div>"
       end
-      inject_into_file 'app/controllers/application_controller.rb', <<EOI, :after => "protect_from_forgery with: :exception\n" if private_site
-  include Hobo::Controller::AuthenticationSupport
-  before_action :except => [:login, :forgot_password, :accept_invitation, :do_accept_invitation, :reset_password,
-:do_reset_password] do
-     login_required unless #{@user_resource_name.camelize}.count == 0
-  end
-EOI
-    end
 
-    def dryml_only_templates_option
-      if wizard?
-        say_title 'Templates Option'
-        dryml_only_templates = yes_no?("Will your application use only hobo/dryml web page templates?\n(Choose 'n' only if you also plan to use plain rails/erb web page templates)")
-      else
-        dryml_only_templates = options[:dryml_only_templates]
+      def a_place_for_your_own_words
+        create_file "config/locales/app.#{@locale}.yml", <<~YAML unless File.exist?(File.join(destination_root, "config/locales/app.#{@locale}.yml"))
+          # The names your application uses for its own things. Rails looks here for
+          # them, and Hobo's pages ask Rails -- so a model called `Story` becomes
+          # "Relato" everywhere by saying it once, here.
+          #
+          # Hobo's own strings are in the gem; to change one, write the same key in
+          # a file of yours (config/locales/hobo.#{@locale}.yml).
+          #{@locale}:
+          #  activerecord:
+          #    models:
+          #      story:
+          #        one: Story
+          #        other: Stories
+        YAML
       end
-      if dryml_only_templates
-        remove_file 'app/views/layouts/application.html.erb'
-        remove_file 'app/helpers/application_helper.rb'
-        environment "#"
-        environment "config.hobo.dryml_only_templates = true"
-        environment "# Hobo: remove support for ERB templates"
+
+      def draw_the_routes
+        return if routes.include?("hobo_routes")
+        route "hobo_routes"
       end
-    end
 
-    def dont_emit_deprecated_routes
-      environment "#"
-      environment "config.hobo.dont_emit_deprecated_routes = true"
-      environment "# Hobo: Named routes have changed in Hobo 2.0.   Set to false to emit both the 2.0 and 1.3 names."
-    end
-
-    def quiet_assets
-      say "Adding quiet_assets gem"
-      gem_with_comments('quiet_assets', :group => :development, :comments => "\n# Hobo has a lot of assets.   Stop cluttering the log in development mode.")
-    end
-
-    def will_paginate
-      say "Adding hobo_will_paginate gem"
-      gem_with_comments('hobo_will_paginate', :comments => "\n# Hobo's version of will_paginate is required.")
-    end
-
-    def front_controller
-      if wizard?
-        say_title 'Front Controller'
-        front_controller_name = ask("Choose a name for the front controller: [<enter>=front|<custom_name>]", 'front')
-        say "Installing #{front_controller_name} controller..."
-      else
-        front_controller_name = options[:front_controller_name]
+      def the_front_page
+        say_step "La portada"
+        return say("  ya hay una portada (root)") if routes.match?(/^\s*root /)
+        invoke "hobo:front_controller", [@front]
       end
-      invoke 'hobo:front_controller', [front_controller_name], :user_resource_name => @user_resource_name, :invite_only => @invite_only
-    end
 
-    def install_default_plugins
-      if wizard?
-        say_title 'Front Theme'
-        say "The currently available themes are clean, clean_admin, clean_sidemenu and bootstrap."
-        @front_theme = ask("Choose a theme for the front site: [<enter>=bootstrap|<custom_name>]", 'bootstrap')
+      def the_accounts
+        say_step "Las cuentas"
+        return say("  no hay modelo de usuario: corre `bin/rails generate authentication`", :yellow) unless user_exists?
+        return say("  ya hay alta") if routes.match?(/signup|invite/)
 
-        say_title 'Front jQuery-UI Theme'
-        say "The currently available jQuery-UI themes are listed here: https://github.com/fatdude/jquery-ui-themes-rails/blob/master/README.markdown"
-        @front_ui_theme = ask("Choose a jQuery-UI theme for the front site: [<enter>=redmond|<custom_name>]", 'redmond')
-      else
-        @front_theme = options[:front_theme]
-        @front_ui_theme = options[:front_ui_theme]
+        invoke "hobo:user_resource", ["User"],
+               :activation_email => @activation_email, :invite_only => @invite_only
       end
-      invoke 'hobo:install_default_plugins', [], {:subsite => 'front', :theme => "hobo_#{@front_theme}", :ui_theme => @front_ui_theme, :skip_gem => false}
-    end
 
-    def admin_subsite
-      if wizard?
-        say_title 'Admin Subsite'
-        if @invite_only || (@add_admin_subsite = yes_no?("Do you want an admin subsite?"))
-          @admin_subsite_name = ask("Choose a name for the admin subsite: [<enter>=admin|<custom_name>]", 'admin')
-
-          say "The currently available themes are clean, clean_admin, clean_sidemenu and bootstrap."
-          @admin_theme = ask("Choose a theme for the #{@admin_subsite_name} site: [<enter>=clean_admin|<custom_name>]", 'clean_admin')
-
-          say "The currently available jQuery-UI themes are listed here: https://github.com/fatdude/jquery-ui-themes-rails/blob/master/README.markdown"
-          @admin_ui_theme = ask("Choose a jQuery-UI theme for the admin site: [<enter>=flick|<custom_name>]", 'flick')
-        end
-      else
-        if @invite_only || (@add_admin_subsite = options[:add_admin_subsite])
-          @admin_subsite_name = options[:admin_subsite_name]
-          @admin_theme = options[:front_theme]
-          @admin_ui_theme = options[:front_ui_theme]
-        end
+      # Run again and it picks up the models that appeared since: a subsite is a
+      # controller per resource, and resources arrive over time. Thor says
+      # "identical" for the ones already there.
+      def the_admin_subsite
+        return unless @admin
+        say_step "El subsitio de administracion"
+        invoke "hobo:admin_subsite", [@admin_name], :theme => options[:admin_theme]
       end
-    end
 
-    def invoking_user_and_admin
-      say "Installing '#{@user_resource_name}' resources..."
-      invoke 'hobo:user_resource', [@user_resource_name],
-                                   :invite_only => @invite_only,
-                                   :activation_email => @activation_email,
-                                   :admin_subsite_name => @admin_subsite_name
-      if @invite_only || @add_admin_subsite
-        say "Installing admin subsite..."
-        invoke 'hobo:admin_subsite', [@admin_subsite_name],
-                                     :user_resource_name => @user_resource_name,
-                                     :invite_only => @invite_only,
-                                     :theme => @admin_theme,
-                                     :ui_theme => @admin_ui_theme
+      def the_migration
+        say [
+          "",
+          "Listo. Si algun modelo ha cambiado, la migracion:",
+          "",
+          "  bin/rails generate hobo:migration",
+          "",
+        ].join("\n"), :green
       end
-    end
 
-    def active_reload_dryml
-      environment "#", :env => :development
-      environment "config.watchable_dirs[File.join(config.root, 'app/views')] = ['dryml']", :env => :development
-      environment "# Hobo: tell ActiveReload about dryml", :env => :development
-    end
+      private
 
-    def generate_migration
-      if wizard?
-        say_title 'DB Migration'
-        action = choose("Initial Migration: [s]kip, [g]enerate migration file only, generate and [m]igrate: [s|g|m]", /^(s|g|m)$/)
-        opt = case action
-              when 's'
-                return say('Migration skipped!')
-              when 'g'
-                {:generate => true}
-              when 'm'
-                {:migrate => true}
-              end
-        say action == 'g' ? 'Generating Migration...' : 'Migrating...'
-      else
-        return if !options[:migration_generate] && !options[:migration_migrate]
-        opt = options[:migration_migrate] ? {:migrate => true} : {:generate => true}
+      def interactive?
+        return true if options[:wizard]
+        return false if options[:wizard] == false
+        $stdin.tty?
       end
-      rake 'db:setup'
-      invoke 'hobo:migration', ['initial_migration'], opt
+
+      # The parentheses matter: in an endless method `def x = y if z` the `if`
+      # applies to the **definition**, so this ran `interactive?` at class level
+      # and the generator would not even load.
+      def say_step(title) = (say("\n#{title}", :green) if interactive?)
+
+      # Thor's `yes?` reads a bare Enter as "no", which makes a question whose
+      # default is yes impossible to answer the easy way. This reads the Enter
+      # as the default, which is what the brackets promise.
+      def yes_or_no?(flag, text, default)
+        given = options[flag]
+        return given unless given.nil?
+        return default unless interactive?
+
+        said = ask("#{text} [#{default ? 'S/n' : 's/N'}]").to_s.strip.downcase
+        said.empty? ? default : said.start_with?("s", "y")
+      end
+
+      def named(flag, text, default)
+        given = options[flag]
+        return given if given.present?
+        return default unless interactive?
+
+        said = ask("#{text} [#{default}]").to_s.strip
+        said.empty? ? default : said
+      end
+
+      def choose_theme
+        given = options[:theme]
+        return given if given.present?
+        return "clean" unless interactive?
+
+        said = ask("Tema: [c]lean (el de Hobo), [b]ootstrap, [n]inguno? [c]").to_s.strip.downcase
+        { "b" => "bootstrap", "n" => "none" }.fetch(said[0].to_s, "clean")
+      end
+
+      def routes = @routes ||= File.read(File.join(destination_root, "config", "routes.rb"))
+
+      # `application` appends inside the Application class, and running the
+      # wizard twice must not say the same thing twice.
+      def add_to_configuration(line)
+        return say("  ya estaba: #{line}") if File.read(File.join(destination_root, "config", "application.rb")).include?(line)
+        application "    #{line}"
+      end
+
     end
-
-    def i18n
-      if wizard?
-        say_title 'I18n'
-        i18n_templates = File.expand_path('../../i18n/templates', __FILE__)
-        supported_locales = Dir.glob("#{i18n_templates}/hobo.map(&:yml)").map do |l|
-          l =~ /([^\/.]+)\.yml$/
-          $1
-        end
-        say "The Hobo supported locales are #{supported_locales * ' '} (please, contribute to more translations)"
-        locales = ask("Type the locales (space separated) you want to add to your application or <enter> for 'en':", 'en').split(/\s/)
-        unless locales.size == 1 && locales.first == 'en'
-          default_locale = ask "Do you want to set a default locale? Type the locale or <enter> to skip:"
-        end
-      else
-        default_locale = options[:default_locale]
-        locales = options[:locales]
-      end
-      unless default_locale.blank?
-        default_locale.gsub!(/\:/, '')
-        environment "#"
-        environment "config.i18n.default_locale = #{default_locale.to_sym.inspect}"
-        environment "#"
-      end
-      ls = (locales - %w[en]).map {|l| ":#{l}" }
-      lstr = ls.to_sentence
-      invoke 'hobo:i18n', locales
-      say(<<STR , Color::YELLOW) unless ls.empty?
-NOTICE: You should manually install in 'config/locales' also the official Rails locale #{ls.size==1 ? 'file' : 'files'} for #{lstr} that your application will use.
-Official rails I18n URLs:
-  - Readme:     https://github.com/svenfuchs/rails-i18n/blob/master/README.md
-  - locale dir: https://github.com/svenfuchs/rails-i18n/tree/master/rails/locale/
-STR
-    end
-
-    def git_repo
-      if wizard?
-        say_title 'Git Repository'
-        return unless yes_no?("Do you want to initialize a git repository now?")
-        gitignore_auto_generated = yes_no? "Do you want git to ignore the auto-generated files?\n(Choose 'n' only if you are planning to deploy on a read-only File System like Heroku)"
-        say 'Initializing git repository...'
-      else
-        return unless options[:git_repo]
-        gitignore_auto_generated = options[:gitignore_auto_generated_files]
-      end
-      if gitignore_auto_generated
-        # config/hobo_routes.rb is not generated any more: the routes are a
-        # method an application calls from its own config/routes.rb.
-        append_file '.gitignore', "app/views/taglibs/auto/**/*\n"
-      end
-      git :init
-      git :add => '.'
-      git :commit => '-m "initial commit"'
-    end
-
-    def finalize
-      return unless wizard?
-      say_title 'Process completed!'
-      say %(You can start your application with `rails server`
-(run with --help for options). Then point your browser to
-http://localhost:3000/
-
-Follow the guidelines to start developing your application.
-You can find the following resources handy:
-
-* The Getting Started Guide: http://guides.rubyonrails.org/getting_started.html
-* Ruby on Rails Tutorial Book: http://www.railstutorial.org/
-)
-end
-
-private
-
-  def wizard?
-    options[:wizard]
-  end
 
   end
 end

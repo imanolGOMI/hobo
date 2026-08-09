@@ -138,8 +138,22 @@ module Hobo
         model.name.underscore
       end
 
+      # The model this controller is about.
+      #
+      # The name is a **guess**, made with the English inflector, and English is
+      # not the only language people name models in: `NotasController` asks for
+      # `Notum`, `CategoriasController` for `Categorium`. So when the guess is
+      # not a class that exists, the name as it was written gets a turn --
+      # `Nota` -- and only then does it give up.
+      #
+      # A controller can also say it outright, and the generated ones do:
+      # `self.model = Nota`.
       def model
-        @model ||= controller_name.camelcase.singularize.constantize
+        @model ||= begin
+          guess = controller_name.camelcase
+          guess.singularize.safe_constantize || guess.safe_constantize ||
+            raise(NameError, "#{name}: no encuentro el modelo. Dilo con `self.model = ...`")
+        end
       end
 
 
