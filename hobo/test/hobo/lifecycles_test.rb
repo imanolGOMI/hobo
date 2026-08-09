@@ -162,6 +162,34 @@ class LifecyclesTest < Minitest::Test
     assert_nil article.lifecycle.active_step
   end
 
+  # A lifecycle declares two columns, so the model has to be one the migration
+  # generator looks at. It was not: `include_in_migration` is turned on by a
+  # model writing its own `fields do`, and a user model whose only Hobo fields
+  # came from its lifecycle was skipped -- `hobo:migration` said "database and
+  # models match" while `key_timestamp` did not exist, and the first signup died
+  # with "can't write unknown attribute".
+  def test_a_model_whose_fields_come_from_the_lifecycle_is_migrated
+    Object.const_set(:Bare, Class.new(ActiveRecord::Base))
+    ::Bare.class_eval do
+      self.table_name = "articles"
+      include Hobo::Model
+      def create_permitted?  = true
+      def update_permitted?  = true
+      def destroy_permitted? = true
+
+      lifecycle do
+        state :new, :default => true
+        state :old
+        transition :age, { :new => :old }
+      end
+    end
+
+    assert ::Bare.include_in_migration, "un modelo con lifecycle tiene columnas que migrar"
+    assert_includes ::Bare.field_specs.keys.map(&:to_s), "key_timestamp"
+  ensure
+    HoboTest.clean_up(:Bare)
+  end
+
   # --- the keys -----------------------------------------------------------------
   #
   # The half of lifecycles that only an application uses: a step with

@@ -23,6 +23,19 @@ module Hobo
             # about instance_eval, which told nobody anything.
             return has_lifecycle? ? self::Lifecycle : nil if block.nil?
 
+            # A lifecycle declares columns -- the state and the key timestamp --
+            # so the model has to be one the migration generator looks at.
+            #
+            # `include_in_migration` is turned on by a model writing its own
+            # `fields do` block, and `Hobo::Model` deliberately calls
+            # `fields(false)`. A model whose only Hobo fields come from here was
+            # therefore **invisible to `hobo:migration`**: it said "database and
+            # models match" while `key_timestamp` did not exist, and the first
+            # signup died with "can't write unknown attribute". In Hobo 2 it
+            # never showed, because its generated user model always had a
+            # `fields do` block of its own.
+            fields
+
             options = args.extract_options!
             options = options.reverse_merge(:state_field => :state,
                                             :key_timestamp_field => :key_timestamp,
