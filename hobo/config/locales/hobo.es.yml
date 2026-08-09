@@ -22,6 +22,7 @@ es:
       count: "%{count} %{name}"
       new_link: "Nuevo %{name}"
       actions_heading: "Acciones"
+      empty: "Nada por aquí todavía."
     forms:
       new_title: "Nuevo %{name}"
       edit_title: "Editar %{name}"

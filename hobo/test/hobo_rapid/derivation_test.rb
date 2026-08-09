@@ -152,7 +152,7 @@ class DerivationTest < Minitest::Test
   end
 
   def test_an_empty_index_says_so
-    assert_includes render(:index_page, collection_of([])), "Nada por aqui todavia"
+    assert_includes render(:index_page, collection_of([])), "Nothing here yet"
   end
 
   # --- the form ---------------------------------------------------------------

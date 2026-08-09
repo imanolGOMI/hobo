@@ -322,7 +322,7 @@ module HoboRapid
                 tag("div", { :class => "filters mb-3" }, :filters)
 
                 if records.empty?
-                  tag("p", { :class => "empty text-secondary" }, :empty) { text "Nada por aqui todavia." }
+                  tag("p", { :class => "empty text-secondary" }, :empty) { text t(:"index.empty", "Nothing here yet.") }
                 else
                   tag("table", { :class => "table table-striped table-bordered" }, :collection) do
                     tag("thead", {}, :headings) do
