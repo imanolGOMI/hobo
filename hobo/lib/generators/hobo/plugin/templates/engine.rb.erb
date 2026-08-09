@@ -1,0 +1,24 @@
+require "rails/engine"
+
+module <%= module_name %>
+
+  # The engine of a plugin does one thing: put the gem's assets where the
+  # application's asset pipeline and import map can see them. An engine's
+  # `app/javascript` is on nobody's path and its pins are in nobody's import map
+  # unless it says so.
+  class Engine < ::Rails::Engine
+
+    initializer "<%= plugin_name %>.importmap", :before => "importmap" do |app|
+      app.config.assets.paths << root.join("app/javascript") if app.config.respond_to?(:assets)
+      app.config.importmap.paths << root.join("config/importmap.rb") if app.config.respond_to?(:importmap)
+    end
+
+    initializer "<%= plugin_name %>.assets" do |app|
+      next unless app.config.respond_to?(:assets)
+      app.config.assets.paths << root.join("app", "assets", "stylesheets")
+      app.config.assets.precompile += %w[<%= plugin_name %>.css]
+    end
+
+  end
+
+end

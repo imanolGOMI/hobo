@@ -2143,7 +2143,7 @@ Una aplicación Rails 8 generada con `hobo new`:
 - **Filtros**: `<search-filter>` y `<filter-menu>` sobre Ransack, que suman en
   vez de turnarse.
 
-**Pruebas: 464 en **una** suite (+11 en la del plugin), todas en verde, + la
+**Pruebas: 476 en **una** suite (+11 en la del plugin), todas en verde, + la
 suite de conformidad en navegador (`cd hobo && HOBO_APP=~/hobo_apps/hobo_luz rake
 test`). El banco se regenera con el `hobo new` de hoy: tiene que ser lo que sale
 del generador, no lo que salía hace tres commits.**
@@ -2628,6 +2628,11 @@ Visto en las capturas, ordenado por lo que más se nota:
     invisible: gana el último que carga y nadie avisa. La tabla dice quién define
     cada tag y marca `shadowed` lo que ya no pinta nada. Es la lección de la
     fusión convertida en herramienta.
+32. **Escribir un plugin también es un generador.** `rails generate hobo:plugin
+    <nombre>` escribe el esqueleto de la gema —engine, fichero de tags, assets,
+    import map, gemspec y prueba—, que es exactamente lo que es `hobo_timeago/`.
+    La prueba lo genera en un directorio temporal, carga lo escrito, comprueba
+    que el tag quedó registrado y lo borra.
 31. **El asistente es un generador, no un momento.** `rails generate
     hobo:setup_wizard` hace las preguntas y hace lo que dicen, **también en una
     aplicación que ya existe** —que es lo que necesita quien acaba de añadir la
@@ -2896,13 +2901,33 @@ se parece a la de Hobo 2. Lo que queda es empaquetar y pulir.
 **Los cuatro puntos de esta lista están hechos** (2026-08-09). Lo que queda
 anotado, sin orden y sin prisa:
 
-- Un `belongs_to` no enlaza a la página de su registro, y no hay caja de
-  búsqueda global en la barra. Son las dos únicas diferencias que quedaron al
-  comparar pantalla a pantalla con Hobo 2.
+- ~~El `belongs_to` que no enlazaba y la caja de búsqueda~~ **hechos**. Un
+  registro es un sitio: `<view>` lo enlaza cuando hay ruta. Y la búsqueda global
+  vuelve —`<search-box>` en la barra, `<search-results>` agrupadas por modelo,
+  `hobo:search`—: el motor (`Hobo.find_by_search`) era de Hobo 2 y seguía
+  entero; faltaban los dos extremos.
 - ~~Los generadores viejos~~ **hechos**: cinco reescritos, cinco borrados, y
   el asistente vuelve a existir (ver la sección de arriba).
-- Los ocho plugins de la organización siguen en DRYML. `hobo_timeago/` es el
-  ejemplo de a qué tienen que llegar.
+- **Los ocho plugins de la organización se quedan fuera, y a propósito.** Siguen
+  en DRYML, en sus repositorios, y nadie los ha tocado: `hobo_summary`,
+  `hobo_mapstraction`, `select_one_or_new_dialog`, `hobo_data_tables`,
+  `hobo_simple_color`, `hobo_tokeninput`, `hobo_tree_table`, `hobo_omniauth`,
+  `hobo_paperclip`.
+
+  Lo que hay que hacer con cada uno **ya está resuelto y probado**: son gemas
+  con un engine, un fichero de tags y sus assets (decisión 22), `hobo_timeago/`
+  es el ejemplo terminado, y `rails generate hobo:plugin <nombre>` escribe el
+  esqueleto. El trabajo que queda en cada uno es **su DRYML**: convertir sus
+  `taglibs/*.dryml` en tags de Ruby.
+
+  Se quedan fuera porque son repositorios de la organización —solo se clonan y
+  se leen— y porque portar uno es una decisión de producto (¿hace falta
+  autocompletar? ¿pestañas?), no una pieza pendiente de esta migración.
+- ~~Los cuatro usos de `classy_module`~~ **hecho**: `HoboFields::Model` es un
+  `Concern`, los mixins Thor son el generador que los usaba, `CommonTasks` era
+  de Hobo 2 y no lo requería nadie, y `classy_module` ya no existe. Con él
+  apareció que **`hobo:model` llevaba roto desde Ruby 3**: `ERB.new(src, nil,
+  "-")` — el nivel de seguridad no existe y el trim mode es una keyword.
 - El actualizador de plantillas de aplicaciones existentes (decisión 6) sigue
   siendo solo el parser de DRYML conservado a propósito.
 

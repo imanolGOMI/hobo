@@ -1,0 +1,21 @@
+# <%= plugin_name %>: a Hobo plugin.
+#
+# Three things, none of them a Hobo API:
+#
+#   1. a Rails engine, so the assets and the import map of the gem reach the
+#      application (lib/<%= plugin_name %>/engine.rb);
+#   2. a file that defines tags, required from here (lib/<%= plugin_name %>/tags.rb);
+#   3. assets under app/assets and app/javascript, where Rails looks.
+#
+# Installing it is `bundle add <%= plugin_name %>`. There is nothing else: no
+# generator, no include in a taglib, no `//= require`. **Defining a tag is
+# registering it**, and the gem's files run when Bundler requires the gem.
+
+module <%= module_name %>
+
+  VERSION = File.read(File.expand_path("../VERSION", __dir__)).strip
+
+end
+
+require "<%= plugin_name %>/tags"
+require "<%= plugin_name %>/engine" if defined?(Rails::Engine)

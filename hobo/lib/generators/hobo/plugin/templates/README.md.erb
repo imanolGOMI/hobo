@@ -1,0 +1,25 @@
+# <%= plugin_name %>
+
+Un plugin de Hobo.
+
+```ruby
+# Gemfile
+gem "<%= plugin_name %>"
+```
+
+Y ya está: **definir un tag es registrarlo**, y los ficheros de la gema se
+ejecutan cuando Bundler la requiere. No hay generador de instalación, ni
+`<include gem="..."/>`, ni `//= require`.
+
+## Qué hay dentro
+
+    lib/<%= plugin_name %>/tags.rb   los tags: lo que pinta
+    lib/<%= plugin_name %>/engine.rb dos initializers: los assets y el import map
+    app/assets/stylesheets/          su css
+    app/javascript/controllers/      su javascript (Stimulus)
+
+## Las pruebas
+
+    rake test
+
+Carga `hobo` y esta gema, y nada más.

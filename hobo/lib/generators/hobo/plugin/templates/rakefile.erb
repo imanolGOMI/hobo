@@ -1,0 +1,12 @@
+require "rake/testtask"
+
+# No Gemfile and no `bundle install`: the suite loads `hobo` and this gem, and
+# nothing else. A plugin that can only be tested inside a Rails application is a
+# plugin nobody tests.
+Rake::TestTask.new(:test) do |t|
+  t.libs << "test" << "lib"
+  t.test_files = FileList["test/**/*_test.rb"]
+  t.warning = false
+end
+
+task :default => :test

@@ -1,0 +1,22 @@
+# The tags of the plugin.
+#
+# Three kinds of thing you can do here, and the second is why plugins exist:
+#
+#   Rapid.define(:my_tag) { ... }              a tag of your own
+#   Rapid.define_for(:view_content, Date) { }  how a **type** is painted, in
+#                                              every page that paints one
+#   Rapid.extend_tag(:page) { old; ... }       adding to somebody else's tag
+#
+# Defining a tag registers it, and the registry is one table: the last
+# definition of a name wins. `bin/rails hobo:tags` shows who defines what and
+# marks `shadowed` whatever no longer paints anything -- run it after writing
+# this file.
+
+require "rapid"
+require "<%= plugin_name %>"
+
+Rapid.define(:<%= plugin_name.tr("-", "_") %>) do
+  tag("span", { :class => "<%= plugin_name %>" }, :body) do
+    text "Hola desde <%= plugin_name %>"
+  end
+end

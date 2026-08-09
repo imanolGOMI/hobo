@@ -1,0 +1,19 @@
+require "minitest/autorun"
+require "<%= plugin_name %>"
+
+class <%= module_name %>Test < Minitest::Test
+
+  def test_it_defines_its_tag
+    assert_includes Rapid.render(:<%= plugin_name.tr("-", "_") %>), "Hola"
+  end
+
+  # Who defines what: if this plugin replaces a tag of the catalogue, the
+  # catalogue's definition stays in the record marked `shadowed`, and that is
+  # the only way to see it from outside.
+  def test_the_registry_knows_where_this_came_from
+    definition = Rapid.definitions_for(:<%= plugin_name.tr("-", "_") %>).last
+
+    assert_includes definition.source.to_s, "<%= plugin_name %>"
+  end
+
+end
