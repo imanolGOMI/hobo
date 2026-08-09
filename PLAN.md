@@ -2143,7 +2143,7 @@ Una aplicación Rails 8 generada con `hobo new`:
 - **Filtros**: `<search-filter>` y `<filter-menu>` sobre Ransack, que suman en
   vez de turnarse.
 
-**Pruebas: 441 en **una** suite (+11 en la del plugin), todas en verde, + la
+**Pruebas: 448 en **una** suite (+11 en la del plugin), todas en verde, + la
 suite de conformidad en navegador (`cd hobo && HOBO_APP=~/hobo_apps/hobo_luz rake
 test`). El banco se regenera con el `hobo new` de hoy: tiene que ser lo que sale
 del generador, no lo que salía hace tres commits.**
@@ -2612,12 +2612,60 @@ Visto en las capturas, ordenado por lo que más se nota:
     invisible: gana el último que carga y nadie avisa. La tabla dice quién define
     cada tag y marca `shadowed` lo que ya no pinta nada. Es la lección de la
     fusión convertida en herramienta.
+25. **El tema es una pregunta, no un hecho** (revisa la decisión 13). Sigue
+    viniendo dentro de la gema y sigue siendo lo que sale por defecto, pero lo
+    carga un initializer y la aplicación puede decir `config.hobo.theme = false`:
+    entonces Hobo pinta **el cuerpo** de cada página y el layout de la aplicación
+    la envuelve. Es lo que permite meter Hobo en una app que ya tiene diseño, y
+    lo que permite empezar en blanco. `hobo new --no-theme`.
 24. **El inglés es el `:default`, y no hay `hobo.en.yml`.** Cada cadena viaja
     como clave con su inglés escrito en el sitio donde se pinta, y lo que se
     entrega es un fichero por idioma añadido (`hobo.es.yml`). Dos listas de las
     mismas cadenas se separan, y la que nadie lee es la que está mal. Una
     aplicación que quiera otro inglés escribe su `hobo.en.yml`, que es como se
     pisan las traducciones de una gema en Rails de toda la vida.
+
+## Paridad de `hobo new`: las preguntas del asistente (2026-08-09)
+
+**Criterio, de Imanol:** antes de los pasos grandes, `hobo new` tiene que dejar
+lo mismo que dejaba en Hobo 2. Y las veinte preguntas del asistente **no se
+tiran: se convierten en opciones con el valor por defecto que hemos decidido.**
+Si alguien contesta que no a todo, sale una aplicación plana y el diseño lo pone
+él.
+
+| Pregunta del asistente de Hobo 2 | Hoy |
+|---|---|
+| Tema del front / tema de jQuery-UI | **`--theme` / `--no-theme`** ✔ (decisión 25) |
+| Instalar plugins por defecto (jquery, jquery-ui) | No aplica: Stimulus (decisión 14) |
+| Nombre del controlador de portada | `hobo:front_page` ✔ |
+| Modelo de usuario, sesión, contraseñas | Rails 8 (decisión 15) ✔ |
+| Alta de usuario | `hobo:signup` ✔ |
+| **¿Activación por correo?** | **falta** |
+| **¿Solo por invitación?** | **falta** |
+| **¿Subsitio de administración?** | **falta** |
+| ¿Sitio privado? | falta (un `before_action`) |
+| Migración inicial | `hobo:migration` ✔ |
+| Locales / idioma por defecto | parcial: hay `hobo.es.yml`; falta el generador |
+| Repo git | `rails new` ✔ |
+
+### Las claves de lifecycle no funcionaban en Rails 8
+
+Lo primero que apareció al ir a por la activación, porque va montada encima.
+Un paso con `:new_key => true` pone una clave de un solo uso en un correo, y
+quien vuelve con ella puede dar el siguiente paso.
+
+- Se firmaba con `Rails.application.config.secret_token`, que **Rails quitó en
+  la 5.2**: en Rails 8 esa línea es un `NoMethodError`. Ahora firma con el
+  `secret_key_base` de la aplicación, y fuera de Rails con
+  `HOBO_LIFECYCLE_SECRET`. Sin secreto se niega: una clave firmada con nada no
+  es una clave.
+- `generate_key` exigía `Time.zone` y **no lo usaba** —la línea siguiente es
+  `Time.now.utc`—. En una aplicación siempre está puesto, así que el guardián
+  solo saltaba fuera de Rails: justo donde uno quiere probar esto sin arrancar
+  una aplicación.
+
+Ninguna prueba podía verlo: la suite probaba estados y transiciones y **nunca
+había pedido una clave**.
 
 ## Lo siguiente, por orden
 
