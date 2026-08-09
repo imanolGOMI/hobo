@@ -14,24 +14,91 @@
 
 hobo_dev = ENV["HOBODEV"]
 
-# The questions the old setup wizard asked.
+# **The setup wizard.**
 #
-# They did not disappear with the wizard -- what disappeared is being asked
-# twenty of them before you had written a line. Each one is a flag with a
-# default, and the template only *asks* when there is somebody to answer:
-# `hobo new --no-theme blog` never stops, and neither does a test.
+# Hobo 2 asked twenty questions before you had written a line, and that was too
+# many -- but the questions themselves were good ones, and they are the same
+# ones today: how it looks, how people get accounts, whether there is an admin
+# side, whether the whole thing is private, what language it speaks.
+#
+# So it asks, and:
+#
+#   - every question is also a flag, so a script never stops:
+#     `hobo new blog --no-theme --invite-only --locale=es`
+#   - with no terminal to ask in, every question takes its default -- which is
+#     what a test does, and what `hobo new blog < /dev/null` does
+#   - `--wizard` asks anyway, and `--no-wizard` never asks
+#
+# The defaults are the decisions of PLAN.md: theme yes, public signup, no
+# activation mail, no admin subsite, not private, English.
 answers = ENV["HOBO_NEW_ANSWERS"].to_s.split
+
+interactive = if answers.include?("--wizard") then true
+              elsif answers.include?("--no-wizard") then false
+              else $stdin.tty?
+              end
+
+# Thor's `yes?` reads a bare Enter as "no", which makes a question whose default
+# is yes impossible to answer the easy way. This reads the Enter as the default,
+# which is what the brackets promise.
+question = lambda do |flag, text, default|
+  next false if answers.include?("--no-#{flag}")
+  next true  if answers.include?("--#{flag}")
+  next default unless interactive
+
+  said = ask("#{text} [#{default ? 'S/n' : 's/N'}]").to_s.strip.downcase
+  next default if said.empty?
+  said.start_with?("s", "y")
+end
+
+say "\nHobo\n", :green if interactive
 
 # **The theme is a question.** Answer no and what comes out is a plain Rails
 # application: Hobo still derives every page from the model, but it paints the
 # body and nothing else, and your own layout wraps it. That is the way in for an
 # application that already has a design -- and the way to start bare and add
 # your own.
-with_theme = if answers.include?("--no-theme") then false
-             elsif answers.include?("--theme") then true
-             elsif $stdin.tty? then yes?("Quieres el tema de Hobo? Si dices que no, la aplicacion sale sin estilos y el diseno lo pones tu. [S/n]")
-             else true
-             end
+with_theme = question.call("theme", "Quieres el tema de Hobo? Si dices que no, la aplicacion sale sin estilos y el diseno lo pones tu.", true)
+
+# How people get an account. Both are steps of the user's lifecycle; see
+# `hobo:signup`.
+invite_only = question.call("invite-only", "Solo se entra por invitacion? (un administrador invita; no hay alta publica)", false)
+activation_email = invite_only ? false : question.call("activation-email", "El alta tiene que confirmarse por correo?", false)
+
+# A part of the application for administrators: another directory of
+# controllers over the same models.
+with_admin = question.call("admin", "Quieres un subsitio de administracion en /admin?", false)
+
+# The old wizard's "prevent all access to the site to non-members".
+private_site = question.call("private", "Todo el sitio detras del login? (si no, cada modelo decide quien ve sus paginas)", false)
+
+# And the language.
+locale = answers.grep(/\A--locale=/).first.to_s.split("=").last
+locale = ask("Idioma de la aplicacion? [en]").to_s.strip if locale.blank? && interactive
+locale = "en" if locale.blank?
+
+# The names. Hobo 2 asked for all three and they are still real choices: an
+# application may call its front page `home` and its administration `staff`.
+named = lambda do |flag, text, default|
+  given = answers.grep(/\A--#{flag}=/).first.to_s.split("=").last
+  next given if given.present?
+  next default unless interactive
+  said = ask("#{text} [#{default}]").to_s.strip
+  said.empty? ? default : said
+end
+
+front_name = named.call("front", "Como se llama el controlador de la portada?", "front")
+admin_name = with_admin ? named.call("admin-name", "Como se llama el subsitio de administracion?", "admin") : "admin"
+
+# What Hobo 2 asked as "Initial Migration: [s]kip, [g]enerate migration file
+# only, generate and [m]igrate". The generator takes the same three answers.
+migration = if answers.include?("--skip-migration") then "s"
+            elsif answers.include?("--generate-migration") then "g"
+            elsif !interactive then "m"
+            else
+              said = ask("Migracion inicial: [s]altar, [g]enerar el fichero, generar y [m]igrar? [m]").to_s.strip.downcase
+              %w[s g m].include?(said) ? said : "m"
+            end
 
 gem_line = lambda do |name|
   hobo_dev ? %(gem "#{name}", path: "#{File.join(hobo_dev, name)}") : %(gem "#{name}")
@@ -54,7 +121,7 @@ after_bundle do
   # Rails owns the user, the session and the passwords (piece 15). Hobo owns the
   # page that lets the first person in without a console.
   generate "authentication"
-  generate "hobo:front_page"
+  generate "hobo:front_page", front_name
   # Rails' generator writes a session and a password reset and no registration.
   # Hobo 2 had signup in the bar and an application without it is an application
   # with exactly one user, forever.
@@ -65,9 +132,12 @@ after_bundle do
   # the public one are already drawn and taking them back out is not a
   # generator's job.
   signup_options = []
-  signup_options << "--activation-email" if answers.include?("--activation-email")
-  signup_options << "--invite-only" if answers.include?("--invite-only")
+  signup_options << "--activation-email" if activation_email
+  signup_options << "--invite-only" if invite_only
   generate "hobo:signup", *signup_options
+
+  # A directory of controllers over the same models, for administrators.
+  generate "hobo:admin_subsite", admin_name if with_admin
 
   # Without the theme there is nothing to plug into the layout: the application
   # keeps the one Rails wrote, Hobo paints the body of each page into it, and the
@@ -86,19 +156,16 @@ after_bundle do
   # generator is gone, and what is left of the question is this line, plus a
   # file for **your** words -- which is the half of `app.<locale>.yml` that was
   # worth keeping.
-  locale = answers.grep(/\A--locale=/).first.to_s.split("=").last
-  if locale.present?
-    application %(    config.i18n.default_locale = :#{locale})
-  end
+  application %(    config.i18n.default_locale = :#{locale}) unless locale == "en"
 
-  create_file "config/locales/app.#{locale.presence || 'en'}.yml", <<~YAML
+  create_file "config/locales/app.#{locale}.yml", <<~YAML
     # The names your application uses for its own things. Rails looks here for
     # them, and Hobo's pages ask Rails -- so a model called `Story` becomes
     # "Relato" everywhere by saying it once, here.
     #
     # Uncomment what you need. Hobo's own strings are in the gem; to change one,
-    # write the same key in a file of yours (config/locales/hobo.#{locale.presence || 'en'}.yml).
-    #{locale.presence || 'en'}:
+    # write the same key in a file of yours (config/locales/hobo.#{locale}.yml).
+    #{locale}:
     #  activerecord:
     #    models:
     #      story:
@@ -113,7 +180,7 @@ after_bundle do
   # "Prevent all access to the site to non-members", as the old wizard asked it.
   # Rails' filter is already on every controller; what this does is stop Hobo's
   # from stepping around it. The pages that let somebody in keep working.
-  if answers.include?("--private")
+  if private_site
     application %(    # Todo el sitio detras del login.\n    config.hobo.private_site = true)
   end
 
@@ -149,7 +216,10 @@ after_bundle do
   #
   # The `rescue nil` that used to be on the next line is why that was quiet.
   rails_command "db:migrate"
-  generate "hobo:migration", "-n -m"
+  case migration
+  when "m" then generate "hobo:migration", "-n -m"
+  when "g" then generate "hobo:migration", "-n -g"
+  end
 
   say [
     "",
