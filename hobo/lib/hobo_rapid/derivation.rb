@@ -297,7 +297,7 @@ module HoboRapid
                   end
 
                   new_path = new_path_for(model)
-                  if new_path
+                  if new_path && creatable_here?(model)
                     tag("a", { :href => new_path, :class => "btn btn-primary" }, :new_link) do
                       text t(:"index.new_link", "New %{name}", :name => singular.downcase)
                     end

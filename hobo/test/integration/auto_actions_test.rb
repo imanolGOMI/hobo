@@ -102,6 +102,47 @@ class AutoActionsIntegrationTest < Minitest::Test
     assert_includes output, "CREADAS 0", output
   end
 
+  # A stranger, against the permissions a generated model actually has.
+  #
+  # `bin/rails generate hobo:resource` writes `create_permitted? =
+  # acting_user.present?`, which is the Rails way of saying "somebody has to be
+  # logged in". Hobo's answer for nobody is a `Hobo::Model::Guest`, and **an
+  # object is present**: so a visitor could POST a record into a generated
+  # application, while the very same page refused to paint them an edit link.
+  # The tags normalised a guest to nil and the model layer did not.
+  #
+  # Written with the generated model's own words on purpose: this is the
+  # permission every application starts with, and it has to mean what it says.
+  def test_a_visitor_cannot_create_in_a_model_that_asks_for_somebody
+    output = run_in_app(<<~RUBY)
+      ActiveRecord::Base.connection.create_table(:stories, :force => true) { |t| t.string :title }
+
+      class Story < ActiveRecord::Base
+        include Hobo::Model
+        fields { title :string }
+        def view_permitted?(field) = true
+        def create_permitted?  = acting_user.present?
+        def update_permitted?  = acting_user.present?
+        def destroy_permitted? = acting_user.present?
+      end
+
+      class StoriesController < ApplicationController
+        include Hobo::Controller::Model
+        auto_actions :all
+      end
+
+      Rails.application.routes.draw { resources :stories }
+
+      #{caller_helper}
+
+      call(:create, "POST", "/stories", "story" => { "title" => "De un extrano" })
+      puts "CREADAS \#{Story.count}"
+    RUBY
+
+    assert_includes output, "CREATE 403", output
+    assert_includes output, "CREADAS 0", output
+  end
+
   # Piece 12: the routes are drawn by `hobo_routes` in the application's own
   # config/routes.rb. There is no generated config/hobo_routes.rb any more.
   def test_hobo_routes_draws_the_routes_of_every_controller

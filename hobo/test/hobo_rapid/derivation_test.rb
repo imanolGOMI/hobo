@@ -155,6 +155,64 @@ class DerivationTest < Minitest::Test
     assert_includes render(:index_page, collection_of([])), "Nothing here yet"
   end
 
+  # --- offering to create -------------------------------------------------------
+  #
+  # The index offered "New story" to anybody the moment the route existed, and a
+  # stranger who followed it got a form with every input read-only: the
+  # permissions were right and the link was not. **An offer is a promise**, and
+  # this is the model being asked whether it can be kept.
+  #
+  # Nothing could catch this before: with no Rails there is no route, so the
+  # link was never painted in a test at all. It took looking at a real
+  # application as a guest.
+  class Thing
+    attr_accessor :id, :name
+    def self.field_specs = { :name => nil }
+    def self.name_attribute = :name
+    def self.attr_type(_field) = String
+    def viewable_by?(_user, _field = nil) = true
+    def editable_by?(_user, _field = nil) = false
+    def destroyable_by?(_user) = false
+    def creatable_by?(_user) = false
+  end
+
+  class OpenThing < Thing
+    def creatable_by?(_user) = true
+  end
+
+  class ThingCollection < Array
+    def initialize(member_class, records) = (@member_class = member_class; super(records))
+    attr_reader :member_class
+  end
+
+  # There is no Rails here, so no route -- which is exactly why the link never
+  # showed up in a test. Say there is one.
+  def with_a_new_route
+    Rapid::Tag.class_eval do
+      alias_method :new_path_for_without_stub, :new_path_for
+      define_method(:new_path_for) { |_model| "/things/new" }
+    end
+    yield
+  ensure
+    Rapid::Tag.class_eval do
+      alias_method :new_path_for, :new_path_for_without_stub
+      remove_method :new_path_for_without_stub
+    end
+  end
+
+  def index_of(model)
+    HoboRapid::Derivation.derive(model)
+    with_a_new_route { Rapid.render(:index_page, {}, :this => ThingCollection.new(model, [])) }
+  end
+
+  def test_the_index_does_not_offer_a_new_one_to_whoever_cannot_make_one
+    refute_includes index_of(Thing), "/things/new"
+  end
+
+  def test_and_offers_it_to_whoever_can
+    assert_includes index_of(OpenThing), "/things/new"
+  end
+
   # --- the form ---------------------------------------------------------------
 
   # Where `fields do` pays off: nobody said what control each field gets.

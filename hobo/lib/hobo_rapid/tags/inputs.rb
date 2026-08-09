@@ -35,6 +35,24 @@ module HoboRapid
         this.destroyable_by?(acting_user)
       end
 
+      # Whether *a new one* may be made -- what decides whether the index offers
+      # "New story" at all.
+      #
+      # The index used to offer it to anybody the moment the route existed, and
+      # a stranger who followed it got a form with no fields in it: every input
+      # was read-only, because the permissions were right and the link was not.
+      # The offer is a promise, and this is the model being asked to keep it.
+      def creatable_here?(model)
+        return true unless model.respond_to?(:new)
+        record = model.new
+        return true unless record.respond_to?(:creatable_by?)
+        record.creatable_by?(acting_user)
+      rescue StandardError
+        # A model whose `new` needs arguments, or a permission method that
+        # trips over a blank record, must not take the page down with it.
+        true
+      end
+
       def can_edit?
         return true unless this_parent && this_field
         return true unless this_parent.respond_to?(:editable_by?)
