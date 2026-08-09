@@ -58,7 +58,16 @@ after_bundle do
   # Rails' generator writes a session and a password reset and no registration.
   # Hobo 2 had signup in the bar and an application without it is an application
   # with exactly one user, forever.
-  generate "hobo:signup"
+  #
+  # The two questions the old wizard asked about accounts travel from the
+  # command line to here: `hobo new blog --invite-only` has to generate the
+  # invitation flow instead of the public one, because afterwards the routes of
+  # the public one are already drawn and taking them back out is not a
+  # generator's job.
+  signup_options = []
+  signup_options << "--activation-email" if answers.include?("--activation-email")
+  signup_options << "--invite-only" if answers.include?("--invite-only")
+  generate "hobo:signup", *signup_options
 
   # Without the theme there is nothing to plug into the layout: the application
   # keeps the one Rails wrote, Hobo paints the body of each page into it, and the

@@ -1,9 +1,10 @@
 class UserMailer < ApplicationMailer
 
+<% if activation_email? -%>
   # The activation mail: a link with a one-use key in it.
   #
   # The key is the lifecycle's (`:new_key => true` on the signup step), it is
-  # signed with the application's `secret_key_base`, and it stops working when
+  # signed with the application's `secret_key_base`, and it stops working once
   # the step it belongs to has been taken.
   def activation(user, key)
     @user = user
@@ -11,4 +12,17 @@ class UserMailer < ApplicationMailer
     mail :subject => "Activate your account", :to => user.email_address
   end
 
+<% end -%>
+<% if invite_only? -%>
+  # The invitation mail. The same mechanism -- a one-use key from the lifecycle
+  # -- with the difference that the person on the other end has no password yet
+  # and chooses one by following the link.
+  def invitation(user, key, from = nil)
+    @user = user
+    @from = from.try(:email_address) || "Somebody"
+    @url  = accept_url(user, :key => key)
+    mail :subject => "You have been invited", :to => user.email_address
+  end
+
+<% end -%>
 end

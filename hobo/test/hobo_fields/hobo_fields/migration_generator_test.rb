@@ -171,6 +171,18 @@ module MigrationGeneratorBattery
     assert_reversible(up, down)
   end
 
+  # The same thing said out loud, which is what an application writes.
+  def test_add_fields_says_these_are_mine_and_the_rest_is_not
+    connection.create_table(:users) { |t| t.string :email_address, :null => false }
+    define_model(:User) { add_fields { administrator :boolean, :default => false } }
+
+    up, down = generate
+
+    assert_match(/add_column :users, :administrator, :boolean/, up)
+    refute_match(/remove_column :users, :email_address/, up)
+    assert_reversible(up, down)
+  end
+
   # And a model that does describe its table keeps saying what is not in it.
   def test_a_table_the_model_describes_still_loses_what_is_not_declared
     connection.create_table(:adverts) do |t|

@@ -82,8 +82,14 @@ end
 #
 # One tag, then, and two callers: `<first-user-form>` is this with the words of
 # somebody who is about to own the application.
-Rapid.define(:signup_form, :attrs => [:action, :heading, :blurb, :button_label, :class]) do
+Rapid.define(:signup_form, :attrs => [:action, :heading, :blurb, :button_label, :class, :fields]) do
   field = login_field
+
+  # Which halves of the form to paint. The whole thing by default; an invitation
+  # asks an administrator only for the address, and asks the person who accepts
+  # it only for a password. It is one form because it is one thing -- making an
+  # account -- asked in two sittings.
+  wanted = Array(attributes[:fields] || %w[login password]).map(&:to_s)
 
   tag("div", { :class => attributes[:class] || "signup" }, :box) do
     tag("h1", {}, :heading) { text attributes[:heading] || t(:"front.signup", "Create an account") }
@@ -94,14 +100,17 @@ Rapid.define(:signup_form, :attrs => [:action, :heading, :blurb, :button_label, 
     tag("form", { :method => "post", :action => attributes[:action] || "/", :class => "signup-form" }, :form) do
       param(:authenticity_token) { authenticity_token_field }
 
-      tag("div", { :class => "field" }, :"#{field}_field") do
-        tag("label", { :for => "user_#{field}" }, :"#{field}_label") { text field.humanize }
-        tag("input", { :type => field.include?("email") ? "email" : "text",
-                       :name => "user[#{field}]", :id => "user_#{field}", :required => true })
+      if wanted.include?("login")
+        tag("div", { :class => "field" }, :"#{field}_field") do
+          tag("label", { :for => "user_#{field}" }, :"#{field}_label") { text field.humanize }
+          tag("input", { :type => field.include?("email") ? "email" : "text",
+                         :name => "user[#{field}]", :id => "user_#{field}", :required => true })
+        end
       end
 
-      { "password" => t(:"front.password", "Password"),
-      "password_confirmation" => t(:"front.password_confirmation", "Repeat the password") }.each do |name, label|
+      passwords = wanted.include?("password") ? { "password" => t(:"front.password", "Password"),
+                                                  "password_confirmation" => t(:"front.password_confirmation", "Repeat the password") } : {}
+      passwords.each do |name, label|
         tag("div", { :class => "field" }, :"#{name}_field") do
           tag("label", { :for => "user_#{name}" }, :"#{name}_label") { text label }
           tag("input", { :type => "password", :name => "user[#{name}]", :id => "user_#{name}", :required => true })

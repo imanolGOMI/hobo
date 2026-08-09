@@ -17,7 +17,7 @@ TEMPLATE = File.expand_path("../lib/generators/hobo/app_template.rb", __dir__)
 # `rails new` sees them -- an unknown flag there is an error -- and handed to the
 # template through the environment. Without a flag the template asks, and with
 # no terminal to ask in it takes the default.
-HOBO_FLAGS = /\A--(no-)?(theme)\z/
+HOBO_FLAGS = /\A--(no-)?(theme|activation-email|invite-only)\z/
 
 command = ARGV.shift
 
@@ -42,6 +42,9 @@ else
 
       --theme / --no-theme   El tema de Hobo, o una aplicacion plana a la que
                              le pones tu diseno. Por defecto: con tema.
+      --activation-email     El alta deja la cuenta apagada y manda un correo
+                             con la clave para encenderla.
+      --invite-only          No hay alta publica: un administrador invita.
 
     El resto de opciones se le pasan tal cual a `rails new`.
 

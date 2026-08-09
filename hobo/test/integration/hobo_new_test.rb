@@ -198,6 +198,17 @@ class HoboNewTest < Minitest::Test
       File.write(File.join(app, "tmp", "key.rb"), %(print User.last.lifecycle.key))
 
       with_server(app, 3097) do |http|
+        # The first person in owns the application and is active from the start:
+        # they arrive at the front page, before there is anybody to send a mail
+        # to or anybody to answer it. Activation is for **everybody after that**,
+        # so the test has to make the owner first or it would be measuring the
+        # exception.
+        jefa = Browser.new(http)
+        jefa.get("/")
+        jefa.post("/first-user", "user[email_address]" => "jefa@example.com",
+                                 "user[password]" => "test1234",
+                                 "user[password_confirmation]" => "test1234")
+
         nueva = Browser.new(http)
         nueva.get("/signup")
         nueva.post("/signup", "user[email_address]" => "nueva@example.com",
@@ -235,6 +246,65 @@ class HoboNewTest < Minitest::Test
 
         assert_equal "inactive", run_command(app, "bin/rails runner tmp/state.rb").split.first,
                      "una clave inventada no activa nada"
+      end
+    end
+  end
+
+  # `hobo new --invite-only`: the other account question of the old wizard.
+  #
+  # There is no public signup at all -- the route is not drawn, so the page does
+  # not exist and the bar stops offering it by itself. An administrator invites,
+  # and the person invited chooses their own password when they accept.
+  #
+  # The first person in is the administrator: the front page creates them
+  # directly, without a lifecycle step, so the model has to put them in the
+  # active state as well. Otherwise the first user of a brand new application
+  # cannot log in -- a locked door with the key inside.
+  def test_hobo_new_can_make_a_site_you_have_to_be_invited_to
+    Dir.mktmpdir do |tmp|
+      app = File.join(tmp, "porinvitacion")
+      run_command(tmp, "#{ROOT}/hobo/bin/hobo new porinvitacion --invite-only " \
+                       "--skip-git --skip-test --skip-system-test --skip-javascript " \
+                       "--skip-hotwire --skip-jbuilder --skip-action-cable " \
+                       "--skip-action-mailbox --skip-action-text --skip-active-storage --skip-bootsnap")
+
+      refute_includes File.read(File.join(app, "config", "routes.rb")), "registrations#new",
+                      "en un sitio por invitacion no hay alta publica"
+
+      File.write(File.join(app, "tmp", "quien.rb"), <<~RUBY)
+        print User.order(:id).map { |u| "\#{u.id}:\#{u.email_address}:\#{u.administrator?}:\#{u.state}" }.join(" ")
+      RUBY
+
+      with_server(app, 3096) do |http|
+        jefa = Browser.new(http)
+        jefa.get("/")
+        jefa.post("/first-user", "user[email_address]" => "jefa@example.com",
+                                 "user[password]" => "test1234",
+                                 "user[password_confirmation]" => "test1234")
+
+        # In, and the owner of the application.
+        assert_includes jefa.get("/"), "Log out", "el primero entra"
+        assert_includes run_command(app, "bin/rails runner tmp/quien.rb"), "jefa@example.com:true:active"
+
+        # Nobody else gets in on their own.
+        stranger = Browser.new(http)
+        refute_includes stranger.get("/"), "Sign up"
+
+        # The administrator invites.
+        jefa.get("/invite")
+        jefa.post("/invite", "user[email_address]" => "invitada@example.com")
+        assert_includes run_command(app, "bin/rails runner tmp/quien.rb"), "invitada@example.com:false:invited"
+
+        # And the link in the mail is where the password is chosen.
+        link = File.read(File.join(app, "log", "development.log"))[%r{INVITATION (/accept/\d+\?key=\w+)}, 1]
+        refute_nil link, "no se envio la invitacion"
+
+        invitada = Browser.new(http)
+        assert_includes invitada.get(link), "Choose a password"
+        invitada.post(link, "user[password]" => "otra1234", "user[password_confirmation]" => "otra1234")
+
+        assert_includes run_command(app, "bin/rails runner tmp/quien.rb"), "invitada@example.com:false:active"
+        assert_includes invitada.get("/"), "Log out", "quien acepta la invitacion se queda dentro"
       end
     end
   end

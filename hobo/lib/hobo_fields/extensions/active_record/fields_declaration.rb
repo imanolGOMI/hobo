@@ -1,5 +1,22 @@
 ActiveRecord::Base.class_eval do
 
+    # The columns Hobo **adds** to a table that is somebody else's.
+    #
+    # `fields do ... end` is a model describing its whole table, and that is
+    # what lets the migration generator propose dropping a column that is not in
+    # it. When Hobo joins an application that already exists -- a model Rails
+    # made, or the `User` of `bin/rails generate authentication` -- the right
+    # thing to say is smaller: *these* are mine, the rest is not mine to touch.
+    #
+    #     add_fields do
+    #       administrator :boolean, :default => false
+    #     end
+    def self.add_fields(&b)
+      fields(&b)
+      @hobo_owns_the_table = false
+      self
+    end
+
     def self.fields(include_in_migration = true, &b)
       # Any model that calls 'fields' gets a bunch of other
       # functionality included automatically, but make sure we only
