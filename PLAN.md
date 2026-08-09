@@ -2207,6 +2207,35 @@ cd /tmp/videoteca3 && setsid nohup env HOBODEV=/home/imanol/RubymineProjects/hob
   bin/rails server -p 3009 -b 0.0.0.0 >> log/server.log 2>&1 < /dev/null &
 ```
 
+## Las cinco aplicaciones vivas (2026-08-09)
+
+Para poder mirar, no para pasar pruebas. Todas en `~/hobo_apps/`, que sobrevive
+a un reinicio; `/tmp` no.
+
+| Puerto | Qué | Cómo se arranca |
+|---:|---|---|
+| **3007** | `hobo_luz`: lo que sale de `hobo new` hoy. El banco de conformidad | `HOBODEV=... bin/rails server -p 3007` |
+| **3010** | `rails8_hobo`: una app Rails 8 ajena **con** la gema añadida | `bin/rails server -p 3010` |
+| **3011** | `rails8_baseline`: la **misma** app sin la gema, para comparar | `bin/rails server -p 3011` |
+| **3012** | `agility2`: Agility en **Hobo 2.2.6**, Rails 4.2, Ruby 2.5.9 | `RBENV_VERSION=2.5.9 bundle exec rails server -p 3012` |
+| **3013** | `agility3`: la misma Agility portada a Hobo 3 | `HOBODEV=... bin/rails server -p 3013` |
+
+Usuarios: `admin@example.com` / `test1234` en 3007 y 3013;
+`admin@lastdance-events.com` / `test1234` en 3010 y 3011. La de Hobo 2 (3012)
+pide crear el usuario en su propia pantalla de alta.
+
+⚠ **Los puertos 3000, 3001 y 3002 son de Imanol. No tocarlos.**
+
+**Cómo se volvió a levantar la de Hobo 2**, que es lo que más cuesta:
+`~/hobo_apps/hobo2_gems` es una copia plana (sin git del repo) de `master`, con
+`NAME_STR` → `QNAME_STR` en `dryml/lib/dryml/parser/base_parser.rb`. En el
+`Gemfile` de la app: `git://` → `https://` (GitHub ya no sirve `git://`), rails
+`4.2.11.3`, `sqlite3 1.3.13`, `ffi < 1.17` (la 1.17 pide Ruby 3) y **`kramdown
+< 2.0`**, porque kramdown 2.5 arrastra `rexml 3.4` y el parser de DRYML es de
+2012: con esa rexml, `NEW_REX` sale falso y todo DRYML es «malformed XML». Con
+la rexml de la propia Ruby 2.5 (3.1.7.4) funciona. Falta `gem "blankslate"`, que
+`hobo_support` usa y nadie declara.
+
 ## La aplicación de pruebas viva
 
 ⚠ **`/tmp` se vacía al reiniciar la máquina, y se vació.** El 2026-08-09 ya no
@@ -2605,8 +2634,9 @@ anotado, sin orden y sin prisa:
 - Los generadores del asistente viejo —`setup_wizard`, `install_plugin`,
   `install_default_plugins`, `subsite_taglib` y `generators/hobo/plugin.rb`—
   siguen en el árbol y **contradicen la decisión 22**: instalar un plugin ya no
-  es invocar nada. Nadie los llama; `hobo new` no pasa por ahí. Son lo siguiente
-  que hay que borrar.
+  es invocar nada. Nadie los llama; `hobo new` no pasa por ahí, y el port de
+  Agility tampoco. **Ya se puede borrar**: el círculo está cerrado y ninguna de
+  las dos migraciones los usó.
 - Los ocho plugins de la organización siguen en DRYML. `hobo_timeago/` es el
   ejemplo de a qué tienen que llegar.
 - El actualizador de plantillas de aplicaciones existentes (decisión 6) sigue
@@ -2703,6 +2733,83 @@ Un tropiezo que vale la pena recordar: un engine de Rails ya carga
 `lib/tasks/**/*.rake` él solo. Decirlo otra vez con `rake_tasks { load … }`
 cargaba el fichero dos veces, y rake **suma** el segundo cuerpo al primero en vez
 de reemplazarlo, así que la tarea imprimía el catálogo entero dos veces.
+
+### El círculo: instalar la gema en una app ajena, y portar una vieja (2026-08-09)
+
+Antes de borrar los generadores viejos, cerrar el círculo. Y menos mal.
+
+#### 1. Una app Rails 8 ajena, con la gema añadida y nada más
+
+Sujeto: una copia de `rails8_bootstrap` (Devise, Slim, Bootstrap propio,
+ActiveStorage, Pagy, 9 modelos). **Todas sus páginas se caían**, el login
+incluido, con solo poner la gema en el `Gemfile`. Tres monkeypatches de 2008
+sobre clases de Rails y de Ruby que sobrevivieron a la reescritura:
+
+| Qué | Por qué rompía |
+|---|---|
+| `String#safe_constantize` | El de ActiveSupport responde `nil` cuando la constante no está; el de Hobo relanzaba el `NameError` salvo que el nombre que faltara fuera **exactamente** la cadena entera. ActiveRecord pregunta justo por candidatos que espera que no existan (`Dj::ActiveStorage::Attachment` antes que `ActiveStorage::Attachment`), así que reventaba toda página con un adjunto, una asociación polimórfica o STI |
+| `String#remove` | El de ActiveSupport quita **todas** las apariciones; el de Hobo, la primera. Mismo nombre, mismos argumentos, otra respuesta, ningún error |
+| `ActionView#translate` | Reabierto con la firma de 2008, pasando el hash a `I18n.translate` por posición: hoy es `ArgumentError`, así que **`t()` moría en cualquier vista de la aplicación**. Estaba ahí por el tag `<t>` de DRYML |
+| `current_user` | Hobo lo define en un helper que aterriza en todos los controladores y en todas las vistas, y se llevaba por delante el de Devise: el layout hacía `current_user.email` sobre un `Hobo::Model::Guest` |
+
+Los dos primeros y el tercero: **borrados**. El cuarto cede con
+`return super if defined?(super)`.
+
+> **Una aplicación generada por Hobo no puede ver lo que Hobo le rompe a una
+> aplicación que no generó.** Es la lección de la capa 6 un piso más arriba: la
+> app de `hobo new` no llama a `t()` en una vista, no tiene adjuntos y no trae
+> otra autenticación, así que nada de esto podía fallar en casa.
+
+Después del arreglo, las cinco pantallas de la app ajena se ven **igual con la
+gema que sin ella** (3010 vs 3011), y un modelo suyo que no tenía CRUD
+—`EventPrice`— pasó a tener páginas con **dos líneas en el modelo, tres en un
+controlador nuevo y `hobo_routes`**. Y salieron en español solas, porque la
+aplicación tiene `es` de idioma.
+
+Lo que **no** encaja todavía: la página derivada se pinta con el tema de Hobo
+(documento entero, su propia barra), no con el layout de la aplicación. Para
+adoptar Hobo en una app que ya tiene diseño hace falta poder decir «dame el
+cuerpo, el layout lo pongo yo». El mecanismo ya está a medias —el controlador
+mira si lo pintado empieza por `<!DOCTYPE` y solo entonces se salta el layout—:
+falta la manera de decirlo.
+
+#### 2. Agility, de Hobo 2 a Hobo 3
+
+`agility_bootstrap` es la app de pruebas clásica: 13 modelos, 12 controladores,
+~20 vistas DRYML escritas a mano y **permisos de verdad por usuario**. Se portó
+el dominio (Project, Story, Task, StoryStatus, ProjectMembership,
+TaskAssignment) y **ni una vista**.
+
+Lo que costó, por línea de modelo:
+
+| Hobo 2 | Hobo 3 |
+|---|---|
+| `hobo_model` | igual (sigue existiendo) |
+| `fields do … end` | igual |
+| `:accessible => true`, `children`, `belongs_to … :creator => true` | igual |
+| `attr_accessible` | fuera (`protected_attributes` murió en Rails 5) |
+| `has_many …, :scope => :contributor` | lambda: `-> { where(:role => "contributor") }` |
+| `has_attached_file` (Paperclip) | fuera; sería ActiveStorage |
+| `hobo_user_model` con su lifecycle de alta | el `User` de Rails 8 + tres líneas (decisión 15) |
+| `errors[:base] << "…"` | `errors.add(:base, "…")` |
+
+Y dos cosas rotas que **solo se ven con una aplicación así**:
+
+- **El tipo `:markdown` no existía.** Sus dos ficheros llevaban comentados desde
+  una nota de Rails 4 que decía «se cargarán más tarde», y más tarde no llegó
+  nunca. Estaban comentados porque el motor se elegía **al cargar** el fichero
+  (`defined?(RDiscount)`), y si Bundler no lo había requerido todavía la
+  respuesta era `nil`. Ahora se busca al usarlo.
+- **Un permiso denegado salía como 500.** El catálogo lanza su propio
+  `HoboRapid::PermissionDenied` —`<view>` pregunta `viewable_by?` antes de
+  pintar— y el controlador solo rescataba el de Hobo. Las aplicaciones que
+  genera Hobo dejan verlo todo a todo el mundo; hacía falta una con permisos.
+  Ahora un visitante recibe 403, que es lo que Agility dice.
+
+Resultado: `/projects`, `/stories`, `/tasks` y `/story_statuses` funcionan
+derivadas, con los permisos de Agility mandando. Lo que **no** se portó, y es la
+mitad que falta: las ~20 vistas DRYML escritas a mano. Eso es el actualizador
+(decisión 6), y ahora hay dos aplicaciones vivas para escribirlo contra ellas.
 
 ### De paso: `hobo new` dejaba una aplicación rota (2026-08-09)
 
