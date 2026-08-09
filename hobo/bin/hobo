@@ -17,7 +17,7 @@ TEMPLATE = File.expand_path("../lib/generators/hobo/app_template.rb", __dir__)
 # `rails new` sees them -- an unknown flag there is an error -- and handed to the
 # template through the environment. Without a flag the template asks, and with
 # no terminal to ask in it takes the default.
-HOBO_FLAGS = /\A--(no-)?(theme|activation-email|invite-only|private)\z/
+HOBO_FLAGS = /\A--(no-)?(theme|activation-email|invite-only|private)\z|\A--locale=/
 
 command = ARGV.shift
 
@@ -47,6 +47,8 @@ else
       --invite-only          No hay alta publica: un administrador invita.
       --private              Todo el sitio detras del login. Sin esto, cada
                              modelo decide quien ve sus paginas.
+      --locale=es            El idioma de la aplicacion. Hobo trae sus cadenas
+                             en ingles y en espanol.
 
     El resto de opciones se le pasan tal cual a `rails new`.
 

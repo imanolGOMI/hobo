@@ -155,6 +155,64 @@ class DerivationTest < Minitest::Test
     assert_includes render(:index_page, collection_of([])), "Nothing here yet"
   end
 
+  # --- what a model is called ---------------------------------------------------
+  #
+  # The heading of an index used to be `model.name.humanize` and nothing else, so
+  # a page said "Stories" whatever language the application was in -- while the
+  # column headings above the same table were translated, because those go
+  # through `human_attribute_name`. `activerecord.models.story`, the key every
+  # Rails application knows, had no effect on any page Hobo painted.
+  #
+  # And the second half matters more: **deriving happens once, rendering happens
+  # on every request**. The language belongs to the request, so a name captured
+  # while deriving is the language the server started in, for ever.
+  class Named
+    attr_accessor :id, :name
+    def self.field_specs = { :name => nil }
+    def self.name_attribute = :name
+    def self.attr_type(_field) = String
+    def self.name = "Story"
+    def viewable_by?(_user, _field = nil) = true
+
+    # What Rails answers. `model_name.human` reads `activerecord.models.story`,
+    # and here it reads whatever the test last said.
+    def self.said = @said ||= { :one => "Story", :other => "Stories" }
+    def self.model_name = ModelName.new(said)
+
+    class ModelName
+      def initialize(said) = @said = said
+      def human(options = {}) = options[:count].to_i == 2 ? @said[:other] : @said[:one]
+    end
+  end
+
+  class NamedCollection < Array
+    def member_class = Named
+  end
+
+  def test_the_heading_is_what_rails_calls_the_model
+    Named.said.merge!(:one => "Relato", :other => "Relatos")
+    HoboRapid::Derivation.derive(Named)
+
+    html = Rapid.render(:index_page, {}, :this => NamedCollection.new([]))
+
+    assert_includes html, "<h2>Relatos</h2>"
+  ensure
+    Named.said.merge!(:one => "Story", :other => "Stories")
+  end
+
+  # The one that would have caught it: derive first, translate afterwards.
+  def test_the_name_is_asked_when_the_page_is_painted_not_when_it_is_derived
+    HoboRapid::Derivation.derive(Named)
+    Named.said.merge!(:one => "Relato", :other => "Relatos")
+
+    html = Rapid.render(:index_page, {}, :this => NamedCollection.new([]))
+
+    assert_includes html, "<h2>Relatos</h2>",
+                    "el idioma es de cada peticion, no del arranque del servidor"
+  ensure
+    Named.said.merge!(:one => "Story", :other => "Stories")
+  end
+
   # --- offering to create -------------------------------------------------------
   #
   # The index offered "New story" to anybody the moment the route existed, and a

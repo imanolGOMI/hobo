@@ -115,8 +115,30 @@ module HoboRapid
         Array(model.view_hints.children).map(&:to_s)
       end
 
-      def title_of(model) = model.name.demodulize.underscore.humanize
-      def plural_of(model) = title_of(model).pluralize
+      # What a model is called, **asking Rails**.
+      #
+      # This used to be `model.name.humanize` and nothing else, so a page said
+      # "Stories" whatever language the application was in: the labels of the
+      # fields were translatable (`human_attribute_name`) and the heading above
+      # them was not. `activerecord.models.story` -- the key every Rails
+      # application knows, and the one `hobo new` leaves a file for -- had no
+      # effect on any page Hobo painted.
+      def title_of(model)
+        return model.model_name.human if model.respond_to?(:model_name) && model.model_name.respond_to?(:human)
+        model.name.demodulize.underscore.humanize
+      end
+
+      # And the plural, which is not the singular with an s in most languages.
+      # Rails' `human(:count => 2)` answers with the translation when there is
+      # one and with the singular when there is not -- so the English rule stays
+      # as the fallback.
+      def plural_of(model)
+        if model.respond_to?(:model_name) && model.model_name.respond_to?(:human)
+          plural = model.model_name.human(:count => 2, :default => "").to_s
+          return plural if plural.present? && plural != title_of(model)
+        end
+        title_of(model).pluralize
+      end
 
       # Rails keeps these, and they are never what a page is about.
       HOUSEKEEPING = %w[created_at updated_at id type].freeze
@@ -219,9 +241,11 @@ module HoboRapid
         description = description_attribute_of(model)
         fields = summary_fields(model) - [description].compact
         children = children_of(model)
-        title = title_of(model)
 
         Rapid.define_for(:show_page, model) do
+          # At render time: see the note in derive_index_page. The name of a
+          # model belongs to the language of the request.
+          title = HoboRapid::Derivation.title_of(model)
           heading = name_attribute ? this.send(name_attribute).to_s : model.name.demodulize
           in_page("#{title} #{heading}") do
             tag("article", { :class => "show-page #{model.name.demodulize.underscore}" }, :body) do
@@ -278,11 +302,17 @@ module HoboRapid
         fields = summary_fields(model)
         name_attribute = name_attribute_of(model)
         columns = ([name_attribute] + fields).compact
-        plural = plural_of(model)
-        singular = title_of(model)
-
         Rapid.define_for(:index_page, model) do
           records = Array(this)
+
+          # Asked **here** and not when the page was derived. Deriving happens
+          # once, at boot; rendering happens on every request, and the language
+          # belongs to the request -- `I18n.locale` can be set per person. A
+          # name captured at derivation time is the language the server started
+          # in, for ever, which is how a Spanish application kept saying
+          # "Stories" above a table whose headings were in Spanish.
+          plural = HoboRapid::Derivation.plural_of(model)
+          singular = HoboRapid::Derivation.title_of(model)
           in_page(plural) do
             tag("div", { :class => "index-page #{model.name.demodulize.underscore.pluralize}" }, :body) do
 
@@ -412,7 +442,7 @@ module HoboRapid
       def derive_form_page(model)
         Rapid.define_for(:form_page, model) do
           new_record = this.respond_to?(:new_record?) && this.new_record?
-          name = model.name.demodulize.underscore.humanize.downcase
+          name = HoboRapid::Derivation.title_of(model).downcase
           title = new_record ? t(:"forms.new_title", "New %{name}", :name => name)
                              : t(:"forms.edit_title", "Edit %{name}", :name => name)
 

@@ -76,6 +76,40 @@ after_bundle do
     application %(    # Hobo pinta el cuerpo de cada pagina; el layout es tuyo.\n    config.hobo.theme = false)
   end
 
+  # The language of the application, which was one of the wizard's questions too
+  # (`hobo:i18n de en es fr hu it nb pt-PT ru`).
+  #
+  # That generator **copied Hobo's own strings into your application** -- 197
+  # lines per language -- because in 2010 that was the only way to change them.
+  # It is not any more: the gem is an engine and its `config/locales` are loaded
+  # on their own, and an application overrides a key by having that key. So the
+  # generator is gone, and what is left of the question is this line, plus a
+  # file for **your** words -- which is the half of `app.<locale>.yml` that was
+  # worth keeping.
+  locale = answers.grep(/\A--locale=/).first.to_s.split("=").last
+  if locale.present?
+    application %(    config.i18n.default_locale = :#{locale})
+  end
+
+  create_file "config/locales/app.#{locale.presence || 'en'}.yml", <<~YAML
+    # The names your application uses for its own things. Rails looks here for
+    # them, and Hobo's pages ask Rails -- so a model called `Story` becomes
+    # "Relato" everywhere by saying it once, here.
+    #
+    # Uncomment what you need. Hobo's own strings are in the gem; to change one,
+    # write the same key in a file of yours (config/locales/hobo.#{locale.presence || 'en'}.yml).
+    #{locale.presence || 'en'}:
+    #  activerecord:
+    #    models:
+    #      story:
+    #        one: Story
+    #        other: Stories
+    #    attributes:
+    #      story:
+    #        title: Title
+    #        body: Body
+  YAML
+
   # "Prevent all access to the site to non-members", as the old wizard asked it.
   # Rails' filter is already on every controller; what this does is stop Hobo's
   # from stepping around it. The pages that let somebody in keep working.
