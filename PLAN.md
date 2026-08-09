@@ -2143,7 +2143,7 @@ Una aplicación Rails 8 generada con `hobo new`:
 - **Filtros**: `<search-filter>` y `<filter-menu>` sobre Ransack, que suman en
   vez de turnarse.
 
-**Pruebas: 438 en **una** suite (+11 en la del plugin), todas en verde, + la
+**Pruebas: 441 en **una** suite (+11 en la del plugin), todas en verde, + la
 suite de conformidad en navegador (`cd hobo && HOBO_APP=~/hobo_apps/hobo_luz rake
 test`). El banco se regenera con el `hobo new` de hoy: tiene que ser lo que sale
 del generador, no lo que salía hace tres commits.**
@@ -2843,6 +2843,45 @@ servidor de verdad**. La primera versión hacía las peticiones en proceso, con 
 propio tarro de galletas, y daba por rotas dos cosas que la aplicación en marcha
 hacía bien: **una prueba que se equivoca en esa dirección es peor que no
 tenerla**.
+
+#### 4. Un invitado podía crear registros (2026-08-09)
+
+Lo vio Imanol mirando la app generada: de invitado no salen las acciones, pero
+**sí sale el botón «New»**, y al pulsarlo un formulario sin campos.
+
+Lo primero que se hizo fue el A/B que él propuso: generar una aplicación con la
+versión de **ayer** (`0a9880ab`) y otra con la de hoy, sembrar lo mismo y mirar
+las tres caras —dueño, otro usuario, invitado—. Salen idénticas. **No era de
+hoy**, y saberlo antes de tocar nada ahorró perseguir un fantasma.
+
+| quién | acciones | botón «New» | campos del formulario |
+|---|---:|---:|---:|
+| jefe | 2 | 1 | 4 |
+| otra | 2 | 1 | 4 |
+| invitado | 0 | **1** | **1** |
+
+Que jefe y otra tengan acciones es correcto: el `Story` generado declara
+`update_permitted? = acting_user.present?`, o sea *cualquiera que haya entrado*.
+
+Debajo había algo peor: **un extraño podía POSTear un registro y se guardaba**.
+
+- **La oferta es una promesa.** El índice pintaba «New X» en cuanto existía la
+  ruta, sin preguntar. Ahora pregunta al modelo (`creatable_here?`).
+- **Los permisos se preguntaban por otra persona.** Los modelos generados dicen
+  `acting_user.present?`, y la respuesta de Hobo para nadie es un
+  `Hobo::Model::Guest` —que **es** present—. Los tags normalizan el invitado a
+  nil (decisión 20) y el modelo no: de ahí que la página escondiera el enlace de
+  editar a alguien que sí podía crear.
+
+  El arreglo obvio —que `current_user` devuelva nil— es **el equivocado**, y la
+  suite lo dijo en el primer intento: sin `acting_user`, Hobo entiende que no
+  hay nadie actuando (una consola, un `seeds.rb`) y **se salta los permisos**.
+  Ahí está el valor de ese objeto: distingue *nadie mirando* de *alguien que no
+  es nadie*. Así que sigue siendo un objeto, y ahora es **blank**: `present?`
+  dice que no.
+
+> Dos capas con dos ideas de quién es nadie, y ninguna de las dos equivocada por
+> separado.
 
 ### De paso: `hobo new` dejaba una aplicación rota (2026-08-09)
 
