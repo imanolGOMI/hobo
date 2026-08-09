@@ -221,11 +221,11 @@ Rapid.define(:input_many, :attrs => [:minimum, :prefix, :fields, :add_label, :re
       # Without the `btn` they are just buttons inside a form, and the rule that
       # styles the plain forms Rails paints turned them into big blue primary
       # buttons -- the same rule that was eating the delete glyph.
-      tag("button", { :type => "button", :class => "btn btn-sm btn-outline-secondary add-item",
+      tag("button", { :type => "button", :class => "action small add-item",
                       :"data-action" => "rapid-input-many#add" }, :add) do
         text(attributes[:add_label] || "+")
       end
-      tag("button", { :type => "button", :class => "btn btn-sm btn-outline-secondary remove-item",
+      tag("button", { :type => "button", :class => "action small remove-item",
                       :"data-action" => "rapid-input-many#remove" }, :remove) do
         text(attributes[:remove_label] || "−")
       end

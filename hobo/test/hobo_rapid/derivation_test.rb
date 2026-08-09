@@ -135,7 +135,7 @@ class DerivationTest < Minitest::Test
 
     html = render(:index_page, collection_of([story, other]))
 
-    assert_includes html, %(<table class="table table-striped table-bordered">)
+    assert_includes html, %(<table class="collection-table">)
     assert_includes html, "<th>Body</th>"
     assert_equal 2, html.scan("<tr>").length - 1, "una fila por registro, mas la de cabeceras"
     assert_includes html, "Primera historia"

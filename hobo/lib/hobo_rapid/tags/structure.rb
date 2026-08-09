@@ -182,10 +182,10 @@ Rapid.define(:session_links) do
 
     if session
       tag("li", { :class => "nav-item" }, :log_out) do
-        tag("form", { :method => "post", :action => session, :class => "d-inline" }, :form) do
+        tag("form", { :method => "post", :action => session, :class => "inline" }, :form) do
           param(:authenticity_token) { authenticity_token_field }
           tag("input", { :type => "hidden", :name => "_method", :value => "delete" })
-          tag("button", { :type => "submit", :class => "btn btn-link nav-link" }, :button) { text t(:"session.log_out", "Log out") }
+          tag("button", { :type => "submit", :class => "nav-link logout" }, :button) { text t(:"session.log_out", "Log out") }
         end
       end
     end
@@ -239,8 +239,8 @@ Rapid.define(:dev_user_changer, :attrs => [:limit]) do
 
   current = someone_here
 
-  tag("form", { :method => "get", :action => action, :class => "dev-user-changer d-inline" }, :form) do
-    tag("select", { :name => field, :class => "form-select form-select-sm",
+  tag("form", { :method => "get", :action => action, :class => "dev-user-changer" }, :form) do
+    tag("select", { :name => field, :class => "form-select",
                     :"aria-label" => t(:"session.change_user", "Change user"),
                     :"data-controller" => "rapid-autosubmit",
                     :"data-action" => "change->rapid-autosubmit#submit" }, :select) do

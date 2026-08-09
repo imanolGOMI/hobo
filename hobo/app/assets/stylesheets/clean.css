@@ -1,0 +1,253 @@
+/* The Clean theme: Hobo's own, and the default.
+ *
+ * It styles the **roles** the catalogue writes -- `index-page`, `content-header`,
+ * `field-list`, `action`, `record-actions` -- and nothing else. No framework, no
+ * class names from anybody else in your html, nothing to download.
+ *
+ * It is meant to be read and changed: 200 lines, one section per part of a page.
+ * If you want Bootstrap instead, `hobo new --theme=bootstrap`; if you want to do
+ * it all yourself, `--theme=none`.
+ */
+
+:root {
+  --hobo-ink: #1c1f23;
+  --hobo-muted: #667085;
+  --hobo-line: #e4e7ec;
+  --hobo-bg: #ffffff;
+  --hobo-soft: #f7f8fa;
+  --hobo-accent: #2f5cff;
+  --hobo-danger: #c8342b;
+  --hobo-radius: 6px;
+  --hobo-gap: 1rem;
+}
+
+body {
+  margin: 0;
+  color: var(--hobo-ink);
+  background: var(--hobo-bg);
+  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+a { color: var(--hobo-accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* --- the bar ------------------------------------------------------------- */
+
+.navbar {
+  border-bottom: 1px solid var(--hobo-line);
+  background: var(--hobo-soft);
+  margin-bottom: 1.5rem;
+}
+
+.navbar-inner {
+  display: flex;
+  align-items: center;
+  gap: var(--hobo-gap);
+  max-width: 72rem;
+  margin: 0 auto;
+  padding: 0.6rem 1.25rem;
+}
+
+.brand { font-weight: 600; color: var(--hobo-ink); }
+
+.nav { display: flex; align-items: center; gap: 0.75rem; list-style: none; margin: 0; padding: 0; }
+.account-nav { margin-left: auto; }
+.nav-link { color: var(--hobo-muted); padding: 0.25rem 0; }
+.nav-link.current { color: var(--hobo-ink); font-weight: 600; }
+
+.subnav { border-bottom: 1px solid var(--hobo-line); margin-bottom: 1.5rem; }
+
+/* --- the page ------------------------------------------------------------ */
+
+.container { max-width: 72rem; margin: 0 auto; padding: 0 1.25rem 3rem; }
+
+.columns { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start; }
+.content, .aside { flex: 1 1 100%; min-width: 0; }
+
+/* Twelfths, said as they are meant: `content-9` is three quarters. */
+.content-1  { flex-basis: 8.33% }   .content-2  { flex-basis: 16.6% }
+.content-3  { flex-basis: 25% }     .content-4  { flex-basis: 33.3% }
+.content-5  { flex-basis: 41.6% }   .content-6  { flex-basis: 50% }
+.content-7  { flex-basis: 58.3% }   .content-8  { flex-basis: 66.6% }
+.content-9  { flex-basis: 74% }     .content-10 { flex-basis: 83.3% }
+.content-11 { flex-basis: 91.6% }   .content-12 { flex-basis: 100% }
+.aside-1 { flex-basis: 8.33% }  .aside-2 { flex-basis: 16.6% }
+.aside-3 { flex-basis: 22% }    .aside-4 { flex-basis: 30% }
+.aside-5 { flex-basis: 41.6% }  .aside-6 { flex-basis: 50% }
+
+@media (max-width: 45rem) {
+  .content, .aside { flex-basis: 100%; }
+}
+
+.aside-box {
+  display: block;
+  border: 1px solid var(--hobo-line);
+  border-radius: var(--hobo-radius);
+  padding: 1rem;
+  background: var(--hobo-soft);
+}
+
+.page-footer { border-top: 1px solid var(--hobo-line); margin-top: 3rem; }
+
+/* --- the head of a page --------------------------------------------------- */
+
+.content-header {
+  border: 1px solid var(--hobo-line);
+  border-radius: var(--hobo-radius);
+  background: var(--hobo-soft);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.header-line { display: flex; justify-content: space-between; align-items: center; gap: var(--hobo-gap); }
+.content-header h1, .content-header h2 { margin: 0; font-size: 1.4rem; }
+.count, .empty { color: var(--hobo-muted); margin: 0.25rem 0 0; }
+.description { margin: 0 0 1.5rem; }
+
+/* --- lists ---------------------------------------------------------------- */
+
+.collection-table { width: 100%; border-collapse: collapse; }
+.collection-table th, .collection-table td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--hobo-line);
+  vertical-align: top;
+}
+.collection-table th { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--hobo-muted); }
+.collection-table tbody tr:hover { background: var(--hobo-soft); }
+.collection-table td.actions, .collection-table th.actions { width: 1%; white-space: nowrap; text-align: right; }
+
+.card {
+  border: 1px solid var(--hobo-line);
+  border-radius: var(--hobo-radius);
+  padding: 1rem;
+  margin-bottom: var(--hobo-gap);
+}
+.card h3 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+
+.collection-view { list-style: none; margin: 0; padding: 0; }
+.collection-section { margin-top: 2rem; }
+
+/* --- a record ------------------------------------------------------------- */
+
+.field-list { display: grid; grid-template-columns: minmax(8rem, 12rem) 1fr; gap: 0.4rem 1rem; margin: 0; }
+.field-label { color: var(--hobo-muted); }
+.field-value { margin: 0; }
+
+/* --- forms ---------------------------------------------------------------- */
+
+.field { margin-bottom: var(--hobo-gap); }
+.field label { display: block; margin-bottom: 0.25rem; color: var(--hobo-muted); }
+
+input[type=text], input[type=email], input[type=password], input[type=date],
+input[type=number], input[type=search], input[type=url], input[type=tel],
+textarea, select {
+  width: 100%;
+  max-width: 32rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--hobo-line);
+  border-radius: var(--hobo-radius);
+  background: var(--hobo-bg);
+  color: inherit;
+  font: inherit;
+}
+input:focus, textarea:focus, select:focus { outline: 2px solid var(--hobo-accent); outline-offset: 1px; }
+textarea { min-height: 8rem; }
+
+.actions { display: flex; gap: 0.5rem; align-items: center; margin-top: 1.25rem; }
+
+/* --- what you press -------------------------------------------------------- */
+
+/* `:not(...)` and not a bare `button[type=submit]`: the delete of a row **is** a
+   submit button -- a delete has to be a form, or a crawler empties the database
+   -- and a rule that paints every submit painted it as a big primary button
+   next to a tiny pencil. The same mistake the Bootstrap theme made, from the
+   same cause. */
+.action,
+button[type=submit]:not(.action-delete):not(.action-edit):not(.nav-link) {
+  display: inline-block;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--hobo-line);
+  border-radius: var(--hobo-radius);
+  background: var(--hobo-bg);
+  color: var(--hobo-ink);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+.action:hover,
+button[type=submit]:not(.action-delete):not(.action-edit):not(.nav-link):hover {
+  background: var(--hobo-soft);
+  text-decoration: none;
+}
+
+/* The one that carries the action of the page. */
+.action.new, .action.submit,
+button[type=submit]:not(.action-delete):not(.action-edit):not(.nav-link) {
+  background: var(--hobo-accent);
+  border-color: var(--hobo-accent);
+  color: #fff;
+}
+.action.new:hover, .action.submit:hover { filter: brightness(1.08); }
+.action.delete { color: var(--hobo-danger); border-color: var(--hobo-danger); background: var(--hobo-bg); }
+.action.small { padding: 0.2rem 0.5rem; font-size: 0.9rem; }
+
+/* A "log out" is a form, because logging somebody out with a link is asking a
+   crawler to do it. It still has to look like the link next to it. */
+.nav-link[type=submit], button.nav-link {
+  border: 0;
+  background: none;
+  padding: 0.25rem 0;
+  font: inherit;
+  color: var(--hobo-muted);
+  cursor: pointer;
+}
+.nav-link[type=submit]:hover, button.nav-link:hover { color: var(--hobo-ink); }
+
+/* The icons of the actions column: a link and a form button that must look the
+   same, because they are the same kind of thing to a person. */
+.record-actions { display: flex; gap: 0.5rem; align-items: center; justify-content: flex-end; }
+.record-actions form { display: inline; margin: 0; }
+.action-edit, .action-delete {
+  border: 0;
+  background: none;
+  padding: 0.15rem 0.35rem;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--hobo-muted);
+  text-decoration: none;
+}
+.action-edit:hover { color: var(--hobo-accent); }
+.action-delete { color: var(--hobo-danger); opacity: 0.75; }
+.action-delete:hover { opacity: 1; }
+
+/* --- filters ---------------------------------------------------------------- */
+
+.filters { display: flex; flex-wrap: wrap; gap: var(--hobo-gap); margin-bottom: 1.25rem; }
+.search-filter, .filter-menu { display: inline-flex; gap: 0.5rem; align-items: center; }
+.search-filter input, .filter-menu select { max-width: 16rem; }
+
+/* --- messages ---------------------------------------------------------------- */
+
+.flash-messages:empty { display: none; }
+.flash {
+  border: 1px solid var(--hobo-line);
+  border-left: 3px solid var(--hobo-accent);
+  border-radius: var(--hobo-radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: var(--hobo-gap);
+  background: var(--hobo-soft);
+}
+.flash-error, .error-messages { border-left-color: var(--hobo-danger); }
+.error-messages { border: 1px solid var(--hobo-danger); border-radius: var(--hobo-radius); padding: 0.75rem 1rem; margin-bottom: var(--hobo-gap); }
+.error-messages h2 { font-size: 1rem; margin: 0 0 0.5rem; }
+
+/* --- the developer's user changer --------------------------------------------- */
+
+.dev-user-changer select { max-width: 14rem; }
+
+/* --- what an input-many looks like ---------------------------------------------- */
+
+.input-many-item { display: flex; gap: 0.5rem; align-items: flex-start; margin-bottom: 0.5rem; }
+.input-many-item input, .input-many-item select { max-width: 20rem; }

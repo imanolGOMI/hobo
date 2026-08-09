@@ -49,13 +49,40 @@ module Rapid
   # name has two owners.
   Definition = Struct.new(:name, :kind, :type, :source, :keyword_init => true)
 
+  # **What a class name means, and who decides how it looks.**
+  #
+  # The catalogue writes the *role* of an element -- `index-page`,
+  # `record-actions`, `field`, `count` -- and a theme says what those look like.
+  # Until now the catalogue wrote Bootstrap's own class names (`card card-body
+  # bg-body-tertiary p-3 mb-4`), which meant there was one possible theme: an
+  # application without Bootstrap got its markup anyway, full of names that
+  # meant nothing, and a second theme would have had to fight them.
+  #
+  # A theme fills this table; the runtime only carries it. With it empty --
+  # `--theme=none` -- what comes out is the semantic names and nothing else,
+  # which is exactly what somebody bringing their own design wants.
+  @class_map = {}
+
   @tags = {}
   @attrs = {}
   @polymorphic = Hash.new { |h, k| h[k] = {} }
   @definitions = []
 
   class << self
-    attr_reader :tags, :definitions
+    attr_reader :tags, :definitions, :class_map
+
+    # `dress("index-page stories")` -> whatever the theme adds to each of those.
+    def dress(names)
+      tokens = names.to_s.split
+      return names if @class_map.empty? || tokens.empty?
+
+      tokens.flat_map { |token| [token, *@class_map[token].to_s.split] }.uniq.join(" ")
+    end
+
+    # A theme's whole vocabulary, in one call.
+    def dress_with(map)
+      @class_map = @class_map.merge(map.transform_keys(&:to_s))
+    end
 
     def define(name, attrs: [], superclass: Tag, &body)
       record(name, :define)

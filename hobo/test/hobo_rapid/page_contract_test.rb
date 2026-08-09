@@ -1,6 +1,6 @@
 require "test_helper"
 require "rapid/param_contract"
-require "hobo_bootstrap/page"
+require "hobo_rapid/tags/page"
 
 # Piece 13b: `<page>` is the contract between Hobo and a theme, and PLAN.md asks
 # for it **with a test**. This is that test.
@@ -53,18 +53,20 @@ class PageContractTest < Minitest::Test
 
   # --- the aside --------------------------------------------------------------
   #
-  # The sizes are twelfths, as they always were; only the spelling changed from
-  # Bootstrap 2's `spanN` to Bootstrap 5's `col-N`.
+  # The sizes are twelfths, as they always were. What changed is who spells
+  # them: the page says `content-9`, a **role**, and a theme turns that into
+  # whatever it calls nine twelfths (`col-9` in Bootstrap). Without a theme the
+  # role is what comes out, and it is a perfectly good thing to write css for.
 
   def test_without_an_aside_the_content_takes_the_whole_width
-    assert_includes painted(:title => "x"), %(class="col-12")
+    assert_includes painted(:title => "x"), %(class="content content-12")
   end
 
   def test_an_aside_makes_room_for_itself
     html = painted(:title => "x", :params => { :aside => Rapid.markup { text "al lado" } })
 
-    assert_includes html, %(class="col-9")
-    assert_includes html, %(class="col-3")
+    assert_includes html, %(class="content content-9")
+    assert_includes html, %(class="aside aside-3")
     assert_includes html, "al lado"
   end
 
@@ -72,15 +74,15 @@ class PageContractTest < Minitest::Test
     html = painted(:title => "x", :content_size => 8,
                    :params => { :aside => Rapid.markup { text "al lado" } })
 
-    assert_includes html, %(class="col-8")
-    assert_includes html, %(class="col-4")
+    assert_includes html, %(class="content content-8")
+    assert_includes html, %(class="aside aside-4")
   end
 
   def test_the_aside_can_go_on_the_left
     html = painted(:title => "x", :aside_location => "left",
                    :params => { :aside => Rapid.markup { text "IZQUIERDA" } })
 
-    assert_operator html.index("IZQUIERDA"), :<, html.index("col-9")
+    assert_operator html.index("IZQUIERDA"), :<, html.index("content-9")
   end
 
   # --- the javascript ---------------------------------------------------------

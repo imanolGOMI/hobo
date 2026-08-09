@@ -49,17 +49,37 @@ module Hobo
     # application's own layout then wraps. Nothing else changes: the derivation,
     # the forms, the permissions and the rest of the catalogue are the same.
     # `hobo new` asks the question and writes the line.
+    # `config.hobo.theme` -- `:clean` (the default), `:bootstrap`, or `false`.
+    #
+    # A theme is a table of class names and a stylesheet (HoboRapid::Theme), and
+    # `<page>` belongs to the catalogue. Which is what makes a second theme
+    # possible: until now `<page>` lived *inside* the Bootstrap theme, so there
+    # was one theme and no way to have another.
+    #
+    # `false` loads no `<page>` at all: then `in_page` paints the body alone and
+    # the application's own layout wraps it -- semantic class names and not one
+    # stylesheet of ours. That is the way in for an application that already has
+    # a design.
     initializer "hobo.theme", :before => "hobo.theme_assets" do |app|
-      require "hobo_bootstrap" unless app.config.hobo.theme == false
+      theme = app.config.hobo.theme
+      theme = :clean if theme == true
+      next unless theme
+
+      require "hobo_rapid/tags/page"
+      case theme.to_sym
+      when :bootstrap then require "hobo_bootstrap"
+      when :clean     then require "hobo_clean"
+      else raise ArgumentError, "config.hobo.theme: :clean, :bootstrap o false (era #{theme.inspect})"
+      end
     end
 
     # Was HoboBootstrap::Engine: the theme's stylesheets, served from the gem so
     # an application does not have to copy anything to look like something.
     initializer "hobo.theme_assets" do |app|
-      next if app.config.hobo.theme == false
       next unless app.config.respond_to?(:assets)
       app.config.assets.paths << root.join("app", "assets", "stylesheets")
-      app.config.assets.precompile += %w[bootstrap.css hobo.css]
+      # Whatever the theme said it wears, and nothing else.
+      app.config.assets.precompile += HoboRapid::Theme.stylesheets.map { |s| "#{s}.css" }
     end
 
     # Was HoboRapid::Engine: the pages of every model, derived on boot and on
@@ -76,9 +96,10 @@ module Hobo
       h = config.hobo = ActiveSupport::OrderedOptions.new
       h.app_name = self.class.name.split('::').first.underscore.titleize
       h.developer_features = Rails.env.in?(["development", "test"])
-      # The theme is a question, and this is its default answer. `false` gives
-      # an application the body of each page and lets it do its own layout.
-      h.theme = true
+      # The theme is a question, and this is its default answer: Hobo's own,
+      # which depends on nothing. `:bootstrap` for Bootstrap 5, `false` for the
+      # body of each page and your own layout.
+      h.theme = :clean
       # The whole site behind the login, or the models deciding page by page.
       # `hobo new --private` writes the line that turns this on.
       h.private_site = false

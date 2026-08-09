@@ -88,7 +88,7 @@ class FiltersTest < Minitest::Test
 
     # On the form, not on the select: a controller only reaches its own element,
     # and the fallback button it hides is a sibling of the select.
-    assert_includes html, %(class="filter-menu d-inline-flex gap-2 align-items-center" data-controller="rapid-autosubmit")
+    assert_includes html, %(class="filter-menu" data-controller="rapid-autosubmit")
     assert_includes html, %(data-action="change-&gt;rapid-autosubmit#submit")
     assert_includes html, %(data-rapid-autosubmit-target="fallback")
   end

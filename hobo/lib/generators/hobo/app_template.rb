@@ -53,12 +53,30 @@ end
 
 say "\nHobo\n", :green if interactive
 
-# **The theme is a question.** Answer no and what comes out is a plain Rails
-# application: Hobo still derives every page from the model, but it paints the
-# body and nothing else, and your own layout wraps it. That is the way in for an
-# application that already has a design -- and the way to start bare and add
-# your own.
-with_theme = question.call("theme", "Quieres el tema de Hobo? Si dices que no, la aplicacion sale sin estilos y el diseno lo pones tu.", true)
+# **The theme is a question, with three answers.**
+#
+#   clean      Hobo's own: 222 lines of css over the roles the catalogue writes,
+#              no framework, nothing to download. The default.
+#   bootstrap  Bootstrap 5: the same pages, dressed by a table of class names.
+#   none       No page and no stylesheet: Hobo paints the **body** of each page,
+#              with its semantic class names, and your own layout wraps it.
+#              The way in for an application that already has a design.
+theme = answers.grep(/\A--theme=/).first.to_s.split("=").last
+theme = "none" if answers.include?("--no-theme")
+theme = "clean" if answers.include?("--theme")
+
+if theme.blank? && interactive
+  said = ask("Tema: [c]lean (el de Hobo), [b]ootstrap, [n]inguno? [c]").to_s.strip.downcase
+  theme = { "b" => "bootstrap", "n" => "none" }.fetch(said[0].to_s, "clean")
+end
+theme = "clean" if theme.blank?
+
+unless %w[clean bootstrap none].include?(theme)
+  say "Tema desconocido: #{theme}. Son clean, bootstrap o none.", :red
+  exit 1
+end
+
+with_theme = theme != "none"
 
 # How people get an account. Both are steps of the user's lifecycle; see
 # `hobo:signup`.
@@ -142,9 +160,9 @@ after_bundle do
   # Without the theme there is nothing to plug into the layout: the application
   # keeps the one Rails wrote, Hobo paints the body of each page into it, and the
   # design is yours from the first minute.
-  unless with_theme
-    application %(    # Hobo pinta el cuerpo de cada pagina; el layout es tuyo.\n    config.hobo.theme = false)
-  end
+  # The application says which one out loud, because it is a thing about the
+  # application and not about the command that made it.
+  application %(    config.hobo.theme = #{with_theme ? ":#{theme}" : "false"})
 
   # The language of the application, which was one of the wizard's questions too
   # (`hobo:i18n de en es fr hu it nb pt-PT ru`).
@@ -197,14 +215,27 @@ after_bundle do
   # the line is matched by what it is, not by what it carried that year, and
   # `test_the_layout_wears_the_theme` in the conformance suite fails if it ever
   # stops matching at all.
+  # Rails renders its own views -- the session form, the password pages -- with
+  # the application layout, and that layout knows nothing about the theme. So
+  # those pages came out unstyled next to the ones Hobo paints. The layout gets
+  # the theme's stylesheets and its container, and everything looks like one
+  # application again.
+  #
+  # The match has to survive Rails changing its own layout: 8.1 writes
+  # `stylesheet_link_tag :app, "data-turbo-track": "reload"`, and a pattern
+  # anchored on `:app %>` stopped matching -- silently, because `gsub_file`
+  # reports the file either way.
   if with_theme
+    sheets = theme == "bootstrap" ? %w[bootstrap hobo] : %w[clean]
+    links = sheets.map { |sheet| %(<%= stylesheet_link_tag "#{sheet}" %>) }.join("\n\\1")
+
     gsub_file "app/views/layouts/application.html.erb",
               /^(\s*)<%= stylesheet_link_tag :app.*%>$/,
-              "\\1<%= stylesheet_link_tag \"bootstrap\" %>\n\\1<%= stylesheet_link_tag \"hobo\" %>\n\\0"
+              "\\1#{links}\n\\0"
 
     gsub_file "app/views/layouts/application.html.erb",
               /<%= yield %>/,
-              "<div class=\"container py-4\">\n      <%= yield %>\n    </div>"
+              "<div class=\"container\">\n      <%= yield %>\n    </div>"
   end
 
   route "hobo_routes"

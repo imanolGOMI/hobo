@@ -59,7 +59,7 @@ Rapid.define(:front_page, :attrs => [:app_name, :action]) do
       else
         param(:welcome) do
           tag("h1", {}, :heading) { text attributes[:app_name] || "Hobo" }
-          tag("p", { :class => "lead" }, :blurb) { text t(:"front.blurb", "You can log in and start now.") }
+          tag("p", { :class => "blurb" }, :blurb) { text t(:"front.blurb", "You can log in and start now.") }
         end
       end
     end
@@ -93,7 +93,7 @@ Rapid.define(:signup_form, :attrs => [:action, :heading, :blurb, :button_label, 
 
   tag("div", { :class => attributes[:class] || "signup" }, :box) do
     tag("h1", {}, :heading) { text attributes[:heading] || t(:"front.signup", "Create an account") }
-    tag("p", { :class => "lead" }, :blurb) do
+    tag("p", { :class => "blurb" }, :blurb) do
       text attributes[:blurb] || t(:"front.signup_blurb", "Choose an email address and a password.")
     end
 
@@ -118,7 +118,7 @@ Rapid.define(:signup_form, :attrs => [:action, :heading, :blurb, :button_label, 
       end
 
       tag("div", { :class => "actions" }, :actions) do
-        tag("button", { :type => "submit", :class => "btn btn-primary" }, :submit) do
+        tag("button", { :type => "submit", :class => "action submit" }, :submit) do
           text attributes[:button_label] || t(:"front.signup_button", "Sign up")
         end
       end

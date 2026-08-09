@@ -318,6 +318,8 @@ module Rapid
       attrs.reject { |_, v| v.nil? || v == false }
            .map do |name, value|
              name = name.to_s.tr("_", "-")
+             # The one attribute a theme has a say in: see Rapid.class_map.
+             value = Rapid.dress(value) if name == "class"
              value == true ? " #{name}" : %( #{name}="#{CGI.escapeHTML(value.to_s)}")
            end.join
     end

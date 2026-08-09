@@ -86,18 +86,18 @@ Rapid.define(:search_filter, :attrs => [:fields, :label, :placeholder, :button_l
   key = "#{fields.join('_or_')}_cont"
   value = search_value(key)
 
-  tag("form", { :method => "get", :class => "search-filter d-inline-flex gap-2 align-items-center" }, :form) do
+  tag("form", { :method => "get", :class => "search-filter" }, :form) do
     hidden_filters(key)
 
     if attributes[:label]
-      tag("label", { :class => "form-label mb-0" }, :label) { text attributes[:label] }
+      tag("label", { :class => "form-label" }, :label) { text attributes[:label] }
     end
 
     tag("input", { :type => "search", :name => "q[#{key}]", :value => value,
-                   :class => "form-control form-control-sm",
+                   :class => "form-control",
                    :placeholder => attributes[:placeholder] || t(:"filters.search", "Search") }, :input)
 
-    tag("button", { :type => "submit", :class => "btn btn-sm btn-outline-secondary" }, :submit) do
+    tag("button", { :type => "submit", :class => "action filter" }, :submit) do
       text(attributes[:button_label] || t(:"filters.search", "Search"))
     end
 
@@ -105,7 +105,7 @@ Rapid.define(:search_filter, :attrs => [:fields, :label, :placeholder, :button_l
     # button you learn to ignore.
     if value.to_s.present?
       tag("a", { :href => "?#{other_filters(key).map { |k, v| "q[#{k}]=#{CGI.escape(v.to_s)}" }.join('&')}",
-                 :class => "btn btn-sm btn-link" }, :clear) do
+                 :class => "action clear" }, :clear) do
         text(attributes[:clear_label] || t(:"filters.clear", "Clear"))
       end
     end
@@ -143,15 +143,15 @@ Rapid.define(:filter_menu, :attrs => [:field, :param, :options, :label, :all_lab
   # The controller goes on the **form**, not on the select: its reach is its own
   # element, and the fallback button it has to hide is a sibling of the select,
   # not a child of it.
-  tag("form", { :method => "get", :class => "filter-menu d-inline-flex gap-2 align-items-center",
+  tag("form", { :method => "get", :class => "filter-menu",
                 :"data-controller" => "rapid-autosubmit" }, :form) do
     hidden_filters(key)
 
     if attributes[:label]
-      tag("label", { :class => "form-label mb-0" }, :label) { text attributes[:label] }
+      tag("label", { :class => "form-label" }, :label) { text attributes[:label] }
     end
 
-    tag("select", { :name => "q[#{key}]", :class => "form-select form-select-sm",
+    tag("select", { :name => "q[#{key}]", :class => "form-select",
                     :"data-action" => "change->rapid-autosubmit#submit" }, :select) do
       tag("option", { :value => "" }) { text(attributes[:all_label] || t(:"filters.all", "All")) }
       choices.each do |label, value|
@@ -162,7 +162,7 @@ Rapid.define(:filter_menu, :attrs => [:field, :param, :options, :label, :all_lab
 
     # Without JavaScript the menu still works: the button is there, and the
     # controller takes it away when it connects.
-    tag("button", { :type => "submit", :class => "btn btn-sm btn-outline-secondary",
+    tag("button", { :type => "submit", :class => "action filter",
                     :"data-rapid-autosubmit-target" => "fallback" }, :submit) do
       text t(:"filters.filter", "Filter")
     end

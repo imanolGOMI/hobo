@@ -250,8 +250,8 @@ module HoboRapid
           in_page("#{title} #{heading}") do
             tag("article", { :class => "show-page #{model.name.demodulize.underscore}" }, :body) do
 
-              tag("div", { :class => "content-header card card-body bg-body-tertiary p-3 mb-4" }, :content_header) do
-                tag("div", { :class => "d-flex justify-content-between align-items-start" }) do
+              tag("div", { :class => "content-header" }, :content_header) do
+                tag("div", { :class => "header-line" }) do
                   tag("h2", {}, :heading) do
                     text "#{title} "
                     param(:name) do
@@ -273,18 +273,18 @@ module HoboRapid
                   end
                 end
 
-                tag("dl", { :class => "field-list row" }, :field_list) do
+                tag("dl", { :class => "field-list" }, :field_list) do
                   fields.each do |field|
                     with_field(field) do
-                      tag("dt", { :class => "col-sm-3" }, :"#{field}_label") { text HoboRapid::Derivation.label_for(model, field) }
-                      tag("dd", { :class => "col-sm-9" }, :"#{field}_value") { call_tag(:view, {}, :as => :"#{field}_view") }
+                      tag("dt", { :class => "field-label" }, :"#{field}_label") { text HoboRapid::Derivation.label_for(model, field) }
+                      tag("dd", { :class => "field-value" }, :"#{field}_value") { call_tag(:view, {}, :as => :"#{field}_view") }
                     end
                   end
                 end
 
                 children.each do |child|
                   tag("section", { :class => "collection-section #{child}" }, :"#{child}_section") do
-                    tag("div", { :class => "d-flex justify-content-between align-items-center" }) do
+                    tag("div", { :class => "header-line" }) do
                       tag("h3", {}, :"#{child}_heading") { text child.humanize }
                     end
                     with_field(child) { call_tag(:view, { :force => true }, :as => :"#{child}_collection") }
@@ -316,11 +316,11 @@ module HoboRapid
           in_page(plural) do
             tag("div", { :class => "index-page #{model.name.demodulize.underscore.pluralize}" }, :body) do
 
-              tag("div", { :class => "content-header card card-body bg-body-tertiary p-3 mb-4" }, :content_header) do
-                tag("div", { :class => "d-flex justify-content-between align-items-center" }) do
+              tag("div", { :class => "content-header" }, :content_header) do
+                tag("div", { :class => "header-line" }) do
                   tag("div") do
                     tag("h2", {}, :heading) { text plural }
-                    tag("p", { :class => "count text-secondary mb-0" }, :count) do
+                    tag("p", { :class => "count" }, :count) do
                       text(records.length == 1 ? t(:"index.count_one", "1 %{name}", :name => singular.downcase)
                                                : t(:"index.count", "%{count} %{name}", :count => records.length, :name => plural.downcase))
                     end
@@ -328,7 +328,7 @@ module HoboRapid
 
                   new_path = new_path_for(model)
                   if new_path && creatable_here?(model)
-                    tag("a", { :href => new_path, :class => "btn btn-primary" }, :new_link) do
+                    tag("a", { :href => new_path, :class => "action new" }, :new_link) do
                       text t(:"index.new_link", "New %{name}", :name => singular.downcase)
                     end
                   end
@@ -349,12 +349,12 @@ module HoboRapid
                 #         call_tag(:search_filter, :fields => "title, synopsis")
                 #         call_tag(:filter_menu, :field => "category")
                 #       } %>
-                tag("div", { :class => "filters mb-3" }, :filters)
+                tag("div", { :class => "filters" }, :filters)
 
                 if records.empty?
-                  tag("p", { :class => "empty text-secondary" }, :empty) { text t(:"index.empty", "Nothing here yet.") }
+                  tag("p", { :class => "empty" }, :empty) { text t(:"index.empty", "Nothing here yet.") }
                 else
-                  tag("table", { :class => "table table-striped table-bordered" }, :collection) do
+                  tag("table", { :class => "collection-table" }, :collection) do
                     tag("thead", {}, :headings) do
                       tag("tr") do
                         columns.each do |field|
@@ -464,7 +464,7 @@ module HoboRapid
                 call_tag(:model_form, {}, :as => :form_fields)
 
                 tag("div", { :class => "actions" }, :actions) do
-                  tag("button", { :type => "submit", :class => "btn btn-primary" }, :submit) do
+                  tag("button", { :type => "submit", :class => "action new" }, :submit) do
                     text(new_record ? t(:"actions.create", "Create") : t(:"actions.save", "Save"))
                   end
                 end
@@ -508,7 +508,7 @@ Rapid.define(:record_actions, :attrs => [:style]) do
 
   tag("div", { :class => "record-actions" }, :actions) do
     if edit && editable_here?
-      tag("a", { :href => edit, :class => buttons ? "btn btn-secondary" : "action-edit" }, :edit) do
+      tag("a", { :href => edit, :class => buttons ? "action edit button" : "action-edit" }, :edit) do
         text(buttons ? t(:"actions.edit", "Edit") : "\u270E")
       end
     end
@@ -516,10 +516,10 @@ Rapid.define(:record_actions, :attrs => [:style]) do
     if destroy && destroyable_here?
       # A delete is a POST with `_method`, never a link: a crawler that follows
       # links must not be able to empty the database.
-      tag("form", { :method => "post", :action => destroy, :class => "d-inline" }, :delete_form) do
+      tag("form", { :method => "post", :action => destroy, :class => "inline" }, :delete_form) do
         param(:authenticity_token) { authenticity_token_field }
         tag("input", { :type => "hidden", :name => "_method", :value => "delete" })
-        tag("button", { :type => "submit", :class => buttons ? "btn btn-outline-danger" : "action-delete",
+        tag("button", { :type => "submit", :class => buttons ? "action delete button" : "action-delete",
                         :"data-turbo-confirm" => t(:"actions.confirm_delete", "Are you sure?") }, :delete) do
           text(buttons ? t(:"actions.delete", "Delete") : "\u2716")
         end

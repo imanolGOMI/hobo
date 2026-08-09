@@ -1,22 +1,25 @@
-# The theme: piece 13b.
+# `<page>`: the whole document, and the contract with a theme (piece 13b).
 #
-# `<page>` is the contract between Hobo and a theme, and it is the reason the
-# param mechanism of layer 3 had to survive: ~30 named extension points, so an
-# application can change one corner of a page without owning the whole thing.
+# It used to live inside `hobo_bootstrap`, and that meant **there could only be
+# one theme**: anybody who did not want Bootstrap got no page at all, or a page
+# full of class names that meant nothing without it. The page belongs to the
+# catalogue now and says the **role** of each part -- `navbar`, `brand`,
+# `content`, `aside` -- and a theme puts its own names on top of those
+# (`Rapid.class_map`) and brings its stylesheet.
 #
-# The markup is Bootstrap 5. What was here targeted `bootstrap-sass ~> 2.1` --
-# Bootstrap 2.1, from 2012 -- and its classes (`navbar-inner`, `nav-collapse`,
-# `span9`, `icon-bar`) have not existed since Bootstrap 3. The *contract* is
-# what carries over; the class names are the cheap part.
+# The ~30 named extension points are still the contract: an application changes
+# one corner of a page without taking over the whole page. That is what made the
+# param mechanism of layer 3 worth carrying.
 #
-# The aside sizing used Bootstrap 2's twelve `spanN` classes. Bootstrap 5 says
-# the same thing with `col-*`, so `content_size` and `aside_size` keep their
-# meaning -- twelfths -- and only the spelling changes.
+# The column sizes (`content-9`, `aside-3`) are said in twelfths, as they always
+# were: another name for a theme to dress -- Bootstrap turns them into `col-9`
+# -- and not somebody else's class.
 
 require "rapid"
 require "hobo_rapid/tags/structure"
+require "hobo_rapid/theme"
 
-module HoboBootstrap
+module HoboRapid
 
   module PageSupport
 
@@ -45,7 +48,7 @@ module HoboBootstrap
 
 end
 
-Rapid::Tag.include(HoboBootstrap::PageSupport)
+Rapid::Tag.include(HoboRapid::PageSupport)
 
 Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_location,
                                :content_size, :aside_size, :bottom_load_javascript]) do
@@ -58,8 +61,8 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
   nav_location = attributes[:nav_location]
 
   aside = proc do
-    tag("div", { :class => "col-#{aside_size}" }, :aside_column) do
-      tag("aside", { :class => "card p-3" }, :aside)
+    tag("div", { :class => "aside aside-#{aside_size}" }, :aside_column) do
+      tag("aside", { :class => "aside-box" }, :aside)
     end
   end
 
@@ -70,10 +73,13 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
       tag("meta", { :name => "viewport", :content => "width=device-width, initial-scale=1" }, :viewport)
       tag("title", {}, :title) { text full_title }
       param(:stylesheets) do
-        # Bootstrap first, then what Hobo adds, then the application's own, so
-        # each one can override the one before it.
-        call_tag(:stylesheet, { :name => "bootstrap" }, :as => :bootstrap_stylesheet)
-        call_tag(:stylesheet, { :name => "hobo" }, :as => :hobo_stylesheet)
+        # The theme's own first, then the application's, so an application can
+        # override what the theme said. **Which** stylesheets the theme has is
+        # the theme's business: it registers them, and a theme with none -- or
+        # no theme at all -- simply adds nothing here.
+        HoboRapid::Theme.stylesheets.each_with_index do |sheet, i|
+          call_tag(:stylesheet, { :name => sheet }, :as => :"theme_stylesheet_#{i}")
+        end
         call_tag(:stylesheet, { :name => subsite || "application" }, :as => :app_stylesheet)
       end
       unless attributes[:bottom_load_javascript]
@@ -89,13 +95,13 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
       # **transparent** unless it is told otherwise, so the bar came out white
       # on white and the application looked like it had no chrome at all. The
       # old theme got it from `navbar-inner`, which Bootstrap 5 dropped.
-      tag("nav", { :class => "navbar navbar-expand-lg bg-body-tertiary border-bottom mb-4" }, :navbar) do
-        tag("div", { :class => "container-fluid px-4" }, :navbar_container) do
+      tag("nav", { :class => "navbar" }, :navbar) do
+        tag("div", { :class => "navbar-inner" }, :navbar_container) do
           tag("div", {}, :app_name) do
-            tag("a", { :class => "navbar-brand", :href => "#{base_url}/" }) { call_tag(:app_name, {}, :as => :app_name_link) }
+            tag("a", { :class => "brand", :href => "#{base_url}/" }) { call_tag(:app_name, {}, :as => :app_name_link) }
           end
           if nav_location.blank? || nav_location == "top"
-            call_tag(:main_nav, { :class => "navbar-nav", :current => attributes[:title] }, :as => :main_nav)
+            call_tag(:main_nav, { :class => "nav main-nav", :current => attributes[:title] }, :as => :main_nav)
           end
           call_tag(:account_nav, {}, :as => :account_nav)
         end
@@ -104,7 +110,7 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
       if nav_location == "sub"
         tag("div", { :class => "container" }, :nav_container) do
           tag("nav", { :class => "subnav" }, :subnav) do
-            call_tag(:main_nav, { :class => "nav nav-pills", :current => attributes[:title] }, :as => :sub_nav)
+            call_tag(:main_nav, { :class => "nav subnav-list", :current => attributes[:title] }, :as => :sub_nav)
           end
         end
       end
@@ -112,10 +118,10 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
       tag("div", { :class => "container" }, :container) do
         call_tag(:flash_messages, {}, :as => :flash)
 
-        tag("div", { :class => "row" }, :main_row) do
+        tag("div", { :class => "columns" }, :main_row) do
           aside.call if has_aside && aside_location == "left"
 
-          tag("div", { :class => "col-#{content_size}" }, :main_column) do
+          tag("div", { :class => "content content-#{content_size}" }, :main_column) do
             tag("section", {}, :content) do
               tag("section", {}, :main_content) do
                 tag("header", {}, :content_header)
@@ -160,7 +166,7 @@ Rapid.define(:javascript, :attrs => [:name]) do
 
   if helpers.respond_to?(:javascript_importmap_tags)
     entry = attributes[:name].to_s
-    entry = "application" unless HoboBootstrap.pinned?(entry)
+    entry = "application" unless HoboRapid.pinned?(entry)
     raw helpers.javascript_importmap_tags(entry)
   else
     src = asset_path_for(attributes[:name], "js")
@@ -172,9 +178,9 @@ end
 # that goes out of date the first week.
 Rapid.define(:main_nav, :attrs => [:current, :class]) do
   tag("ul", { :class => attributes[:class] || "navbar-nav" }, :items) do
-    HoboBootstrap.navigable_models.each do |model, path|
+    HoboRapid.navigable_models.each do |model, path|
       label = model.name.demodulize.underscore.humanize.pluralize
-      current = { :class => "nav-link active", :"aria-current" => "page" } if label == attributes[:current]
+      current = { :class => "nav-link current", :"aria-current" => "page" } if label == attributes[:current]
 
       tag("li", { :class => "nav-item" }, :"#{model.name.demodulize.underscore}_item") do
         tag("a", { :class => "nav-link", :href => path }.merge(current || {})) { text label }
@@ -187,7 +193,7 @@ end
 # an application says who you are and lets you stop being them is not a matter
 # of taste. This decides where it sits and what it looks like.
 Rapid.define(:account_nav) do
-  tag("ul", { :class => "navbar-nav ms-auto align-items-center gap-2" }, :items) do
+  tag("ul", { :class => "nav account-nav" }, :items) do
     param(:session_links) do
       tag("li", { :class => "nav-item" }, :dev_user_changer) do
         call_tag(:dev_user_changer, {}, :as => :changer)
@@ -197,7 +203,7 @@ Rapid.define(:account_nav) do
   end
 end
 
-module HoboBootstrap
+module HoboRapid
 
   # Whether the application's import map knows this entry point. A subsite that
   # has no JavaScript of its own would otherwise ask for a module nobody pinned,
