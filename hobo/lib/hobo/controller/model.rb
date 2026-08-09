@@ -39,6 +39,18 @@ module Hobo
           rescue_from Hobo::PermissionDeniedError,         :with => :permission_denied
           rescue_from Hobo::Model::Lifecycles::LifecycleKeyError, :with => :permission_denied
 
+          # The catalogue raises **its own** permission error -- `<view>` asks
+          # `viewable_by?` before painting a field, and the tag runtime has to be
+          # loadable without the whole of Hobo, so it cannot name
+          # `Hobo::PermissionDeniedError`.
+          #
+          # Nothing rescued it, and the two never met until an application had a
+          # model that says no: a page a visitor may not see came out as a **500**
+          # instead of sending them to the login. Hobo's own generated
+          # applications let everybody view everything, so it took porting one
+          # with real permissions to see it.
+          rescue_from HoboRapid::PermissionDenied, :with => :permission_denied if defined?(HoboRapid::PermissionDenied)
+
           respond_to :html
 
           # Rails 8's authentication generator puts `require_authentication` on
