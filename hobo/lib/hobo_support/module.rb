@@ -74,18 +74,19 @@ class Module
 end
 
 
-# classy_module lets you extract code from classes into modules, but
-# still write it the same way
-module Kernel
+# `classy_module` used to live here: Hobo's own way, from 2008, of extracting
+# code from a class into a module while still writing it as a class body. It was
+# `ActiveSupport::Concern` four years before Concern existed, and the plan
+# (layer 1) said it would go when its last user did.
+#
+# Its last users were `HoboFields::Model`, the Thor mixins of the generators and
+# a file of rake tasks from Hobo 2. The first is a Concern now, the second are
+# ordinary generators, and the third is gone -- so this goes with them.
+#
+# Anything reaching for it should reach for `ActiveSupport::Concern`: `included
+# do` is the same `class_eval`, and `class_methods do` says out loud what
+# `def self.` inside a block only implied.
 
-  def classy_module(mod=Module.new, &b)
-    mod.define_singleton_method(:included) do |base|
-      base.class_eval &b
-    end
-    mod
-  end
-
-end
 
 class Object
 

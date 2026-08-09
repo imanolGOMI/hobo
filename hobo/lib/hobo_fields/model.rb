@@ -1,6 +1,21 @@
 module HoboFields
 
-  Model = classy_module do
+  # What `fields do ... end` adds to a model.
+  #
+  # This was a `classy_module` -- Hobo's own DSL from 2008, which `class_eval`s
+  # a block into whoever includes it. `ActiveSupport::Concern` says the same
+  # thing with a name every Rails developer knows, and `included do` **is** that
+  # `class_eval`: the body below is untouched, and `def self.x` still defines a
+  # class method of the model, as it did before.
+  #
+  # (A finer split -- `class_methods do` for the class methods -- would read
+  # better still, and it is a change to make on its own, with the suite as the
+  # judge, not while removing a DSL.)
+  module Model
+
+    extend ActiveSupport::Concern
+
+    included do
 
     # ignore the model in the migration until somebody sets
     # @include_in_migration via the fields declaration
@@ -266,6 +281,8 @@ module HoboFields
       name = name.to_s
       columns.find {|c| c.name == name }
     end
+
+    end # included
 
   end
 

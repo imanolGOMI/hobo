@@ -45,15 +45,13 @@ class ModuleTest < Minitest::Test
     assert_equal "Andy", parent.nickname
   end
 
-  def test_classy_module_class_evals_its_whole_body
-    mod = classy_module do
-      def self.foo; 123; end
-    end
-
-    assert_equal Module, mod.class
-
-    klass = Class.new { include mod }
-    assert_equal 123, klass.foo
+  # `classy_module` is gone (see hobo_support/module.rb): its last users are
+  # Concerns and ordinary generators now. This is here so that nobody brings it
+  # back by accident -- and if somebody deliberately does, this is where the
+  # conversation starts.
+  def test_there_is_no_classy_module_any_more
+    refute_respond_to Kernel, :classy_module
+    refute_respond_to Object.new, :classy_module
   end
 
 end
