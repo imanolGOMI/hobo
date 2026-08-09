@@ -1,0 +1,35 @@
+# The base of the <%= subsite %> subsite: everything under it is for
+# administrators, and this is where that is said once.
+#
+# A subsite in Hobo 3 is not a thing you register: it is **a directory of
+# controllers**. `app/controllers/<%= subsite %>/` exists, so `hobo_routes` draws
+# its routes under `/<%= subsite %>`, and the models' permissions are asked with
+# that subsite as the context.
+class <%= subsite.camelize %>::<%= subsite.camelize %>Controller < ApplicationController
+
+  # Rails 8 resumes the session **inside** `require_authentication`, and Hobo's
+  # model controllers skip that filter on purpose -- so that a public page stays
+  # public and the model's permissions decide. Which means that by the time a
+  # filter of ours runs, nobody has read the cookie yet, and `Current.user` is
+  # nil even for somebody perfectly well logged in.
+  before_action :resume_the_session
+  before_action :administrators_only
+
+  private
+
+  # `Current.user` and not `current_user`: this is a plain controller, and
+  # Hobo's `current_user` lives in the views. Rails 8 puts the session on
+  # `Current`, and `require_authentication` -- which every controller has -- is
+  # what fills it in.
+  def resume_the_session
+    send(:resume_session) if Current.session.nil? && respond_to?(:resume_session, true)
+  rescue StandardError
+    nil
+  end
+
+  def administrators_only
+    return if Current.user.try(:administrator?)
+    redirect_to main_app.root_path, :alert => "That part of the site is for administrators."
+  end
+
+end

@@ -309,6 +309,55 @@ class HoboNewTest < Minitest::Test
     end
   end
 
+  # `hobo:admin_subsite`: the last of the setup wizard's big questions.
+  #
+  # In Hobo 2 this wrote controllers, a DRYML taglib per subsite, a stylesheet,
+  # a JavaScript manifest and a theme. Here it writes **controllers**, because
+  # that is all a subsite is now: `Hobo.subsites` is "a directory under
+  # app/controllers with a controller in it", `hobo_routes` draws those routes
+  # under that prefix, and the pages are the derived ones -- the same model,
+  # seen by somebody who is allowed more.
+  def test_an_admin_subsite_is_a_directory_of_controllers
+    Dir.mktmpdir do |tmp|
+      app = File.join(tmp, "conadmin")
+      run_command(tmp, "#{ROOT}/hobo/bin/hobo new conadmin " \
+                       "--skip-git --skip-test --skip-system-test --skip-javascript " \
+                       "--skip-hotwire --skip-jbuilder --skip-action-cable " \
+                       "--skip-action-mailbox --skip-action-text --skip-active-storage --skip-bootsnap")
+      run_command(app, "bin/rails generate hobo:admin_subsite")
+
+      # The field an administrator is made of, and the migration for it.
+      assert_includes File.read(File.join(app, "app", "models", "user.rb")), "administrator"
+      assert_includes run_command(app, "bin/rails generate hobo:migration -n -m"),
+                      "add_column :users, :administrator"
+
+      # Nothing was registered anywhere: the routes come from the directory.
+      refute_includes File.read(File.join(app, "config", "routes.rb")), "admin"
+
+      with_server(app, 3095) do |http|
+        jefa = Browser.new(http)
+        jefa.get("/")
+        jefa.post("/first-user", "user[email_address]" => "jefa@example.com",
+                                 "user[password]" => "test1234",
+                                 "user[password_confirmation]" => "test1234")
+
+        assert_includes jefa.get("/admin/stories"), "index-page stories",
+                        "una administradora entra en su subsitio"
+
+        # Somebody else does not, and still has the rest of the application.
+        otra = Browser.new(http)
+        otra.get("/signup")
+        otra.post("/signup", "user[email_address]" => "otra@example.com",
+                             "user[password]" => "test1234",
+                             "user[password_confirmation]" => "test1234")
+
+        otra.get("/admin/stories")
+        assert_equal "302", otra.status, "quien no es administrador no entra en /admin"
+        assert_includes otra.get("/stories"), "index-page stories", "y el resto del sitio le funciona igual"
+      end
+    end
+  end
+
   # A browser: a cookie jar and the authenticity token of the page it is on.
   class Browser
 
@@ -316,6 +365,8 @@ class HoboNewTest < Minitest::Test
       @http = http
       @cookies = {}
     end
+
+    attr_reader :status
 
     def get(path)
       request = Net::HTTP::Get.new(path)
