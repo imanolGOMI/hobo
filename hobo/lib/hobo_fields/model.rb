@@ -6,6 +6,20 @@ module HoboFields
     # @include_in_migration via the fields declaration
     inheriting_cattr_reader :include_in_migration => false
 
+    # Whether the model's `fields` declaration describes the **whole** table.
+    #
+    # It does when the model wrote a `fields do ... end` block: that is a model
+    # saying what it has, and the migration generator can then propose dropping
+    # a column that is not in it.
+    #
+    # It does not when Hobo only *added* to somebody else's table -- a lifecycle
+    # putting its state and key columns on the `User` that Rails' authentication
+    # generator made, or `include Hobo::Model` on a model of an application that
+    # already existed. There, everything Hobo did not declare belongs to
+    # somebody else, and the generator offered to **drop `email_address` and
+    # `password_digest`**. Whoever pressed enter too fast lost their users.
+    inheriting_cattr_reader :hobo_owns_the_table => false
+
     # attr_types holds the type class for any attribute reader (i.e. getter
     # method) that returns rich-types
     inheriting_cattr_reader :attr_types => HashWithIndifferentAccess.new

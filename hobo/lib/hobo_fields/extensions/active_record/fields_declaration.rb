@@ -8,6 +8,8 @@ ActiveRecord::Base.class_eval do
       @include_in_migration ||= include_in_migration
 
       if b
+        # A model that writes out its fields is describing its whole table.
+        @hobo_owns_the_table = true
         dsl = HoboFields::FieldDeclarationDsl.new(self)
         if b.arity == 1
           yield dsl

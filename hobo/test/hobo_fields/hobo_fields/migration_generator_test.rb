@@ -135,6 +135,55 @@ module MigrationGeneratorBattery
     assert_reversible(up, down)
   end
 
+  # Somebody else's table.
+  #
+  # Hobo goes into an application that already exists -- `include Hobo::Model` on
+  # a model Rails made, or a lifecycle putting its state columns on the `User`
+  # that `bin/rails generate authentication` wrote. There, Hobo did not describe
+  # the table: it added to it, and everything else belongs to somebody else.
+  #
+  # The generator offered to **drop `email_address` and `password_digest`**, and
+  # then asked for confirmation on a terminal -- which in a script is a question
+  # nobody answers and in front of a person is one question too many. Whoever
+  # said yes lost their users.
+  def test_a_table_hobo_did_not_describe_only_gets_what_hobo_adds
+    connection.create_table(:users) do |t|
+      t.string :email_address, :null => false
+      t.string :password_digest, :null => false
+    end
+
+    define_model(:User) do
+      # No `fields do` block. This is what a lifecycle does when it declares its
+      # state and its key timestamp: it asks to be migrated (`fields` with no
+      # block) and then adds its columns one by one. Written out here because
+      # lifecycles live a layer above this suite.
+      fields
+      declare_field(:state, :string)
+      declare_field(:key_timestamp, :datetime)
+    end
+
+    up, down = generate
+
+    assert_match(/add_column :users, :state/, up)
+    assert_match(/add_column :users, :key_timestamp/, up)
+    refute_match(/remove_column :users, :email_address/, up, "esa columna no es de Hobo")
+    refute_match(/remove_column :users, :password_digest/, up, "esa columna no es de Hobo")
+    assert_reversible(up, down)
+  end
+
+  # And a model that does describe its table keeps saying what is not in it.
+  def test_a_table_the_model_describes_still_loses_what_is_not_declared
+    connection.create_table(:adverts) do |t|
+      t.string :name
+      t.string :sobra
+    end
+    define_model(:Advert) { fields { name :string } }
+
+    up, _down = generate
+
+    assert_match(/remove_column :adverts, :sobra/, up)
+  end
+
   def test_remove_fields_from_an_existing_table
     connection.create_table :adverts do |t|
       t.string :name, :limit => 250

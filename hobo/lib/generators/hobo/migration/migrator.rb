@@ -309,7 +309,11 @@ module Generators
 
           to_add = model_column_names - db_column_names
           to_add += [model.primary_key] if key_missing && model.primary_key
-          to_remove = db_column_names - model_column_names
+          # Only for a table the model describes whole. Where Hobo merely added
+          # its columns to somebody else's table, everything it did not declare
+          # is somebody else's -- and proposing to drop it is how a generator
+          # eats an application's data.
+          to_remove = model.try(:hobo_owns_the_table) ? db_column_names - model_column_names : []
           # to_remove holds strings, so the primary key has to be compared as
           # one -- subtracting a symbol here never removed anything.
           to_remove = to_remove - [model.primary_key.to_s] if model.primary_key

@@ -8,6 +8,38 @@ class RegistrationsController < ApplicationController
     render :html => rapid_tag(:signup_form, nil, :action => create_signup_path), :layout => false
   end
 
+<% if activation_email? -%>
+  # The account is made **inactive**, and the mail carries the key that turns it
+  # on. The step is the lifecycle's -- `create :signup ... :new_key => true` in
+  # the user model -- so the rules live with the model, not here.
+  def create
+    @user = User.lifecycle.signup(current_user_or_nobody, user_params)
+
+    if @user.persisted?
+      redirect_to root_path, :notice => "Check your email: there is a link there to activate your account."
+    else
+      flash.now[:error] = @user.errors.full_messages.to_sentence
+      render :html => rapid_tag(:signup_form, nil, :action => create_signup_path),
+             :layout => false, :status => :unprocessable_entity
+    end
+  end
+
+  # Coming back with the key. Whoever holds it may take the step -- that is what
+  # `:available_to => :key_holder` means -- and nobody else can, because the key
+  # is signed with the application's secret.
+  def activate
+    @user = User.find(params[:id])
+    @user.lifecycle.provided_key = params[:key]
+
+    if @user.lifecycle.can_activate?(nil)
+      @user.lifecycle.activate!(nil)
+      start_new_session_for(@user) if respond_to?(:start_new_session_for, true)
+      redirect_to root_path, :notice => "Your account is active. Welcome."
+    else
+      redirect_to new_session_path, :alert => "That link is no longer valid. Ask for another one."
+    end
+  end
+<% else -%>
   def create
     @user = User.new(user_params)
 
@@ -23,9 +55,18 @@ class RegistrationsController < ApplicationController
              :layout => false, :status => :unprocessable_entity
     end
   end
+<% end -%>
 
   private
 
+<% if activation_email? -%>
+  # The lifecycle asks who is acting. Nobody is: that is the whole point of a
+  # signup, and `:available_to => :all` on the step says so.
+  def current_user_or_nobody
+    respond_to?(:current_user, true) ? current_user : nil
+  end
+
+<% end -%>
   # The columns the user model actually has, plus the two that are never
   # columns. Written from the model rather than listed by hand, so adding a
   # field to the user does not mean remembering this file.

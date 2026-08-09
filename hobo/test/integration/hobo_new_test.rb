@@ -172,6 +172,73 @@ class HoboNewTest < Minitest::Test
     end
   end
 
+  # `hobo:signup --activation-email`: another of the setup wizard's questions,
+  # and the first one built on **lifecycles** (piece 5).
+  #
+  # The account is created inactive, a mail carries a one-use key, and the key
+  # turns it on. The rules live in the user model -- `create :signup ...
+  # :new_key => true` and `transition :activate, :available_to => :key_holder` --
+  # not in the controller, which is the point of having lifecycles at all.
+  def test_signup_can_wait_for_the_mail_to_be_answered
+    Dir.mktmpdir do |tmp|
+      app = File.join(tmp, "activa")
+      run_command(tmp, "#{ROOT}/hobo/bin/hobo new activa " \
+                       "--skip-git --skip-test --skip-system-test --skip-javascript " \
+                       "--skip-hotwire --skip-jbuilder --skip-action-cable " \
+                       "--skip-action-mailbox --skip-action-text --skip-active-storage --skip-bootsnap")
+      run_command(app, "bin/rails generate hobo:signup --activation-email --force")
+
+      # The lifecycle declares two columns, and the migration generator has to
+      # see a model whose only Hobo fields come from a lifecycle.
+      migration = run_command(app, "bin/rails generate hobo:migration -n -m")
+      assert_includes migration, "add_column :users, :state", migration
+      assert_includes migration, "add_column :users, :key_timestamp", migration
+
+      File.write(File.join(app, "tmp", "state.rb"), %(print [User.last&.state, User.last&.id].join(" ")))
+      File.write(File.join(app, "tmp", "key.rb"), %(print User.last.lifecycle.key))
+
+      with_server(app, 3097) do |http|
+        nueva = Browser.new(http)
+        nueva.get("/signup")
+        nueva.post("/signup", "user[email_address]" => "nueva@example.com",
+                              "user[password]" => "test1234",
+                              "user[password_confirmation]" => "test1234")
+
+        state, id = run_command(app, "bin/rails runner tmp/state.rb").split
+        assert_equal "inactive", state, "el alta con activacion deja la cuenta apagada"
+
+        # And an account that is off does not get in. The rule is in the model,
+        # so it holds wherever the application authenticates.
+        intento = Browser.new(http)
+        intento.get("/session/new")
+        intento.post("/session", "email_address" => "nueva@example.com", "password" => "test1234")
+        refute_includes intento.get("/"), "Log out", "sin activar no se entra"
+
+        # The key from the mail. Whoever brings it may take the step.
+        key = run_command(app, "bin/rails runner tmp/key.rb")
+        con_clave = Browser.new(http)
+        con_clave.get("/activate/#{id}?key=#{key}")
+
+        assert_equal "active", run_command(app, "bin/rails runner tmp/state.rb").split.first,
+                     "la clave del correo tiene que activar la cuenta"
+        assert_includes con_clave.get("/"), "Log out", "y deja dentro a quien activa"
+
+        # A key somebody made up opens nothing.
+        File.write(File.join(app, "tmp", "otra.rb"), <<~RUBY)
+          User.lifecycle.signup(nil, :email_address => "otra@example.com",
+                                     :password => "test1234", :password_confirmation => "test1234")
+          print User.last.id
+        RUBY
+        otro_id = run_command(app, "bin/rails runner tmp/otra.rb")
+        inventada = Browser.new(http)
+        inventada.get("/activate/#{otro_id}?key=#{'0' * 40}")
+
+        assert_equal "inactive", run_command(app, "bin/rails runner tmp/state.rb").split.first,
+                     "una clave inventada no activa nada"
+      end
+    end
+  end
+
   # A browser: a cookie jar and the authenticity token of the page it is on.
   class Browser
 
@@ -238,8 +305,13 @@ class HoboNewTest < Minitest::Test
 
   private
 
+  # `< /dev/null` is not decoration. A Rails generator that asks a question --
+  # `hobo:migration` asks DROP/RENAME/KEEP when it cannot tell what a column
+  # became -- reads standard input, and in a test there is nobody there: the
+  # command waits **for ever**, and what you see is a suite that hangs rather
+  # than a suite that fails. Twenty minutes of "it must be slow".
   def run_command(dir, command)
-    `cd #{dir} && HOBODEV=#{ROOT} #{command} 2>&1`
+    `cd #{dir} && HOBODEV=#{ROOT} #{command} < /dev/null 2>&1`
   end
 
 end
