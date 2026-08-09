@@ -4,7 +4,22 @@ module HoboPermissionsHelper
   extend HoboHelperBase
   protected
 
+    # Who is asking. **An application that already answers this keeps its own
+    # answer**, and that is not politeness: this module is included into every
+    # controller that takes Hobo's pages, and its `app/helpers` is on the path
+    # of every application that installs the gem, so this method lands on top of
+    # whatever was there.
+    #
+    # What was there, in a real application, was Devise's -- and Hobo's answer
+    # for somebody not logged in is a `Hobo::Model::Guest`, which has no email,
+    # no name and no id. Adding the gem to an existing Rails 8 application broke
+    # **every page of it**, starting with the layout: `current_user.email` on a
+    # Guest. The application had not asked Hobo for anything yet.
+    #
+    # `defined?(super)` is the whole fix: if anybody up the chain answers this,
+    # they are the authority.
     def current_user
+      return super if defined?(super)
       # simple one-hit-per-request cache
       @current_user ||= rails_authenticated_user || hobo_session_user || guest_user
     end

@@ -95,6 +95,20 @@ module Hobo
     end
 
     ActiveSupport.on_load(:action_view) do
+      # Nothing left to load here, and that is the point.
+      #
+      # There were three. `action_view/tag_helper` reopened `tag` with the 2008
+      # signature and broke every helper written since Rails 5.1 (importmap's
+      # among them). `action_view/translation_helper` reopened **`translate`**
+      # with the 2008 signature -- `translate(key, options = {})` -- and passed
+      # that hash to `I18n.translate` positionally, which today is an
+      # ArgumentError: so `t("anything")` in any view of the application died.
+      # It was there for DRYML's `<t>` tag, and the DRYML compiler is gone.
+      #
+      # Both were invisible from inside Hobo: a generated Hobo application has
+      # no views of its own to call `t` from. It took installing the gem into
+      # somebody else's application to see them.
+      #
       # There used to be a third one here, `action_view/tag_helper`, which
       # reopened ActionView's `tag` to close elements the XHTML way. It was for
       # the old DRYML compiler, which is gone, and it kept the 2008 signature:
@@ -103,7 +117,6 @@ module Hobo
       # how `tag.script` and everything written since Rails 5.1 works. So the
       # patch broke every page that used it, importmap's included, with
       # "wrong number of arguments (given 0, expected 1..4)".
-      require 'hobo/extensions/action_view/translation_helper'
     end
 
     ActiveSupport.on_load(:before_initialize) do
