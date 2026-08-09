@@ -121,11 +121,15 @@ require 'hobo/engine'
 # Hobo::Model what a model declared, and the theme paints what the catalogue
 # gives it.
 #
-# The theme is *in* here on purpose (decision 13): an application created with
-# `hobo new` has to look right without installing anything else. Alternative
-# themes stay separate gems -- that is what the plugin contract is for.
+# The theme ships *in* here (decision 13) so that `hobo new` looks right without
+# installing anything else -- but it is **loaded by an initializer, not by this
+# line** (see hobo/engine.rb): an application can say `config.hobo.theme = false`
+# and get the body only, inside its own layout. Requiring it here made that
+# impossible, because a gem is loaded before an application has said anything.
+#
+# Alternative themes stay separate gems -- that is what the plugin contract is
+# for.
 require 'hobo_rapid'
-require 'hobo_bootstrap'
 
 
 

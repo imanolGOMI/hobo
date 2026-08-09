@@ -33,9 +33,30 @@ module Hobo
       app.config.importmap.paths << root.join("config/importmap.rb") if app.config.respond_to?(:importmap)
     end
 
+    # The theme, and **only if the application wants it**.
+    #
+    # It used to be `require 'hobo_bootstrap'` at the bottom of hobo.rb, which
+    # is to say: always, before an application had said anything. With the theme
+    # loaded, `<page>` paints a whole document -- `<html>`, the navbar, the
+    # stylesheets -- and the controller skips the application's layout, because
+    # a page inside a layout that is also a page gives two of everything.
+    #
+    # So an application that already has a design had no way in. Now it says so:
+    #
+    #     config.hobo.theme = false
+    #
+    # and the derived pages come out as **the body alone**, which the
+    # application's own layout then wraps. Nothing else changes: the derivation,
+    # the forms, the permissions and the rest of the catalogue are the same.
+    # `hobo new` asks the question and writes the line.
+    initializer "hobo.theme", :before => "hobo.theme_assets" do |app|
+      require "hobo_bootstrap" unless app.config.hobo.theme == false
+    end
+
     # Was HoboBootstrap::Engine: the theme's stylesheets, served from the gem so
     # an application does not have to copy anything to look like something.
     initializer "hobo.theme_assets" do |app|
+      next if app.config.hobo.theme == false
       next unless app.config.respond_to?(:assets)
       app.config.assets.paths << root.join("app", "assets", "stylesheets")
       app.config.assets.precompile += %w[bootstrap.css hobo.css]
@@ -55,6 +76,9 @@ module Hobo
       h = config.hobo = ActiveSupport::OrderedOptions.new
       h.app_name = self.class.name.split('::').first.underscore.titleize
       h.developer_features = Rails.env.in?(["development", "test"])
+      # The theme is a question, and this is its default answer. `false` gives
+      # an application the body of each page and lets it do its own layout.
+      h.theme = true
       h.rapid_generators_path = Pathname.new File.expand_path('lib/hobo/rapid/generators', Hobo.root)
       h.auto_taglibs_path = Pathname.new File.expand_path('app/views/taglibs/auto', Rails.root)
       h.read_only_file_system = !!ENV['HEROKU_TYPE']

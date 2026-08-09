@@ -14,6 +14,25 @@
 
 hobo_dev = ENV["HOBODEV"]
 
+# The questions the old setup wizard asked.
+#
+# They did not disappear with the wizard -- what disappeared is being asked
+# twenty of them before you had written a line. Each one is a flag with a
+# default, and the template only *asks* when there is somebody to answer:
+# `hobo new --no-theme blog` never stops, and neither does a test.
+answers = ENV["HOBO_NEW_ANSWERS"].to_s.split
+
+# **The theme is a question.** Answer no and what comes out is a plain Rails
+# application: Hobo still derives every page from the model, but it paints the
+# body and nothing else, and your own layout wraps it. That is the way in for an
+# application that already has a design -- and the way to start bare and add
+# your own.
+with_theme = if answers.include?("--no-theme") then false
+             elsif answers.include?("--theme") then true
+             elsif $stdin.tty? then yes?("Quieres el tema de Hobo? Si dices que no, la aplicacion sale sin estilos y el diseno lo pones tu. [S/n]")
+             else true
+             end
+
 gem_line = lambda do |name|
   hobo_dev ? %(gem "#{name}", path: "#{File.join(hobo_dev, name)}") : %(gem "#{name}")
 end
@@ -41,6 +60,13 @@ after_bundle do
   # with exactly one user, forever.
   generate "hobo:signup"
 
+  # Without the theme there is nothing to plug into the layout: the application
+  # keeps the one Rails wrote, Hobo paints the body of each page into it, and the
+  # design is yours from the first minute.
+  unless with_theme
+    application %(    # Hobo pinta el cuerpo de cada pagina; el layout es tuyo.\n    config.hobo.theme = false)
+  end
+
   # Rails renders its own views -- the session form, the password pages -- with
   # the application layout, and that layout knows nothing about the theme. So
   # those pages came out unstyled next to the ones Hobo paints. The layout gets
@@ -54,13 +80,15 @@ after_bundle do
   # the line is matched by what it is, not by what it carried that year, and
   # `test_the_layout_wears_the_theme` in the conformance suite fails if it ever
   # stops matching at all.
-  gsub_file "app/views/layouts/application.html.erb",
-            /^(\s*)<%= stylesheet_link_tag :app.*%>$/,
-            "\\1<%= stylesheet_link_tag \"bootstrap\" %>\n\\1<%= stylesheet_link_tag \"hobo\" %>\n\\0"
+  if with_theme
+    gsub_file "app/views/layouts/application.html.erb",
+              /^(\s*)<%= stylesheet_link_tag :app.*%>$/,
+              "\\1<%= stylesheet_link_tag \"bootstrap\" %>\n\\1<%= stylesheet_link_tag \"hobo\" %>\n\\0"
 
-  gsub_file "app/views/layouts/application.html.erb",
-            /<%= yield %>/,
-            "<div class=\"container py-4\">\n      <%= yield %>\n    </div>"
+    gsub_file "app/views/layouts/application.html.erb",
+              /<%= yield %>/,
+              "<div class=\"container py-4\">\n      <%= yield %>\n    </div>"
+  end
 
   route "hobo_routes"
 
@@ -83,6 +111,7 @@ after_bundle do
     "There is a Story model with its pages, and not one view written: Hobo",
     "derives them from what the model says. When a page has to be different,",
     "write its template and Hobo steps aside.",
+    with_theme ? "" : "Sin tema: Hobo pinta el cuerpo de cada pagina y tu layout la envuelve.",
     "",
     "The first page will ask you to create the first user.",
     "",

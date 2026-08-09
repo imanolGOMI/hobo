@@ -125,6 +125,53 @@ class HoboNewTest < Minitest::Test
     end
   end
 
+  # `hobo new --no-theme`: the question the old setup wizard asked, kept.
+  #
+  # The theme used to be a fact -- `require "hobo_bootstrap"` at the bottom of
+  # hobo.rb, which is to say always, before an application had said anything.
+  # With it loaded, `<page>` paints a whole document and the controller skips
+  # the application's layout, because a page inside a layout that is also a page
+  # gives two of everything. So an application that already had a design, or
+  # somebody who wanted to write their own, had no way in.
+  #
+  # Answer no and Hobo paints **the body** of each page, and the application's
+  # own layout wraps it. Everything else -- the derivation, the forms, the
+  # permissions -- is the same.
+  def test_hobo_new_can_leave_the_design_to_you
+    Dir.mktmpdir do |tmp|
+      app = File.join(tmp, "plana")
+      run_command(tmp, "#{ROOT}/hobo/bin/hobo new plana --no-theme " \
+                       "--skip-git --skip-test --skip-system-test --skip-javascript " \
+                       "--skip-hotwire --skip-jbuilder --skip-action-cable " \
+                       "--skip-action-mailbox --skip-action-text --skip-active-storage --skip-bootsnap")
+
+      # The application says so out loud, in its own configuration.
+      assert_includes File.read(File.join(app, "config", "application.rb")), "config.hobo.theme = false"
+
+      # And its layout is untouched: no stylesheet of Hobo's in it.
+      layout = File.read(File.join(app, "app", "views", "layouts", "application.html.erb"))
+      refute_includes layout, "bootstrap"
+      refute_includes layout, %(stylesheet_link_tag "hobo")
+
+      File.write(File.join(app, "tmp", "seed.rb"),
+                 %(Story.create!(:title => "Una historia", :body => "Cuerpo")))
+      run_command(app, "bin/rails runner tmp/seed.rb")
+
+      with_server(app, 3098) do |http|
+        page = Browser.new(http).get("/stories")
+
+        # One document, and it is the application's -- the title comes from the
+        # layout Rails wrote, not from Hobo's theme.
+        assert_equal 1, page.scan("<html").length, "dos documentos: la pagina se pinto dentro de otra pagina"
+        assert_includes page, "<title>Plana</title>"
+
+        # And the derived page is inside it, doing its job.
+        assert_includes page, %(class="index-page stories")
+        assert_includes page, "Una historia"
+      end
+    end
+  end
+
   # A browser: a cookie jar and the authenticity token of the page it is on.
   class Browser
 
