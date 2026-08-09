@@ -76,6 +76,13 @@ after_bundle do
     application %(    # Hobo pinta el cuerpo de cada pagina; el layout es tuyo.\n    config.hobo.theme = false)
   end
 
+  # "Prevent all access to the site to non-members", as the old wizard asked it.
+  # Rails' filter is already on every controller; what this does is stop Hobo's
+  # from stepping around it. The pages that let somebody in keep working.
+  if answers.include?("--private")
+    application %(    # Todo el sitio detras del login.\n    config.hobo.private_site = true)
+  end
+
   # Rails renders its own views -- the session form, the password pages -- with
   # the application layout, and that layout knows nothing about the theme. So
   # those pages came out unstyled next to the ones Hobo paints. The layout gets

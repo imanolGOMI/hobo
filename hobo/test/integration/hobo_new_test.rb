@@ -358,6 +358,50 @@ class HoboNewTest < Minitest::Test
     end
   end
 
+  # `hobo new --private`: "prevent all access to the site to non-members", as the
+  # old wizard asked it.
+  #
+  # Rails' `require_authentication` is already on every controller. What Hobo
+  # does is step around it, on purpose, so that a public page stays public and
+  # the model's permissions decide page by page. This is the application saying
+  # it does not want that: the filter stays.
+  #
+  # And the door still works, which is the part worth a test: the front page,
+  # the session and the signup let a stranger in, because those pages allow
+  # anonymous access themselves. A private site whose first user cannot be
+  # created is a locked building with the key inside.
+  def test_hobo_new_can_put_the_whole_site_behind_the_login
+    Dir.mktmpdir do |tmp|
+      app = File.join(tmp, "privada")
+      run_command(tmp, "#{ROOT}/hobo/bin/hobo new privada --private " \
+                       "--skip-git --skip-test --skip-system-test --skip-javascript " \
+                       "--skip-hotwire --skip-jbuilder --skip-action-cable " \
+                       "--skip-action-mailbox --skip-action-text --skip-active-storage --skip-bootsnap")
+
+      assert_includes File.read(File.join(app, "config", "application.rb")), "config.hobo.private_site = true"
+
+      with_server(app, 3094) do |http|
+        stranger = Browser.new(http)
+
+        stranger.get("/stories")
+        assert_equal "302", stranger.status, "un desconocido no ve las paginas de un sitio privado"
+
+        # The way in is still there.
+        stranger.get("/session/new")
+        assert_equal "200", stranger.status, "la pagina de entrar tiene que abrirse"
+
+        # Asked last on purpose: the token this browser sends is the one of the
+        # page it is standing on.
+        assert_includes stranger.get("/"), "user[password_confirmation]", "la portada tiene que dejar crear el primer usuario"
+        stranger.post("/first-user", "user[email_address]" => "jefa@example.com",
+                                     "user[password]" => "test1234",
+                                     "user[password_confirmation]" => "test1234")
+
+        assert_includes stranger.get("/stories"), "index-page stories", "y dentro se ve todo"
+      end
+    end
+  end
+
   # A browser: a cookie jar and the authenticity token of the page it is on.
   class Browser
 

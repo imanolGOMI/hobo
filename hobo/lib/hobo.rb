@@ -92,6 +92,16 @@ module Hobo
     # both, and it is a couple of globs.
     NOT_A_SUBSITE = %w[concerns].freeze
 
+    # Whether the whole application is behind the login. It is a question an
+    # application answers once, in its configuration, and Hobo's controllers
+    # read it when they load.
+    def private_site?
+      return false unless defined?(Rails) && Rails.respond_to?(:application) && Rails.application
+      !!Rails.application.config.hobo.private_site
+    rescue StandardError
+      false
+    end
+
     def subsites
       app_dirs = ["#{Rails.root}/app"] + Hobo.engines.map { |e| "#{e}/app" }
       app_dirs.flat_map do |app|

@@ -59,10 +59,16 @@ module Hobo
           # say anything and a public index becomes a login wall.
           #
           # In Hobo the model decides who sees what, so a Hobo controller lets
-          # the request through and asks the record. An application that wants a
-          # login wall as well says so in its own controller -- that is one line
-          # and it is theirs to write.
-          allow_unauthenticated_access if respond_to?(:allow_unauthenticated_access)
+          # the request through and asks the record.
+          #
+          # Unless the application says the whole site is private -- the setup
+          # wizard's old "prevent all access to non-members" question, which is
+          # now `config.hobo.private_site = true` (or `hobo new --private`).
+          # Then the filter Rails put there stays, and a stranger is sent to the
+          # login before any of this is asked. The pages that let somebody *in*
+          # -- the front page, the session, the signup -- allow anonymous access
+          # themselves, so the door still works.
+          allow_unauthenticated_access if respond_to?(:allow_unauthenticated_access) && !Hobo.private_site?
 
           # And the other half of that decision, which was missing: Rails 8
           # resumes the session **inside** `require_authentication`, the very

@@ -79,6 +79,9 @@ module Hobo
       # The theme is a question, and this is its default answer. `false` gives
       # an application the body of each page and lets it do its own layout.
       h.theme = true
+      # The whole site behind the login, or the models deciding page by page.
+      # `hobo new --private` writes the line that turns this on.
+      h.private_site = false
       h.rapid_generators_path = Pathname.new File.expand_path('lib/hobo/rapid/generators', Hobo.root)
       h.auto_taglibs_path = Pathname.new File.expand_path('app/views/taglibs/auto', Rails.root)
       h.read_only_file_system = !!ENV['HEROKU_TYPE']
