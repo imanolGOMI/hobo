@@ -2143,7 +2143,7 @@ Una aplicación Rails 8 generada con `hobo new`:
 - **Filtros**: `<search-filter>` y `<filter-menu>` sobre Ransack, que suman en
   vez de turnarse.
 
-**Pruebas: 420 en **una** suite (+11 en la del plugin), todas en verde, + la
+**Pruebas: 438 en **una** suite (+11 en la del plugin), todas en verde, + la
 suite de conformidad en navegador (`cd hobo && HOBO_APP=~/hobo_apps/hobo_luz rake
 test`). El banco se regenera con el `hobo new` de hoy: tiene que ser lo que sale
 del generador, no lo que salía hace tres commits.**
@@ -2810,6 +2810,39 @@ Resultado: `/projects`, `/stories`, `/tasks` y `/story_statuses` funcionan
 derivadas, con los permisos de Agility mandando. Lo que **no** se portó, y es la
 mitad que falta: las ~20 vistas DRYML escritas a mano. Eso es el actualizador
 (decisión 6), y ahora hay dos aplicaciones vivas para escribirlo contra ellas.
+
+#### 3. El alta de usuario, que estaba a medias
+
+Lo vio Imanol comparando las dos pantallas: **en Hobo 2 el usuario se crea en
+dos sitios** —el primer administrador en la portada, y `/users/signup` para los
+demás, con su enlace en la barra— y en Hobo 3 solo estaba el primero.
+
+La causa es la decisión 15 leída de más: Rails 8 se queda con la autenticación,
+y su generador escribe **sesión y recuperación de contraseña, no registro**. Así
+que una aplicación generada tenía exactamente un usuario, para siempre. El
+comentario del propio generador decía «anybody else signs up normally», y no
+había *normally*.
+
+- `<signup-form>` es el formulario, y `<first-user-form>` es ese mismo con las
+  palabras de quien va a quedarse la aplicación.
+- `rails generate hobo:signup` escribe el controlador y sus dos rutas, y
+  `hobo new` lo llama. **Sin rutas no hay alta**: quitarlas es la manera de no
+  tenerla, que es más fácil de comprobar que apagar una bandera.
+- La barra ofrece «Sign up» a quien no ha entrado, si la ruta existe.
+
+Y al probarlo de verdad salieron dos cosas más, las dos de la misma familia
+—Rails 8 hace lo suyo en sitios que no se ven—:
+
+| Qué | Por qué |
+|---|---|
+| Creabas el usuario y te quedabas **fuera** | `start_new_session_for` es **privado** en el concern de Rails 8, y el guardián preguntaba `respond_to?` sin `true`. Devolvía false y la línea se saltaba, en silencio |
+| La barra decía «Log in» a quien acababa de registrarse | `allow_unauthenticated_access` es un `skip_before_action :require_authentication`, y **Rails resucita la sesión dentro de ese filtro**. La portada y el alta lo usan, así que nadie miraba la galleta. El puente le pregunta ahora a Rails cuando el controlador no tiene `current_user` |
+
+La prueba de los cinco primeros minutos (`hobo_new_test.rb`) **levanta un
+servidor de verdad**. La primera versión hacía las peticiones en proceso, con su
+propio tarro de galletas, y daba por rotas dos cosas que la aplicación en marcha
+hacía bien: **una prueba que se equivoca en esa dirección es peor que no
+tenerla**.
 
 ### De paso: `hobo new` dejaba una aplicación rota (2026-08-09)
 
