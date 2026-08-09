@@ -2181,6 +2181,16 @@ cd hobo && rake test:app          # force=1 para rehacerla
 # quien define cada tag y que definiciones estan tapadas
 cd ~/hobo_apps/hobo_luz && bin/rails hobo:tags
 
+# los generadores que hay, dentro de una aplicacion
+bin/rails generate hobo:setup_wizard      # las preguntas, aqui y ahora
+bin/rails generate hobo:resource nota titulo:string
+bin/rails generate hobo:model / hobo:controller / hobo:migration
+bin/rails generate hobo:front_controller  # (alias: hobo:front_page)
+bin/rails generate hobo:user_resource     # (alias: hobo:signup)
+bin/rails generate hobo:user_model / hobo:user_mailer / hobo:user_controller
+bin/rails generate hobo:subsite staff     # (alias: hobo:admin_subsite)
+bin/rails generate hobo:assets            # llevarte el css del tema
+
 # la suite de conformidad, en navegador, contra una aplicacion arrancada
 cd hobo && HOBO_APP=~/hobo_apps/hobo_luz rake test
 #   entra sola como admin@example.com / test1234
@@ -2195,6 +2205,12 @@ HOBO_TEST_NEW=1 rake test
 
 # generar una aplicacion nueva contra el arbol de trabajo
 HOBODEV=/home/imanol/RubymineProjects/hobo hobo/bin/hobo new ~/hobo_apps/loquesea
+
+# y `hobo new` pregunta si hay terminal; cada pregunta es tambien una bandera:
+#   --theme=clean|bootstrap|none   --invite-only   --activation-email
+#   --admin  --admin-name=staff    --private       --locale=es
+#   --front=portada                --skip-migration | --generate-migration
+#   --wizard (preguntar siempre)   --no-wizard (no preguntar nunca)
 ```
 
 **Al tocar una gema hay que reiniciar el servidor**: Rails recarga el código de
@@ -2612,6 +2628,20 @@ Visto en las capturas, ordenado por lo que más se nota:
     invisible: gana el último que carga y nadie avisa. La tabla dice quién define
     cada tag y marca `shadowed` lo que ya no pinta nada. Es la lección de la
     fusión convertida en herramienta.
+31. **El asistente es un generador, no un momento.** `rails generate
+    hobo:setup_wizard` hace las preguntas y hace lo que dicen, **también en una
+    aplicación que ya existe** —que es lo que necesita quien acaba de añadir la
+    gema a la suya—. `hobo new` lo llama, así que hay **un solo sitio que
+    pregunta**, y cada pregunta es además una bandera para que un guion no se
+    pare. No rehace lo que ya está.
+30. **Si la función existe, el nombre de Hobo 2 sigue funcionando.** Que el
+    trabajo de un generador lo haga otro fichero no es lo mismo que que el
+    trabajo haya desaparecido. `hobo:user_resource`, `hobo:user_model`,
+    `hobo:user_mailer`, `hobo:user_controller`, `hobo:front_controller`,
+    `hobo:subsite`, `hobo:controller` y `hobo:assets` vuelven a funcionar, y
+    los nombres nuevos (`hobo:signup`, `hobo:front_page`, `hobo:admin_subsite`)
+    **heredan** en vez de copiar: dos nombres para una cosa es malo, dos
+    implementaciones de una cosa es peor.
 29. **El tema es una elección de tres, y puede ser distinta por subsitio**
     (cierra 13a/13b y revisa la 25). El catálogo escribe el **papel** de cada
     cosa —`index-page`, `content-header`, `collection-table`, `action new`— y
@@ -2814,6 +2844,49 @@ las hojas, porque la elección se hace por petición y precompilar pasa una vez.
 deja de ser «feo sin estilos» para ser html con nombres a los que engancharse,
 que es lo que necesita quien mete Hobo en una aplicación con diseño propio.
 
+## Los generadores, uno por uno (2026-08-09/10)
+
+**El criterio lo puso Imanol**, y es mejor que el que yo traía: *si la función
+sigue existiendo, el generador debe seguir funcionando*. Que su trabajo lo haga
+hoy otro fichero **no** es motivo para borrarlo; que el trabajo haya
+desaparecido, sí.
+
+Con ese criterio, de los 24 que había:
+
+| Generador | Estado |
+|---|---|
+| `setup_wizard` | **Reescrito.** Las preguntas, y hacerlas también en una aplicación que ya existe (decisión 31) |
+| `user_model`, `user_mailer`, `user_controller`, `user_resource` | **Reescritos.** El lifecycle del alta, las cartas, las páginas y las rutas. `hobo:signup` es el atajo que usa `hobo new` |
+| `front_controller` | **Reescrito**, con su nombre de siempre; `hobo:front_page` hereda |
+| `subsite` | **Reescrito**: un subsitio cualquiera, y `--administrators-only` le pone la regla. `hobo:admin_subsite` hereda |
+| `controller` | **Reescrito**: el controlador de un modelo que ya existe. `hobo:resource` lo invoca |
+| `assets` | **Reinterpretado**: se lleva la hoja del tema a tu aplicación para que la toques |
+| `resource`, `model`, `migration` | Ya funcionaban |
+| `i18n` | **Borrado**: copiaba 197 líneas por idioma a tu aplicación; hoy la gema es un engine y basta `--locale` |
+| `install_plugin`, `install_default_plugins`, `plugin.rb` | **Borrados**: instalar un plugin es poner la gema (decisión 22) |
+| `subsite_taglib`, `taglib.rb` | **Borrados**: no hay taglibs de DRYML |
+| `activation_email.rb`, `invite_only.rb` | **Borrados como ficheros**: eran mixins de opciones, y hoy son banderas de `hobo:user_resource` |
+
+Con `plugin.rb` y `taglib.rb` caen dos de los últimos usos de `classy_module`;
+quedan cuatro, todos en `hobo_support` y `hobo_fields`.
+
+**La prueba que importa** fue esta: `rails new` de toda la vida, la gema en el
+`Gemfile`, `generate authentication`, y `rails generate hobo:setup_wizard`. Sale
+una aplicación de Hobo que funciona —portada, alta con activación, subsitio,
+tema— sin haber pasado por `hobo new`. **Eso es la historia de adopción entera,
+en un comando.**
+
+Y cinco fallos por el camino, cuatro de ellos de la misma familia —*adivinar en
+vez de mirar*—:
+
+| Qué | Cómo se veía |
+|---|---|
+| Thor **rellena los valores por defecto**, así que un generador no distingue «no me lo has dicho» de «me lo has dicho igual que el defecto» | El asistente no preguntaba nada |
+| El controlador adivinaba su modelo con el **inflector inglés** | `nota` pide `Notum`, `categoria` pide `Categorium`. Ahora prueba también el nombre tal cual, y el generado lo dice en voz alta: `self.model = Nota` |
+| El subsitio elegía sus controladores por **una lista de nombres** | El día que la portada se llamó `portada`, le hizo un controlador de administración. Ahora mira si el fichero incluye `Hobo::Controller::Model` |
+| El modelo de usuario se llevaba el lifecycle **siempre** | Y ese lifecycle llama a un mailer que, sin activación, nadie ha escrito |
+| En un método *endless*, `def x = y if z` aplica el `if` a la **definición** | El generador ni cargaba |
+
 ## Lo siguiente, por orden
 
 **El criterio de aceptación está completo**: la videoteca se construye sin
@@ -2826,12 +2899,8 @@ anotado, sin orden y sin prisa:
 - Un `belongs_to` no enlaza a la página de su registro, y no hay caja de
   búsqueda global en la barra. Son las dos únicas diferencias que quedaron al
   comparar pantalla a pantalla con Hobo 2.
-- Los generadores del asistente viejo —`setup_wizard`, `install_plugin`,
-  `install_default_plugins`, `subsite_taglib` y `generators/hobo/plugin.rb`—
-  siguen en el árbol y **contradicen la decisión 22**: instalar un plugin ya no
-  es invocar nada. Nadie los llama; `hobo new` no pasa por ahí, y el port de
-  Agility tampoco. **Ya se puede borrar**: el círculo está cerrado y ninguna de
-  las dos migraciones los usó.
+- ~~Los generadores viejos~~ **hechos**: cinco reescritos, cinco borrados, y
+  el asistente vuelve a existir (ver la sección de arriba).
 - Los ocho plugins de la organización siguen en DRYML. `hobo_timeago/` es el
   ejemplo de a qué tienen que llegar.
 - El actualizador de plantillas de aplicaciones existentes (decisión 6) sigue
