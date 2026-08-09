@@ -1,28 +1,35 @@
+require "rails/generators"
+require "generators/hobo/user_options"
+
 module Hobo
-  class UserMailerGenerator < Rails::Generators::NamedBase
-    source_root File.expand_path('../templates', __FILE__)
+  module Generators
 
-    # overrides the default
-    argument :name, :type => :string, :default => 'user', :optional => true
+    # `rails generate hobo:user_mailer [name] [--activation-email] [--invite-only]`
+    #
+    # The mails an account needs before it exists: the one that activates it and
+    # the one that invites somebody. Both carry a one-use key from the model's
+    # lifecycle (piece 5).
+    #
+    # Not the password reset: **Rails 8 writes that one** (`PasswordsMailer`), and
+    # it is the half of this that Hobo no longer has to carry.
+    class UserMailerGenerator < Rails::Generators::Base
 
-    include Generators::Hobo::InviteOnly
-    include Generators::Hobo::ActivationEmail
+      include UserOptions
 
-    def self.banner
-      "rails generate hobo:user_mailer [NAME=user] [options]"
-    end
+      source_root File.expand_path("templates", __dir__)
 
-    # check_class_collision :suffix => 'Mailer'
+      argument :name, :type => :string, :default => "User",
+               :desc => "El modelo de las personas (por defecto: User)"
 
-    def generate_mailer
-      template 'mailer.rb.erb', File.join('app/mailers', "#{file_path}_mailer.rb")
-    end
+      def create_mailer
+        return say("Sin --activation-email ni --invite-only no hay correo que escribir.", :yellow) unless
+          activation_email? || invite_only?
 
-    def generate_mails
-      mailer_dir = File.join("app/views", class_path[0..-2], "#{file_name.singularize}_mailer")
-      template 'forgot_password.erb', File.join(mailer_dir, "forgot_password.erb")
-      template( 'invite.erb', File.join(mailer_dir, "invite.erb")) if invite_only?
-      template( 'activation.erb', File.join(mailer_dir, "activation.erb")) if options[:activation_email]
+        template "user_mailer.rb.erb", "app/mailers/user_mailer.rb"
+        template "activation.text.erb", "app/views/user_mailer/activation.text.erb" if activation_email?
+        template "invitation.text.erb", "app/views/user_mailer/invitation.text.erb" if invite_only?
+      end
+
     end
 
   end

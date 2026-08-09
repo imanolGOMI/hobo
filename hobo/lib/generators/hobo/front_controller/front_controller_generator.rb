@@ -1,59 +1,41 @@
+require "rails/generators"
+
 module Hobo
-  class FrontControllerGenerator < Rails::Generators::NamedBase
-    source_root File.expand_path('../templates', __FILE__)
+  module Generators
 
-    # overrides the default
-    argument :name, :type => :string, :default => 'front', :optional => true
+    # `rails generate hobo:front_controller [name]`
+    #
+    # Hobo 2's name, kept: what it writes is a controller. `hobo:front_page` is
+    # the same generator under the name this project used while building it --
+    # one implementation, two doors, and no chance of them drifting apart.
+    #
+    # The front controller: an application with no users offers to create the
+    # first one, and once there is one it shows the application. It is the
+    # first five minutes of Hobo, and Rails has no equivalent -- its
+    # authentication generator gives you a login form and expects the first
+    # user to arrive from a console.
+    class FrontControllerGenerator < Rails::Generators::Base
 
-    include Generators::Hobo::Controller
-    include Generators::Hobo::InviteOnly
+      source_root File.expand_path("templates", __dir__)
 
-    def self.banner
-      "rails generate hobo:front_controller [NAME=front] [options]"
-    end
+      # Hobo 2 asked "Choose a name for the front controller", and it is still a
+      # real choice: an application may call its front page `home`.
+      argument :name, :type => :string, :default => "front",
+               :desc => "Nombre del controlador de portada (por defecto: front)"
 
-    class_option :add_routes,
-                 :type => :boolean,
-                 :desc => "Modify config/routes.rb to support the front controller",
-                 :default => true
-
-    class_option :delete_index,
-                 :aliases => '-d',
-                 :type => :boolean,
-                 :desc => "Delete public/index.html",
-                 :default => true
-
-    class_option :user_resource_name,
-                 :type => :string,
-                 :desc => "User Resource Name",
-                 :default => 'user'
-
-    def generate_controller
-      template 'controller.rb.erb', File.join('app/controllers',"#{file_path}_controller.rb")
-    end
-
-    def generate_index
-      template("index.dryml", File.join('app/views', file_path, "index.dryml"))
-    end
-
-    def remove_index_html
-      return unless options[:delete_index]
-      remove_file File.join(Rails.root, "public/index.html")
-    end
-
-    def add_routes
-      return unless options[:add_routes]
-      route "get 'search' => '#{file_path}#search', :as => 'site_search'"
-      route "post 'search' => '#{file_path}#search', :as => 'site_search_post'"
-      route "get '#{options[:user_resource_name]}s/:id/activate_from_email/:key' => '#{options[:user_resource_name]}s#activate', :as => 'activate_from_email'"
-      route "get '#{options[:user_resource_name]}s/:id/accept_invitation_from_email/:key' => '#{options[:user_resource_name]}s#accept_invitation', :as => 'accept_invitation_from_email'"
-      route "get '#{options[:user_resource_name]}s/:id/reset_password_from_email/:key' => '#{options[:user_resource_name]}s#reset_password', :as => 'reset_password_from_email'"
-      if class_path.empty?
-        route "root :to => '#{file_path}#index'"
-        route "get ENV['RAILS_RELATIVE_URL_ROOT'] => 'front#index' if ENV['RAILS_RELATIVE_URL_ROOT']"
-      else
-        route "get '#{file_path}' => '#{file_path}#index', :as => '#{file_path.gsub(/\//,'_')}'"
+      def create_controller
+        template "front_controller.rb.erb", "app/controllers/#{name}_controller.rb"
       end
+
+      def add_the_route
+        route %(root to: "#{name}#index")
+        route %(post "/first-user" => "#{name}#create_first_user", as: :create_first_user)
+      end
+
+      private
+
+      def controller_class_name = "#{name.camelize}Controller"
+
     end
 
   end
