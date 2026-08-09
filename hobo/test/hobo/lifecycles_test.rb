@@ -43,7 +43,7 @@ class LifecyclesTest < Minitest::Test
   end
 
   def teardown
-    HoboTest.clean_up(:Article)
+    HoboTest.clean_up(:Article, :Keyed)
   end
 
   # --- declaring one ----------------------------------------------------------
@@ -160,6 +160,105 @@ class LifecyclesTest < Minitest::Test
     article.lifecycle.publish!(nil)
 
     assert_nil article.lifecycle.active_step
+  end
+
+  # --- the keys -----------------------------------------------------------------
+  #
+  # The half of lifecycles that only an application uses: a step with
+  # `:new_key => true` puts a one-use key in a mail, and whoever comes back with
+  # it is allowed to make the next move. Activation mails and invitations are
+  # built on this.
+  #
+  # It was **broken for every Rails 8 application** and no test could see it: the
+  # key was signed with `Rails.application.config.secret_token`, which Rails
+  # removed in 5.2, and this suite had never asked for a key.
+  # Declared inside the test and taken away afterwards, like `Article`: a model
+  # defined at load time stays in `Hobo::Model.all_models` for the whole run,
+  # and the migration generator's suite -- which checks that an empty
+  # application has nothing to migrate -- then finds it. Same lesson as layer 2,
+  # third time.
+  def keyed_model
+    return ::Keyed if Object.const_defined?(:Keyed)
+
+    Object.const_set(:Keyed, Class.new(ActiveRecord::Base))
+    ::Keyed.class_eval do
+      self.table_name = "articles"
+      include Hobo::Model
+      fields { title :string }
+      def create_permitted?  = true
+      def update_permitted?  = true
+      def destroy_permitted? = true
+
+      lifecycle :key_timeout => 1.day do
+        state :invited, :default => true
+        state :active
+
+        create :invite, :params => [:title], :become => :invited, :new_key => true
+        transition :accept, { :invited => :active }, :available_to => :key_holder
+      end
+    end
+    ::Keyed
+  end
+
+  def with_secret(secret = "un-secreto-de-pruebas")
+    was = ENV["HOBO_LIFECYCLE_SECRET"]
+    ENV["HOBO_LIFECYCLE_SECRET"] = secret
+    yield
+  ensure
+    ENV["HOBO_LIFECYCLE_SECRET"] = was
+  end
+
+  def invited
+    with_secret { keyed_model.lifecycle.invite(nil, :title => "Invitada") }
+  end
+
+  def test_a_step_with_a_new_key_hands_one_out
+    key = with_secret { invited.lifecycle.key }
+
+    refute_nil key, "un paso con :new_key tiene que dar una clave"
+    assert_equal 40, key.length, "sha1 en hexadecimal"
+  end
+
+  def test_the_same_record_gives_the_same_key
+    record = invited
+
+    assert_equal with_secret { record.lifecycle.key }, with_secret { record.lifecycle.key }
+  end
+
+  # Two records, two keys: a key that did not depend on the record would open
+  # everybody's door.
+  def test_two_records_get_different_keys
+    refute_equal with_secret { invited.lifecycle.key }, with_secret { invited.lifecycle.key }
+  end
+
+  def test_another_secret_gives_another_key
+    record = invited
+
+    refute_equal with_secret("uno") { record.lifecycle.key },
+                 with_secret("otro") { record.lifecycle.key }
+  end
+
+  # Whoever comes back with the key may make the move; whoever comes back with
+  # somebody else's may not.
+  def test_the_key_holder_may_make_the_move
+    record = invited
+
+    with_secret do
+      record.lifecycle.provided_key = record.lifecycle.key
+      assert record.lifecycle.can_accept?(nil), "con la clave buena se puede"
+
+      record.lifecycle.provided_key = "0" * 40
+      refute record.lifecycle.can_accept?(nil), "con una clave inventada, no"
+    end
+  end
+
+  # A key with nothing to sign it is not a key.
+  def test_it_refuses_to_sign_with_nothing
+    record = invited
+
+    with_secret(nil) do
+      assert_raises(Hobo::Model::Lifecycles::LifecycleError) { record.lifecycle.key }
+    end
   end
 
 end
