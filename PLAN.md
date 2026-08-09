@@ -2143,7 +2143,7 @@ Una aplicación Rails 8 generada con `hobo new`:
 - **Filtros**: `<search-filter>` y `<filter-menu>` sobre Ransack, que suman en
   vez de turnarse.
 
-**Pruebas: 455 en **una** suite (+11 en la del plugin), todas en verde, + la
+**Pruebas: 464 en **una** suite (+11 en la del plugin), todas en verde, + la
 suite de conformidad en navegador (`cd hobo && HOBO_APP=~/hobo_apps/hobo_luz rake
 test`). El banco se regenera con el `hobo new` de hoy: tiene que ser lo que sale
 del generador, no lo que salía hace tres commits.**
@@ -2612,6 +2612,16 @@ Visto en las capturas, ordenado por lo que más se nota:
     invisible: gana el último que carga y nadie avisa. La tabla dice quién define
     cada tag y marca `shadowed` lo que ya no pinta nada. Es la lección de la
     fusión convertida en herramienta.
+29. **El tema es una elección de tres, y puede ser distinta por subsitio**
+    (cierra 13a/13b y revisa la 25). El catálogo escribe el **papel** de cada
+    cosa —`index-page`, `content-header`, `collection-table`, `action new`— y
+    **un tema es una tabla de nombres y una hoja de estilos**, nada más:
+    `clean` (el de Hobo, por defecto, sin dependencias), `bootstrap`, o `none`
+    (el cuerpo con sus clases dentro de tu layout). Un subsitio puede vestir
+    otro: `config.hobo.subsite_themes = { "admin" => :bootstrap }`.
+28. **`<page>` es del catálogo, no del tema.** Vivía dentro de
+    `hobo_bootstrap`, y por eso solo podía haber un tema. Sus ~30 puntos de
+    extensión siguen siendo el contrato.
 27. **Un subsitio es una carpeta de controladores** (afina la decisión 14). No se
     registra en ningún sitio: `app/controllers/admin/` con algo dentro *es* el
     subsitio `admin`, y sus rutas las dibuja `hobo_routes`. Lo que el generador
@@ -2637,14 +2647,29 @@ Visto en las capturas, ordenado por lo que más se nota:
 ## Paridad de `hobo new`: las preguntas del asistente (2026-08-09)
 
 **Criterio, de Imanol:** antes de los pasos grandes, `hobo new` tiene que dejar
-lo mismo que dejaba en Hobo 2. Y las veinte preguntas del asistente **no se
-tiran: se convierten en opciones con el valor por defecto que hemos decidido.**
-Si alguien contesta que no a todo, sale una aplicación plana y el diseño lo pone
-él.
+lo mismo que dejaba en Hobo 2. Y las preguntas del asistente **no se tiran**.
+
+**El asistente existe** (`hobo new blog` pregunta), y además cada pregunta es una
+bandera, así que un guion nunca se para: `hobo new blog --theme=none
+--invite-only --locale=es`. Sin terminal, todas toman su valor por defecto —eso
+es lo que hacen las pruebas—; `--wizard` pregunta siempre y `--no-wizard` nunca.
+
+Lo que desapareció del asistente viejo no son las preguntas: son las veinte
+preguntas **antes de escribir una línea**, y cuatro que configuraban cosas que
+ya no existen.
 
 | Pregunta del asistente de Hobo 2 | Hoy |
 |---|---|
-| Tema del front / tema de jQuery-UI | **`--theme` / `--no-theme`** ✔ (decisión 25) |
+| Tema del front | **`--theme=clean\|bootstrap\|none`** ✔ (decisión 29) |
+| Tema del subsitio de administración | **`--theme=` en `hobo:admin_subsite`** ✔ |
+| Tema de jQuery-UI (front y admin) | **Desaparece**: no hay jQuery-UI. Un widget con aspecto propio es hoy un plugin (decisión 22) |
+| ¿Solo plantillas DRYML? | **Desaparece**: las dos cosas funcionan a la vez sin configurar nada. Escribes `index.html.erb` y Hobo se aparta; no la escribes y la deriva |
+| Nombre del recurso de usuario | El `User` de Rails 8 (decisión 15) |
+| Nombre del controlador de portada | **`--front=home`** ✔ |
+| Nombre del subsitio | **argumento de `hobo:admin_subsite`** ✔ |
+| Migración inicial: saltar/generar/migrar | **`--skip-migration` / `--generate-migration`** ✔ |
+| ¿Repositorio git? | `rails new` lo hace; `--skip-git` para que no |
+| ¿Que git ignore los autogenerados? | **Desaparece**: no se genera ningún fichero |
 | Instalar plugins por defecto (jquery, jquery-ui) | No aplica: Stimulus (decisión 14) |
 | Nombre del controlador de portada | `hobo:front_page` ✔ |
 | Modelo de usuario, sesión, contraseñas | Rails 8 (decisión 15) ✔ |
@@ -2748,6 +2773,46 @@ subsitio, una hoja de estilos, un manifiesto de JavaScript y un tema.
 Las órdenes de generadores en las pruebas van con **la entrada estándar
 cerrada**. Una pregunta que nadie contesta es una suite colgada, no una suite que
 falla, y las dos se parecen mucho a las nueve de la noche.
+
+## Los temas, de verdad (2026-08-09)
+
+**El problema.** El tema era una pregunta de sí o no porque *solo podía haber
+uno*: `<page>` —el documento entero— vivía dentro de `hobo_bootstrap`, y el
+catálogo escribía clases de Bootstrap por todas partes (**78 atributos**:
+`card card-body bg-body-tertiary`, `table table-striped`, `btn btn-primary`,
+`d-flex justify-content-between`…). Quien no quisiera Bootstrap se quedaba sin
+página, o con una página llena de nombres que no significan nada sin él.
+
+**Lo que se hizo**, y son tres piezas que se sostienen entre sí:
+
+| Pieza | Qué |
+|---|---|
+| El catálogo escribe **papeles** | `index-page`, `content-header`, `header-line`, `count`, `collection-table`, `field-list`, `action new`, `record-actions`, `content-9`… Ni una clase de Bootstrap en toda la gema |
+| `<page>` sube al catálogo | Con sus ~30 puntos de extensión intactos (el contrato de la pieza 13b) |
+| Un tema es **una tabla y una hoja** | `HoboRapid::Theme.wears "bootstrap", "hobo", "action" => "btn"`. Bootstrap son 40 líneas de tabla; `clean` no tiene tabla, porque su css estiliza los papeles |
+
+```sh
+hobo new blog                    # clean: 222 lineas de css propio, sin dependencias
+hobo new blog --theme=bootstrap  # los mismos papeles, vestidos de Bootstrap 5
+hobo new blog --theme=none       # el cuerpo con sus clases, dentro de tu layout
+```
+
+Y **por subsitio**, que es como lo preguntaba Hobo 2:
+`config.hobo.subsite_themes = { "admin" => :bootstrap }`, o
+`generate hobo:admin_subsite --theme=bootstrap`. Para saber cuál toca, el
+subsitio viaja con la petición como el usuario y el token, y sale de donde ya
+estaba: el espacio de nombres del controlador. El pipeline precompila **todas**
+las hojas, porque la elección se hace por petición y precompilar pasa una vez.
+
+> Un fallo que el css nuevo repitió y por eso está anotado en el propio css:
+> pintar `button[type=submit]` pinta también **el borrar de cada fila** —que es
+> un submit porque un borrado no puede ser un enlace— y salía un botón azul
+> enorme al lado de un lápiz diminuto. Es exactamente el error que ya cometió el
+> tema de Bootstrap en su día.
+
+**Lo que esto abre:** escribir un tercer tema es escribir un css. Y `--theme=none`
+deja de ser «feo sin estilos» para ser html con nombres a los que engancharse,
+que es lo que necesita quien mete Hobo en una aplicación con diseño propio.
 
 ## Lo siguiente, por orden
 
