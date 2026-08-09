@@ -26,9 +26,10 @@ module Hobo
         template "model.rb.erb", File.join("app/models", subsite_path, "#{file_name}.rb")
       end
 
+      # Not a template of its own: `hobo:controller` writes the controller Hobo
+      # writes, and there is one of those.
       def create_controller
-        template "controller.rb.erb",
-                 File.join("app/controllers", subsite_path, "#{file_name.pluralize}_controller.rb")
+        invoke "hobo:controller", [name], options.slice("subsite")
       end
 
       def tell_about_the_migration
