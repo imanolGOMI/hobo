@@ -2143,7 +2143,7 @@ Una aplicación Rails 8 generada con `hobo new`:
 - **Filtros**: `<search-filter>` y `<filter-menu>` sobre Ransack, que suman en
   vez de turnarse.
 
-**Pruebas: 409 en **una** suite (+11 en la del plugin), todas en verde, + la
+**Pruebas: 420 en **una** suite (+11 en la del plugin), todas en verde, + la
 suite de conformidad en navegador (`cd hobo && HOBO_APP=~/hobo_apps/hobo_luz rake
 test`). El banco se regenera con el `hobo new` de hoy: tiene que ser lo que sale
 del generador, no lo que salía hace tres commits.**
@@ -2583,12 +2583,34 @@ Visto en las capturas, ordenado por lo que más se nota:
     invisible: gana el último que carga y nadie avisa. La tabla dice quién define
     cada tag y marca `shadowed` lo que ya no pinta nada. Es la lección de la
     fusión convertida en herramienta.
+24. **El inglés es el `:default`, y no hay `hobo.en.yml`.** Cada cadena viaja
+    como clave con su inglés escrito en el sitio donde se pinta, y lo que se
+    entrega es un fichero por idioma añadido (`hobo.es.yml`). Dos listas de las
+    mismas cadenas se separan, y la que nadie lee es la que está mal. Una
+    aplicación que quiera otro inglés escribe su `hobo.en.yml`, que es como se
+    pisan las traducciones de una gema en Rails de toda la vida.
 
 ## Lo siguiente, por orden
 
 **El criterio de aceptación está completo**: la videoteca se construye sin
 escribir vistas —salvo tres líneas para decir por dónde se filtra—, funciona, y
 se parece a la de Hobo 2. Lo que queda es empaquetar y pulir.
+
+**Los cuatro puntos de esta lista están hechos** (2026-08-09). Lo que queda
+anotado, sin orden y sin prisa:
+
+- Un `belongs_to` no enlaza a la página de su registro, y no hay caja de
+  búsqueda global en la barra. Son las dos únicas diferencias que quedaron al
+  comparar pantalla a pantalla con Hobo 2.
+- Los generadores del asistente viejo —`setup_wizard`, `install_plugin`,
+  `install_default_plugins`, `subsite_taglib` y `generators/hobo/plugin.rb`—
+  siguen en el árbol y **contradicen la decisión 22**: instalar un plugin ya no
+  es invocar nada. Nadie los llama; `hobo new` no pasa por ahí. Son lo siguiente
+  que hay que borrar.
+- Los ocho plugins de la organización siguen en DRYML. `hobo_timeago/` es el
+  ejemplo de a qué tienen que llegar.
+- El actualizador de plantillas de aplicaciones existentes (decisión 6) sigue
+  siendo solo el parser de DRYML conservado a propósito.
 
 ### ~~1. La fusión en una sola gema~~ — **hecha** (2026-08-08)
 
@@ -2702,11 +2724,39 @@ distintos: las migraciones, el `Host` vacío de `Rack::MockRequest` (403 de
 que pedía `/`, que desde que existe `hobo:front_page` ya no es el índice del
 modelo. **Una prueba lenta que no se corre no es una prueba, es una intención.**
 
-### 1. Las cadenas de interfaz a inglés, y detrás i18n
+### ~~1. Las cadenas de interfaz a inglés, y detrás i18n~~ — **hecho** (2026-08-09)
 
-Al final a propósito: es lo más mecánico y lo que menos se aprende haciendo.
-Están en `hobo_rapid/lib/hobo_rapid/derivation.rb` («Nuevo», «Editar», «Crear»,
-«Guardar», «Acciones», «Borrar», «Seguro?») y en `structure.rb`.
+Las dos cosas de una vez, porque traducir después de haber concatenado no se
+puede: **no hay cadenas, hay claves con su inglés escrito donde se usan**.
+
+```ruby
+text t(:"index.new_link", "New %{name}", :name => singular.downcase)
+```
+
+- `hobo/lib/hobo_rapid/translation.rb` — `t` dentro de un tag, y
+  `HoboRapid.translate` fuera. Sin I18n cargado (las pruebas de pieza cargan el
+  runtime y nada más) devuelve el `:default` interpolado.
+- **No hay `hobo.en.yml`.** El inglés es el `:default`, en el sitio donde se
+  pinta. Dos listas de las mismas cadenas se separan, y la que nadie lee es la
+  que está mal. Añadir un idioma es escribir **un** fichero.
+- `hobo/config/locales/hobo.es.yml` es ese fichero, y el engine lo lleva. Una
+  aplicación en español es una línea: `config.i18n.default_locale = :es`.
+- La interpolación es el motivo de todo esto: «New %{name}» y «Nuevo %{name}»
+  no ponen el sustantivo en el mismo sitio, y `"New " + nombre` no llega ahí. El
+  género sí se queda sin resolver («Nuevo película»): eso lo arregla la
+  aplicación pisando la clave.
+- De paso, a inglés también: la salida de `hobo new` y de `hobo:resource`, los
+  mensajes de las excepciones del runtime (`Rapid::Tag`, `PermissionDenied`) y
+  los fallos del contrato de params. Una gema inglesa que lanza excepciones en
+  español no es una gema inglesa.
+- `hobo/test/hobo_rapid/translation_test.rb` (el mecanismo) y
+  `hobo/test/integration/i18n_test.rb` (que **el engine lleva el fichero**: la
+  prueba unitaria carga el yml por ruta y pasaría igual si la gema no lo
+  entregara a nadie — la misma forma de agujero que el tema construido y no
+  conectado).
+
+Comprobado en la aplicación viva: en inglés dice «New story»; con una línea en
+un initializer, «Nuevo story».
 
 ## Cómo mirar la aplicación con el navegador
 

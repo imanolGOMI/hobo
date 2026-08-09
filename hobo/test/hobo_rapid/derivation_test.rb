@@ -147,7 +147,7 @@ class DerivationTest < Minitest::Test
   def test_an_index_offers_the_actions
     html = render(:index_page, collection_of([story]))
 
-    assert_includes html, %(<th class="actions">Acciones</th>)
+    assert_includes html, %(<th class="actions">Actions</th>)
     assert_includes html, %(<td class="actions">)
   end
 

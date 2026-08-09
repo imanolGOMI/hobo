@@ -1,0 +1,51 @@
+# Las palabras del catálogo, en español.
+#
+# El inglés no está aquí: va escrito en el sitio donde se usa la cadena, como
+# `:default` (ver lib/hobo_rapid/translation.rb). Añadir un idioma es escribir
+# **un** fichero como este, y una aplicación que quiera otras palabras en
+# cualquiera de los dos escribe su propio `hobo.<idioma>.yml`, que es como se
+# pisan las traducciones de una gema en Rails de toda la vida.
+#
+# El género no se puede resolver desde aquí: «Nuevo %{name}» sale mal con
+# «película». Una aplicación arregla el suyo con `view_hints`, o pisando estas
+# claves.
+es:
+  hobo:
+    actions:
+      create: "Crear"
+      save: "Guardar"
+      edit: "Editar"
+      delete: "Borrar"
+      confirm_delete: "¿Seguro?"
+    index:
+      count_one: "1 %{name}"
+      count: "%{count} %{name}"
+      new_link: "Nuevo %{name}"
+      actions_heading: "Acciones"
+    forms:
+      new_title: "Nuevo %{name}"
+      edit_title: "Editar %{name}"
+    filters:
+      search: "Buscar"
+      clear: "Limpiar"
+      all: "Todos"
+      filter: "Filtrar"
+    session:
+      log_in: "Entrar"
+      log_out: "Salir"
+      logged_in_as: "Has entrado como %{name}"
+      guest: "Invitado"
+      change_user: "Cambiar de usuario"
+    front:
+      title: "Inicio"
+      welcome: "Bienvenido"
+      blurb: "Ya puedes entrar y empezar."
+      no_users: "Todavía no hay nadie. Crea el primer usuario y serás el administrador."
+      password: "Contraseña"
+      password_confirmation: "Repite la contraseña"
+      register: "Crear administrador"
+    errors:
+      one: "1 error impidió guardar %{name}"
+      many: "%{count} errores impidieron guardar %{name}"
+    associations:
+      new_option: "Nuevo %{name}…"

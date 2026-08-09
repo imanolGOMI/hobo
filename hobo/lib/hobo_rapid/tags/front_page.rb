@@ -13,6 +13,7 @@
 # for one is a Hobo idea.
 
 require "rapid"
+require "hobo_rapid/translation"
 require "hobo_rapid/tags/structure"
 require "hobo_rapid/tags/inputs"
 
@@ -49,7 +50,7 @@ end
 Rapid::Tag.include(HoboRapid::Tags::FrontPageSupport)
 
 Rapid.define(:front_page, :attrs => [:app_name, :action]) do
-  in_page(attributes[:app_name] || "Inicio") do
+  in_page(attributes[:app_name] || t(:"front.title", "Home")) do
     tag("div", { :class => "front-page" }, :body) do
       call_tag(:flash_messages, {}, :as => :flash)
 
@@ -58,7 +59,7 @@ Rapid.define(:front_page, :attrs => [:app_name, :action]) do
       else
         param(:welcome) do
           tag("h1", {}, :heading) { text attributes[:app_name] || "Hobo" }
-          tag("p", { :class => "lead" }, :blurb) { text "Ya puedes entrar y empezar." }
+          tag("p", { :class => "lead" }, :blurb) { text t(:"front.blurb", "You can log in and start now.") }
         end
       end
     end
@@ -70,9 +71,9 @@ Rapid.define(:first_user_form, :attrs => [:action]) do
   field = login_field
 
   tag("div", { :class => "first-user" }, :box) do
-    tag("h1", {}, :heading) { text "Bienvenido" }
+    tag("h1", {}, :heading) { text t(:"front.welcome", "Welcome") }
     tag("p", { :class => "lead" }, :blurb) do
-      text "Todavia no hay nadie. Crea el primer usuario y seras el administrador."
+      text t(:"front.no_users", "Nobody is here yet. Create the first user and you will be the administrator.")
     end
 
     tag("form", { :method => "post", :action => attributes[:action] || "/", :class => "first-user-form" }, :form) do
@@ -84,7 +85,8 @@ Rapid.define(:first_user_form, :attrs => [:action]) do
                        :name => "user[#{field}]", :id => "user_#{field}", :required => true })
       end
 
-      { "password" => "Contrasena", "password_confirmation" => "Repite la contrasena" }.each do |name, label|
+      { "password" => t(:"front.password", "Password"),
+      "password_confirmation" => t(:"front.password_confirmation", "Repeat the password") }.each do |name, label|
         tag("div", { :class => "field" }, :"#{name}_field") do
           tag("label", { :for => "user_#{name}" }, :"#{name}_label") { text label }
           tag("input", { :type => "password", :name => "user[#{name}]", :id => "user_#{name}", :required => true })
@@ -92,7 +94,7 @@ Rapid.define(:first_user_form, :attrs => [:action]) do
       end
 
       tag("div", { :class => "actions" }, :actions) do
-        tag("button", { :type => "submit", :class => "btn btn-primary" }, :submit) { text "Register Administrator" }
+        tag("button", { :type => "submit", :class => "btn btn-primary" }, :submit) { text t(:"front.register", "Register administrator") }
       end
     end
   end

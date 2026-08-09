@@ -5,6 +5,7 @@
 # on a belongs_to becomes a select of the authors this user is allowed to see.
 
 require "rapid"
+require "hobo_rapid/translation"
 require "hobo_rapid/tags/inputs"
 require "hobo_rapid/derivation"
 
@@ -107,7 +108,7 @@ Rapid::Tag.include(HoboRapid::Tags::AssociationSupport)
 # A belongs_to: one choice out of many.
 Rapid.define(:select_one, :attrs => [:include_none, :blank_message, :options, :sort, :limit, :text_method, :disabled, :name]) do
   unless attributes[:disabled] || can_edit?
-    raise HoboRapid::PermissionDenied, "no se puede editar el campo '#{this_field}'"
+    raise HoboRapid::PermissionDenied, "the field '#{this_field}' cannot be edited"
   end
 
   reflection = this_reflection
@@ -293,7 +294,8 @@ Rapid.define(:select_one_or_new, :attrs => [:name, :new_label, :fields, :limit, 
   tag("div", { :class => "select-one-or-new",
                :"data-controller" => "rapid-select-one-or-new" }, :select_one_or_new) do
     new_label = attributes[:new_label] ||
-                "Nuevo #{HoboRapid::Derivation.title_of(member_class).downcase}\u2026"
+                t(:"associations.new_option", "New %{name}\u2026",
+                  :name => HoboRapid::Derivation.title_of(member_class).downcase)
 
     call_tag(:select_one,
              attributes.slice(:limit, :text_method, :include_none, :blank_message, :sort)

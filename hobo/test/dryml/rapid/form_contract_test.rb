@@ -239,7 +239,7 @@ class FormPseudoParameterTest < Minitest::Test
                    :append_submit => Rapid.markup { text "!" })
     end
 
-    assert_includes error.message, "no pinta el contenido"
+    assert_includes error.message, "does not paint the content"
   end
 
 end

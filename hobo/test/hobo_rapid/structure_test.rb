@@ -71,12 +71,12 @@ class StructureTest < Minitest::Test
   def test_the_errors_of_a_record_are_listed
     html = render(:error_messages, Story.new(["El titulo no puede estar en blanco", "El cuerpo tampoco"]))
 
-    assert_includes html, "2 errores impidieron guardar Historia"
+    assert_includes html, "2 errors stopped this Historia from being saved"
     assert_includes html, "<li>El titulo no puede estar en blanco</li>"
   end
 
   def test_one_error_is_said_in_singular
-    assert_includes render(:error_messages, Story.new(["Uno solo"])), "1 error impidio"
+    assert_includes render(:error_messages, Story.new(["Uno solo"])), "1 error stopped"
   end
 
   # A form should not carry an empty box about.

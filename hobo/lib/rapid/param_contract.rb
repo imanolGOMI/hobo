@@ -128,15 +128,15 @@ module ParamContract
 
     def assert_param_overridable(tag_name, scenario, reached, except)
       excepted = except.key?(reached.name)
-      where = "el param #{reached.name.inspect} de <#{tag_name}> " \
-              "(alcanzado en #{scenario[:name].inspect}, lo resuelve #{reached.rendered_by})"
+      where = "param #{reached.name.inspect} of <#{tag_name}> " \
+              "(reached in #{scenario[:name].inspect}, resolved by #{reached.rendered_by})"
 
       if reached.path.nil?
         # Nothing leads here: the tag that declares it was called without
         # exposing the call as a param, so no amount of nesting reaches it.
         assert excepted,
-               "#{where} no se puede sobreescribir desde fuera: nada lleva hasta el. " \
-               "Expon la llamada con `as:`, o anotalo en `except:` con el motivo"
+               "#{where} cannot be overridden from outside: nothing leads to it. " \
+               "Expose the call with `as:`, or write it down in `except:` with the reason"
         return
       end
 
@@ -145,15 +145,15 @@ module ParamContract
 
       if excepted
         refute_includes output, ParamContract::SENTINEL,
-                        "#{where} figura como inalcanzable (#{except[reached.name]}), " \
-                        "pero el override en #{address} si llega: quita la excepcion"
+                        "#{where} is listed as unreachable (#{except[reached.name]}), " \
+                        "but the override at #{address} does get there: drop the exception"
         return
       end
 
       assert_includes output, ParamContract::SENTINEL,
-                      "#{where} no se puede sobreescribir desde fuera: se declara, pero el " \
-                      "override en #{address} no llega. Se perdio en silencio.\n" \
-                      "Salida obtenida:\n#{output}"
+                      "#{where} cannot be overridden from outside: it is declared, but the " \
+                      "override at #{address} never arrives. It was lost in silence.\n" \
+                      "Output:\n#{output}"
 
       # A tag call is free to ignore the content it is handed, and a void
       # element has nowhere to put any: neither can be asked to be filled in.
@@ -161,8 +161,8 @@ module ParamContract
 
       filled = render_tag(tag_name, scenario, nested_override(reached.path, ParamContract.filling))
       assert_includes filled, ParamContract::SENTINEL,
-                      "#{where} se puede reemplazar, pero no rellenar: el contenido pasado en " \
-                      "#{address} no aparece.\nSalida obtenida:\n#{filled}"
+                      "#{where} can be replaced but not filled in: the content passed at " \
+                      "#{address} does not appear.\nOutput:\n#{filled}"
     end
 
   end

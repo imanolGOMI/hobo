@@ -65,7 +65,7 @@ Rapid::Tag.include(HoboRapid::Tags::ViewSupport)
 # to `<view-content>`, which is the polymorphic one. DRYML had the same pair.
 Rapid.define(:view, :attrs => [:if_blank, :inline, :block, :no_wrapper, :truncate, :force, :html]) do
   unless attributes[:force] || can_view?
-    raise HoboRapid::PermissionDenied, "no se puede ver el campo '#{this_field}'"
+    raise HoboRapid::PermissionDenied, "the field '#{this_field}' cannot be seen"
   end
 
   # A blank value never reaches the type view -- there is nothing to paint and

@@ -32,7 +32,7 @@ module Hobo
       end
 
       def tell_about_the_migration
-        say "Ahora: bin/rails generate hobo:migration", :green
+        say "Next: bin/rails generate hobo:migration", :green
       end
 
       private

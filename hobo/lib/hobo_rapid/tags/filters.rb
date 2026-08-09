@@ -17,6 +17,7 @@
 # collection through Ransack.
 
 require "rapid"
+require "hobo_rapid/translation"
 require "hobo_rapid/tags/views"
 # A menu over a belongs_to is an association question -- who may be seen, and
 # what a record is called in a list -- so the answers come from there.
@@ -94,10 +95,10 @@ Rapid.define(:search_filter, :attrs => [:fields, :label, :placeholder, :button_l
 
     tag("input", { :type => "search", :name => "q[#{key}]", :value => value,
                    :class => "form-control form-control-sm",
-                   :placeholder => attributes[:placeholder] || "Buscar" }, :input)
+                   :placeholder => attributes[:placeholder] || t(:"filters.search", "Search") }, :input)
 
     tag("button", { :type => "submit", :class => "btn btn-sm btn-outline-secondary" }, :submit) do
-      text(attributes[:button_label] || "Buscar")
+      text(attributes[:button_label] || t(:"filters.search", "Search"))
     end
 
     # Only when there is something to clear. A button that does nothing is a
@@ -105,7 +106,7 @@ Rapid.define(:search_filter, :attrs => [:fields, :label, :placeholder, :button_l
     if value.to_s.present?
       tag("a", { :href => "?#{other_filters(key).map { |k, v| "q[#{k}]=#{CGI.escape(v.to_s)}" }.join('&')}",
                  :class => "btn btn-sm btn-link" }, :clear) do
-        text(attributes[:clear_label] || "Limpiar")
+        text(attributes[:clear_label] || t(:"filters.clear", "Clear"))
       end
     end
   end
@@ -152,7 +153,7 @@ Rapid.define(:filter_menu, :attrs => [:field, :param, :options, :label, :all_lab
 
     tag("select", { :name => "q[#{key}]", :class => "form-select form-select-sm",
                     :"data-action" => "change->rapid-autosubmit#submit" }, :select) do
-      tag("option", { :value => "" }) { text(attributes[:all_label] || "Todos") }
+      tag("option", { :value => "" }) { text(attributes[:all_label] || t(:"filters.all", "All")) }
       choices.each do |label, value|
         selected = { :selected => true } if value.to_s == chosen.to_s
         tag("option", { :value => value }.merge(selected || {})) { text label }
@@ -163,7 +164,7 @@ Rapid.define(:filter_menu, :attrs => [:field, :param, :options, :label, :all_lab
     # controller takes it away when it connects.
     tag("button", { :type => "submit", :class => "btn btn-sm btn-outline-secondary",
                     :"data-rapid-autosubmit-target" => "fallback" }, :submit) do
-      text "Filtrar"
+      text t(:"filters.filter", "Filter")
     end
   end
 end

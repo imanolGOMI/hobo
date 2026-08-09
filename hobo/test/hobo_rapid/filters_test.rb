@@ -66,8 +66,8 @@ class FiltersTest < Minitest::Test
 
   # A button that does nothing is a button you learn to ignore.
   def test_there_is_nothing_to_clear_until_there_is
-    refute_includes painted(:search_filter), "Limpiar"
-    assert_includes painted(:search_filter, {}, :q => { "title_cont" => "blade" }), "Limpiar"
+    refute_includes painted(:search_filter), "Clear"
+    assert_includes painted(:search_filter, {}, :q => { "title_cont" => "blade" }), "Clear"
   end
 
   # --- <filter-menu> -----------------------------------------------------------

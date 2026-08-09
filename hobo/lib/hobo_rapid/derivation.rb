@@ -16,6 +16,7 @@
 # as a syntax error in a file nobody wrote.
 
 require "rapid"
+require "hobo_rapid/translation"
 require "hobo_rapid/tags/views"
 require "hobo_rapid/tags/inputs"
 require "hobo_rapid/tags/associations"
@@ -290,14 +291,15 @@ module HoboRapid
                   tag("div") do
                     tag("h2", {}, :heading) { text plural }
                     tag("p", { :class => "count text-secondary mb-0" }, :count) do
-                      text(records.length == 1 ? "1 #{singular.downcase}" : "#{records.length} #{plural.downcase}")
+                      text(records.length == 1 ? t(:"index.count_one", "1 %{name}", :name => singular.downcase)
+                                               : t(:"index.count", "%{count} %{name}", :count => records.length, :name => plural.downcase))
                     end
                   end
 
                   new_path = new_path_for(model)
                   if new_path
                     tag("a", { :href => new_path, :class => "btn btn-primary" }, :new_link) do
-                      text "Nuevo #{singular.downcase}"
+                      text t(:"index.new_link", "New %{name}", :name => singular.downcase)
                     end
                   end
                 end
@@ -328,7 +330,7 @@ module HoboRapid
                         columns.each do |field|
                           tag("th", {}, :"#{field}_heading") { text HoboRapid::Derivation.label_for(model, field) }
                         end
-                        tag("th", { :class => "actions" }, :actions_heading) { text "Acciones" } if with_actions
+                        tag("th", { :class => "actions" }, :actions_heading) { text t(:"index.actions_heading", "Actions") } if with_actions
                       end
                     end
 
@@ -410,7 +412,9 @@ module HoboRapid
       def derive_form_page(model)
         Rapid.define_for(:form_page, model) do
           new_record = this.respond_to?(:new_record?) && this.new_record?
-          title = "#{new_record ? 'Nuevo' : 'Editar'} #{model.name.demodulize.underscore.humanize.downcase}"
+          name = model.name.demodulize.underscore.humanize.downcase
+          title = new_record ? t(:"forms.new_title", "New %{name}", :name => name)
+                             : t(:"forms.edit_title", "Edit %{name}", :name => name)
 
           in_page(title) do
             tag("div", { :class => "form-page #{model.name.demodulize.underscore}" }, :body) do
@@ -431,7 +435,7 @@ module HoboRapid
 
                 tag("div", { :class => "actions" }, :actions) do
                   tag("button", { :type => "submit", :class => "btn btn-primary" }, :submit) do
-                    text(new_record ? "Crear" : "Guardar")
+                    text(new_record ? t(:"actions.create", "Create") : t(:"actions.save", "Save"))
                   end
                 end
               end
@@ -475,7 +479,7 @@ Rapid.define(:record_actions, :attrs => [:style]) do
   tag("div", { :class => "record-actions" }, :actions) do
     if edit && editable_here?
       tag("a", { :href => edit, :class => buttons ? "btn btn-secondary" : "action-edit" }, :edit) do
-        text(buttons ? "Editar" : "\u270E")
+        text(buttons ? t(:"actions.edit", "Edit") : "\u270E")
       end
     end
 
@@ -486,8 +490,8 @@ Rapid.define(:record_actions, :attrs => [:style]) do
         param(:authenticity_token) { authenticity_token_field }
         tag("input", { :type => "hidden", :name => "_method", :value => "delete" })
         tag("button", { :type => "submit", :class => buttons ? "btn btn-outline-danger" : "action-delete",
-                        :"data-turbo-confirm" => "Seguro?" }, :delete) do
-          text(buttons ? "Borrar" : "\u2716")
+                        :"data-turbo-confirm" => t(:"actions.confirm_delete", "Are you sure?") }, :delete) do
+          text(buttons ? t(:"actions.delete", "Delete") : "\u2716")
         end
       end
     end

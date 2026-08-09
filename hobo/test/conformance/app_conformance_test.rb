@@ -248,7 +248,7 @@ class AppConformanceTest < Minitest::Test
     skip "necesita una aplicacion sin usuarios" unless ENV["HOBO_APP_FRESH"]
     @page.visit("/")
 
-    assert @page.has_button?("Register Administrator") || @page.has_content?("administrator"),
+    assert @page.has_button?("Register administrator") || @page.has_content?("administrator"),
            "una aplicacion recien creada tiene que ofrecer crear el primer usuario"
   end
 

@@ -9,6 +9,7 @@
 # second theme does not have to reimplement them to keep working.
 
 require "rapid"
+require "hobo_rapid/translation"
 require "hobo_rapid/tags/views"
 require "hobo_rapid/helper"
 
@@ -65,7 +66,9 @@ Rapid.define(:error_messages) do
 
   tag("section", { :class => "error-messages", :role => "alert" }, :errors) do
     tag("h2", {}, :heading) do
-      text(count == 1 ? "1 error impidio guardar #{model}" : "#{count} errores impidieron guardar #{model}")
+      text(count == 1 ? t(:"errors.one", "1 error stopped this %{name} from being saved", :name => model)
+                      : t(:"errors.many", "%{count} errors stopped this %{name} from being saved",
+                          :count => count, :name => model))
     end
     tag("ul", {}, :list) do
       errors.to_a.each { |message| tag("li", {}, :item) { text message.to_s } }
@@ -169,7 +172,7 @@ Rapid.define(:session_links) do
       # `path_for` belongs to the derivation engine; the structural tags must
       # work without it, so they ask before using it.
       path = respond_to?(:path_for) ? path_for(user) : nil
-      label = "Logged in as #{user_label(user)}"
+      label = t(:"session.logged_in_as", "Logged in as %{name}", :name => user_label(user))
       if path
         tag("a", { :class => "nav-link", :href => path }, :link) { text label }
       else
@@ -182,13 +185,13 @@ Rapid.define(:session_links) do
         tag("form", { :method => "post", :action => session, :class => "d-inline" }, :form) do
           param(:authenticity_token) { authenticity_token_field }
           tag("input", { :type => "hidden", :name => "_method", :value => "delete" })
-          tag("button", { :type => "submit", :class => "btn btn-link nav-link" }, :button) { text "Log out" }
+          tag("button", { :type => "submit", :class => "btn btn-link nav-link" }, :button) { text t(:"session.log_out", "Log out") }
         end
       end
     end
   elsif new_session
     tag("li", { :class => "nav-item" }, :log_in) do
-      tag("a", { :class => "nav-link", :href => new_session }, :link) { text "Log in" }
+      tag("a", { :class => "nav-link", :href => new_session }, :link) { text t(:"session.log_in", "Log in") }
     end
   end
 end
@@ -226,10 +229,10 @@ Rapid.define(:dev_user_changer, :attrs => [:limit]) do
 
   tag("form", { :method => "get", :action => action, :class => "dev-user-changer d-inline" }, :form) do
     tag("select", { :name => field, :class => "form-select form-select-sm",
-                    :"aria-label" => "Cambiar de usuario",
+                    :"aria-label" => t(:"session.change_user", "Change user"),
                     :"data-controller" => "rapid-autosubmit",
                     :"data-action" => "change->rapid-autosubmit#submit" }, :select) do
-      tag("option", { :value => "" }) { text "Guest" }
+      tag("option", { :value => "" }) { text t(:"session.guest", "Guest") }
       people.each do |person|
         value = person.send(field).to_s
         selected = { :selected => true } if current && current.id == person.id

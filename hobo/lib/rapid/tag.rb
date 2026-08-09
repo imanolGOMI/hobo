@@ -169,8 +169,8 @@ module Rapid
       end
 
       if reached && !reached[0]
-        raise ArgumentError, "prepend-#{exposed_as} / append-#{exposed_as} no llegaron a ninguna " \
-                             "parte: <#{name}> no pinta el contenido que se le pasa"
+        raise ArgumentError, "prepend-#{exposed_as} / append-#{exposed_as} went nowhere: " \
+                             "<#{name}> does not paint the content it is given"
       end
       nil
     end
@@ -213,8 +213,8 @@ module Rapid
     # The three kinds of param site: a bare `param`, an element carrying one,
     # and a tag call exposed with `as:`. Only the last can take nested params,
     # because only it has another tag's params to pass them to.
-    SITES = { :bare => "no tiene elemento", :element => "es un elemento",
-              :void_element => "es un elemento vacio" }.freeze
+    SITES = { :bare => "has no element of its own", :element => "is an element",
+              :void_element => "is a void element" }.freeze
 
     def parameter_for(name, kind)
       value = @params[name]
@@ -222,8 +222,8 @@ module Rapid
 
       parameter = Parameter.wrap(value)
       if parameter.nested? && kind != :call
-        raise ArgumentError, "el param #{name.inspect} #{SITES[kind]}, no es una llamada a " \
-                             "otro tag, asi que no admite params anidados"
+        raise ArgumentError, "param #{name.inspect} #{SITES[kind]} and is not a call to " \
+                             "another tag, so it takes no nested params"
       end
       parameter
     end
@@ -299,8 +299,8 @@ module Rapid
     def emit_element(name, attrs)
       if VOID_ELEMENTS.include?(name.to_s)
         body = block_given? ? Context.capture { yield } : ""
-        raise ArgumentError, "<#{name}> es un elemento vacio y no puede llevar contenido; " \
-                             "para poner algo en su sitio hace falta `replace`" unless body.empty?
+        raise ArgumentError, "<#{name}> is a void element and cannot carry content; " \
+                             "putting something in its place needs `replace`" unless body.empty?
         Context.buffer << "<#{name}#{format_attrs(attrs)}>"
         return nil
       end

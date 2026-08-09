@@ -57,7 +57,7 @@ class ParamContractTeethTest < Minitest::Test
     end
 
     assert_includes failure.message, "inner_heading"
-    assert_includes failure.message, "no se puede sobreescribir desde fuera"
+    assert_includes failure.message, "cannot be overridden from outside"
   end
 
   def test_the_same_tags_on_the_real_runtime_pass
@@ -72,7 +72,7 @@ class ParamContractTeethTest < Minitest::Test
                                                   :inner_heading => "supuestamente inalcanzable" })
     end
 
-    assert_includes failure.message, "quita la excepcion"
+    assert_includes failure.message, "drop the exception"
   end
 
   def test_an_exception_for_a_param_nobody_declares_fails
@@ -276,7 +276,7 @@ class RuntimeContractTest < Minitest::Test
                    :box => Rapid.parameter(:params => { :heading => Rapid.markup { text "x" } }))
     end
 
-    assert_includes error.message, "no admite params anidados"
+    assert_includes error.message, "takes no nested params"
   end
 
   def test_every_param_reachable_through_two_levels_is_overridable
