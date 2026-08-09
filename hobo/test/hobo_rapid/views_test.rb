@@ -174,4 +174,44 @@ class RichTypeViewsTest < Minitest::Test
     end
   end
 
+  # --- a record is a place ------------------------------------------------------
+  #
+  # A `belongs_to` painted as its name and nothing else is a dead end: the
+  # category of a film, the project of a story, sitting in every table and
+  # leading nowhere. Hobo 2 linked them; this had lost it.
+  class Category
+    attr_accessor :id, :name
+    def initialize(id, name) = (@id, @name = id, name)
+    def self.name_attribute = :name
+    def viewable_by?(_user, _field = nil) = true
+  end
+
+  def with_routes(path)
+    Rapid::Tag.class_eval do
+      alias_method :path_for_without_stub, :path_for if method_defined?(:path_for)
+      define_method(:path_for) { |_record| path }
+    end
+    yield
+  ensure
+    Rapid::Tag.class_eval do
+      remove_method :path_for
+      alias_method :path_for, :path_for_without_stub if method_defined?(:path_for_without_stub)
+    end
+  end
+
+  def test_a_record_links_to_itself
+    html = with_routes("/categories/1") { Rapid.render(:view_content, {}, :this => Category.new(1, "Drama")) }
+
+    assert_includes html, %(<a href="/categories/1")
+    assert_includes html, "Drama"
+  end
+
+  # And where there is no route -- the catalogue outside Rails, a model with no
+  # pages -- it still paints the name. A link that cannot exist is not an error.
+  def test_and_paints_its_name_when_there_is_nowhere_to_go
+    html = Rapid.render(:view_content, {}, :this => Category.new(1, "Drama"))
+
+    assert_equal "Drama", html
+  end
+
 end

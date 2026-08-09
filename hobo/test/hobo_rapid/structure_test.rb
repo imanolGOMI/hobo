@@ -184,6 +184,58 @@ class StructureTest < Minitest::Test
     refute_includes painted, "Sign up"
   end
 
+  # --- searching the whole site ---------------------------------------------------
+  #
+  # Hobo 2 had a box in the bar that looked for the words in every model. The
+  # engine that does the looking is still here (`Hobo.find_by_search`); what was
+  # missing was somewhere to type and somewhere to read.
+
+  def test_there_is_no_box_when_the_application_has_no_search
+    assert_empty Rapid.render(:search_box).strip
+  end
+
+  def test_the_box_appears_when_the_route_does
+    painted = with_route(:site_search_path, "/search") { Rapid.render(:search_box) }
+
+    assert_includes painted, %(action="/search")
+    assert_includes painted, %(name="query")
+  end
+
+  # And it says what you last looked for, so the page you land on is about the
+  # question you asked.
+  def test_the_box_remembers_the_question
+    painted = with_route(:site_search_path, "/search") do
+      HoboRapid.with_request(nil, nil, {}, { "query" => "gatos" }) { Rapid.render(:search_box) }
+    end
+
+    assert_includes painted, %(value="gatos")
+  end
+
+  # --- and the answers ---------------------------------------------------------
+
+  Found = Struct.new(:id, :name) do
+    def self.name_attribute = :name
+    def viewable_by?(_user, _field = nil) = true
+  end
+
+  def test_the_results_come_grouped_by_model
+    painted = Rapid.render(:search_results, { :query => "gatos",
+                                              :results => { "Story" => [Found.new(1, "Una historia")],
+                                                            "Category" => [Found.new(2, "Gatos"), Found.new(3, "Otra")] } })
+
+    assert_includes painted, "Story (1)"
+    assert_includes painted, "Category (2)"
+    assert_includes painted, "Una historia"
+  end
+
+  # A search that found nothing says so. A page that answers an empty page to a
+  # question looks broken.
+  def test_nothing_found_is_an_answer_too
+    painted = Rapid.render(:search_results, { :query => "loquesea", :results => {} })
+
+    assert_includes painted, "Nothing matched"
+  end
+
   # The user changer is a way to become anybody. Outside development it must not
   # exist -- not hidden, not disabled: absent.
   def test_the_user_changer_paints_nothing_outside_development

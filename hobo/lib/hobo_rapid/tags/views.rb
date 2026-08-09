@@ -98,12 +98,30 @@ end
 # itself**, through `to_html`. The catalogue does not need a view per rich type;
 # the type carries it, which is what "tipos ricos que viajan a la vista" means.
 Rapid.define(:view_content) do
+  name_attribute = this.class.respond_to?(:name_attribute) && this.class.name_attribute
+
   if this.respond_to?(:to_html)
     raw this.to_html
-  elsif this.class.respond_to?(:name_attribute) && this.class.name_attribute
+  elsif name_attribute
     # A record paints as its name, not as its inspect. Which field is its name
     # is something the model already said, so nobody has to say it again.
-    text this.send(this.class.name_attribute).to_s
+    #
+    # **And as a link**, which is what Hobo 2 did and this had lost: a record is
+    # a place, and painting its name without a way to get there is showing
+    # somebody a door and not letting them open it. It is the `belongs_to` of
+    # every table -- the category of a film, the project of a story -- and it
+    # was a dead end on every page.
+    #
+    # `path_for` belongs to the derivation engine, and the catalogue has to
+    # paint without it (that is what the piece tests do), so it asks first.
+    path = respond_to?(:path_for) ? path_for(this) : nil
+    name = this.send(name_attribute).to_s
+
+    if path
+      tag("a", { :href => path, :class => "record-link" }, :link) { text name }
+    else
+      text name
+    end
   else
     text this.to_s
   end

@@ -103,6 +103,7 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
           if nav_location.blank? || nav_location == "top"
             call_tag(:main_nav, { :class => "nav main-nav", :current => attributes[:title] }, :as => :main_nav)
           end
+          call_tag(:search_box, {}, :as => :search_box)
           call_tag(:account_nav, {}, :as => :account_nav)
         end
       end

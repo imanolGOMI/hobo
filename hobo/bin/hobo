@@ -17,7 +17,7 @@ TEMPLATE = File.expand_path("../lib/generators/hobo/app_template.rb", __dir__)
 # `rails new` sees them -- an unknown flag there is an error -- and handed to the
 # template through the environment. Without a flag the template asks, and with
 # no terminal to ask in it takes the default.
-HOBO_FLAGS = /\A--(no-)?(theme|activation-email|invite-only|private|admin|wizard)\z|\A--(locale|front|admin-name|theme)=|\A--(skip|generate)-migration\z/
+HOBO_FLAGS = /\A--(no-)?(theme|activation-email|invite-only|private|admin|search|wizard)\z|\A--(locale|front|admin-name|theme)=|\A--(skip|generate)-migration\z/
 
 command = ARGV.shift
 
@@ -52,6 +52,8 @@ else
       --locale=es            El idioma de la aplicacion. Hobo trae sus cadenas
                              en ingles y en espanol.
       --admin                Un subsitio de administracion en /admin.
+      --search               Una caja de busqueda en la barra, que busca en
+                             todos los modelos del sitio.
       --front=home           Nombre del controlador de portada.
       --admin-name=staff     Nombre del subsitio de administracion.
       --skip-migration       No generar la migracion inicial (o

@@ -208,6 +208,63 @@ Rapid.define(:session_links) do
   end
 end
 
+# The box that searches the whole site.
+#
+# Hobo 2 had it in the bar of every page, and it looked for the words in every
+# model that has search columns -- `Hobo.find_by_search`, which is still here
+# and still does that. What was missing was the box and the page to show the
+# answers on.
+#
+# **The route is the switch**, as everywhere else: an application that has not
+# drawn `site_search` has no box, and nobody has to remember a flag.
+Rapid.define(:search_box, :attrs => [:placeholder, :label]) do
+  action = route_path(:site_search_path)
+  next unless action
+
+  tag("form", { :method => "get", :action => action, :class => "site-search" }, :form) do
+    tag("label", { :for => "site-search-query", :class => "form-label" }, :label) do
+      text(attributes[:label] || t(:"search.label", "Search"))
+    end
+    tag("input", { :type => "search", :name => "query", :id => "site-search-query",
+                   :class => "form-control",
+                   :value => HoboRapid.query_parameters["query"],
+                   :placeholder => attributes[:placeholder] || t(:"search.placeholder", "Search") }, :input)
+    tag("button", { :type => "submit", :class => "action search" }, :submit) do
+      text t(:"search.button", "Search")
+    end
+  end
+end
+
+# What a search answers with: the records it found, in their own groups, each
+# one painted by whatever `<card>` its model has.
+#
+# Grouped by model because the question was asked of the whole site: "seven
+# films and one category" is the answer, and a flat list of eight things is not.
+Rapid.define(:search_results, :attrs => [:query, :results]) do
+  results = attributes[:results] || {}
+  query = attributes[:query].to_s
+
+  tag("div", { :class => "search-results" }, :body) do
+    tag("h1", {}, :heading) { text t(:"search.heading", "Search: %{query}", :query => query) }
+
+    if results.empty?
+      tag("p", { :class => "empty" }, :empty) { text t(:"search.nothing", "Nothing matched.") }
+      next
+    end
+
+    results.each do |model_name, records|
+      tag("section", { :class => "search-group" }, :"#{model_name.underscore}_group") do
+        tag("h2", {}, :"#{model_name.underscore}_heading") do
+          text "#{model_name} (#{records.length})"
+        end
+        Array(records).each do |record|
+          with_this(record) { call_tag(:card, {}, :as => :card) }
+        end
+      end
+    end
+  end
+end
+
 # The user changer: become somebody else without logging out and in again.
 #
 # It is the tool that made Hobo's permissions worth having -- you write

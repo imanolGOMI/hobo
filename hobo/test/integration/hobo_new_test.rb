@@ -402,6 +402,42 @@ class HoboNewTest < Minitest::Test
     end
   end
 
+  # `hobo new --search`: the box in the bar that looks in every model.
+  #
+  # The engine is Hobo 2's and untouched -- `Hobo.find_by_search` asks every
+  # model that declares search columns, or that has one of the ones Hobo guesses
+  # (name, title, body, description). What this checks is the loop: type in the
+  # bar, land on a page, and find the thing.
+  def test_hobo_new_can_search_the_whole_site
+    Dir.mktmpdir do |tmp|
+      app = File.join(tmp, "buscadora")
+      run_command(tmp, "#{ROOT}/hobo/bin/hobo new buscadora --search " \
+                       "--skip-git --skip-test --skip-system-test --skip-javascript " \
+                       "--skip-hotwire --skip-jbuilder --skip-action-cable " \
+                       "--skip-action-mailbox --skip-action-text --skip-active-storage --skip-bootsnap")
+
+      File.write(File.join(app, "tmp", "seed.rb"), <<~RUBY)
+        Story.create!(:title => "Historia de gatos", :body => "Maullidos")
+        Story.create!(:title => "Otra cosa", :body => "Perros")
+      RUBY
+      run_command(app, "bin/rails runner tmp/seed.rb")
+
+      with_server(app, 3093) do |http|
+        page = Browser.new(http)
+
+        # The box is in the bar of every page, because the route exists.
+        index = page.get("/stories")
+        assert_includes index, %(name="query"), "la barra tiene que ofrecer la busqueda"
+
+        found = page.get("/search?query=gatos")
+        assert_includes found, "Historia de gatos"
+        refute_includes found, "Otra cosa", "la busqueda no puede traer lo que no coincide"
+
+        assert_includes page.get("/search?query=zzzz"), "Nothing matched"
+      end
+    end
+  end
+
   # A browser: a cookie jar and the authenticity token of the page it is on.
   class Browser
 

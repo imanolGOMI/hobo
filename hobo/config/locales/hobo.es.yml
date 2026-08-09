@@ -49,6 +49,12 @@ es:
       signup: "Crear una cuenta"
       signup_blurb: "Elige un correo y una contraseña."
       signup_button: "Darse de alta"
+    search:
+      label: "Buscar"
+      placeholder: "Buscar en el sitio"
+      button: "Buscar"
+      heading: "Busqueda: %{query}"
+      nothing: "No hay nada que coincida."
     errors:
       one: "1 error impidió guardar %{name}"
       many: "%{count} errores impidieron guardar %{name}"

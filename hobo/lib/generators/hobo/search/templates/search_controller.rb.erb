@@ -1,0 +1,37 @@
+class SearchController < ApplicationController
+
+  # Searching is not editing: whoever may see a record may look for it, and
+  # `viewable_by?` decides record by record below.
+  allow_unauthenticated_access if respond_to?(:allow_unauthenticated_access)
+
+  # Rails 8 resumes the session inside `require_authentication`, and the line
+  # above skips it -- so without this nobody would be logged in here, and every
+  # permission question below would be answered for a stranger.
+  before_action :resume_the_session
+
+  def index
+    query = params[:query].to_s.strip
+
+    # `Hobo.find_by_search` asks every model that declares search columns --
+    # `set_search_columns :title, :body`, or the guess Hobo makes from the ones
+    # a table has. It answers a hash of model name => records.
+    found = query.present? ? Hobo.find_by_search(query) : {}
+
+    # And then the permissions, one by one: a search must not be a way to find
+    # out that something exists.
+    visible = found.transform_values { |records| records.select { |r| r.try(:viewable_by?, Current.user) != false } }
+                   .reject { |_model, records| records.empty? }
+
+    render :html => rapid_tag(:search_results, nil, :query => query, :results => visible),
+           :layout => false
+  end
+
+  private
+
+  def resume_the_session
+    send(:resume_session) if Current.session.nil? && respond_to?(:resume_session, true)
+  rescue StandardError
+    nil
+  end
+
+end

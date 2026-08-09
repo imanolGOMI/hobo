@@ -36,6 +36,9 @@ module Hobo
                    :desc => "Como se llama el subsitio de administracion"
       class_option :admin_theme, :type => :string,
                    :desc => "El tema del subsitio, si quieres otro"
+      class_option :search, :type => :boolean,
+                   :desc => "Una caja de busqueda en la barra, que busca en todo el sitio"
+
       class_option :private, :type => :boolean,
                    :desc => "Todo el sitio detras del login"
       class_option :locale, :type => :string,
@@ -56,6 +59,7 @@ module Hobo
         @activation_email = @invite_only ? false : yes_or_no?(:activation_email, "El alta tiene que confirmarse por correo?", false)
         @admin = yes_or_no?(:admin, "Quieres un subsitio de administracion?", false)
         @admin_name = @admin ? named(:admin_name, "Como se llama el subsitio de administracion?", "admin") : "admin"
+        @search = yes_or_no?(:search, "Quieres una caja de busqueda en la barra?", false)
         @private = yes_or_no?(:private, "Todo el sitio detras del login? (si no, cada modelo decide quien ve sus paginas)", false)
         @locale = named(:locale, "Idioma de la aplicacion?", "en")
         @front = named(:front, "Como se llama el controlador de la portada?", "front")
@@ -128,6 +132,13 @@ module Hobo
       # Run again and it picks up the models that appeared since: a subsite is a
       # controller per resource, and resources arrive over time. Thor says
       # "identical" for the ones already there.
+      def the_search
+        return unless @search
+        say_step "La busqueda"
+        return say("  ya hay busqueda") if routes.include?("site_search")
+        invoke "hobo:search"
+      end
+
       def the_admin_subsite
         return unless @admin
         say_step "El subsitio de administracion"
