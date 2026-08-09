@@ -2143,7 +2143,7 @@ Una aplicación Rails 8 generada con `hobo new`:
 - **Filtros**: `<search-filter>` y `<filter-menu>` sobre Ransack, que suman en
   vez de turnarse.
 
-**Pruebas: 448 en **una** suite (+11 en la del plugin), todas en verde, + la
+**Pruebas: 455 en **una** suite (+11 en la del plugin), todas en verde, + la
 suite de conformidad en navegador (`cd hobo && HOBO_APP=~/hobo_apps/hobo_luz rake
 test`). El banco se regenera con el `hobo new` de hoy: tiene que ser lo que sale
 del generador, no lo que salía hace tres commits.**
@@ -2612,6 +2612,15 @@ Visto en las capturas, ordenado por lo que más se nota:
     invisible: gana el último que carga y nadie avisa. La tabla dice quién define
     cada tag y marca `shadowed` lo que ya no pinta nada. Es la lección de la
     fusión convertida en herramienta.
+27. **Un subsitio es una carpeta de controladores** (afina la decisión 14). No se
+    registra en ningún sitio: `app/controllers/admin/` con algo dentro *es* el
+    subsitio `admin`, y sus rutas las dibuja `hobo_routes`. Lo que el generador
+    escribe son controladores y una regla de quién entra.
+26. **Un modelo posee su tabla solo si la describe.** `fields do ... end` es un
+    modelo diciendo lo que tiene, y solo entonces el generador de migraciones
+    propone borrar lo que no está. `add_fields do ... end` es Hobo añadiendo a la
+    tabla de otro: añade y no toca el resto. Es lo que hace seguro meter Hobo en
+    una aplicación que ya existe.
 25. **El tema es una pregunta, no un hecho** (revisa la decisión 13). Sigue
     viniendo dentro de la gema y sigue siendo lo que sale por defecto, pero lo
     carga un initializer y la aplicación puede decir `config.hobo.theme = false`:
@@ -2640,9 +2649,9 @@ Si alguien contesta que no a todo, sale una aplicación plana y el diseño lo po
 | Nombre del controlador de portada | `hobo:front_page` ✔ |
 | Modelo de usuario, sesión, contraseñas | Rails 8 (decisión 15) ✔ |
 | Alta de usuario | `hobo:signup` ✔ |
-| **¿Activación por correo?** | **falta** |
-| **¿Solo por invitación?** | **falta** |
-| **¿Subsitio de administración?** | **falta** |
+| ¿Activación por correo? | **`hobo new --activation-email`** ✔ |
+| ¿Solo por invitación? | **`hobo new --invite-only`** ✔ |
+| ¿Subsitio de administración? | **`rails generate hobo:admin_subsite`** ✔ |
 | ¿Sitio privado? | falta (un `before_action`) |
 | Migración inicial | `hobo:migration` ✔ |
 | Locales / idioma por defecto | parcial: hay `hobo.es.yml`; falta el generador |
@@ -2666,6 +2675,79 @@ quien vuelve con ella puede dar el siguiente paso.
 
 Ninguna prueba podía verlo: la suite probaba estados y transiciones y **nunca
 había pedido una clave**.
+
+### Las cuentas: alta, activación e invitación
+
+`bin/rails generate hobo:signup` escribe el alta, y **las dos preguntas del
+asistente viajan desde `hobo new`**, que es donde se preguntaban:
+
+```sh
+hobo new blog                      # alta publica, cuenta activa al momento
+hobo new blog --activation-email   # se da de alta y confirma por correo
+hobo new blog --invite-only        # nadie se da de alta: te invitan
+```
+
+Con `--invite-only` **la ruta de alta no se dibuja**, así que la página no existe
+y la barra deja de ofrecerla sola: el interruptor es la ruta, no una bandera.
+
+Todo va montado sobre los **lifecycles** (pieza 5), que es para lo que existen:
+las reglas —quién puede darse de alta, qué pide el alta, en qué estado deja la
+cuenta, quién puede encenderla— viven en el modelo, no en el controlador.
+
+**Tres trampas de los lifecycles, que solo se aprenden usándolos:**
+
+| Qué | Cómo se ve |
+|---|---|
+| **Dentro de un paso solo pasan los atributos que el paso declara** | Poner la contraseña de un invitado en un callback se perdía por el camino, y el registro moría con «Password can't be blank». Se pone el *digest*, que además es lo honesto: no hay contraseña hasta que la elige quien acepta |
+| **El contexto de validación es el nombre del paso**, no `:create` | Es una característica —deja escribir `validates :x, :on => :signup`— y hace que un `before_validation :on => :create` no se dispare nunca ahí |
+| **Una transición responde lo que responda su bloque**, y un paso sin bloque responde `nil` | `if transicion!` lee como fallo un movimiento que salió perfecto. Si funcionó, se le pregunta al registro |
+
+Y un fallo del producto: **el primer usuario quedaba sin activar y no podía
+entrar** —una puerta cerrada con la llave dentro—. La portada lo crea
+directamente, sin pasar por ningún paso, así que el estado por defecto del
+lifecycle no es el suyo. Ahora queda activo **y administrador**, como en Hobo 2,
+y eso hace verdad lo que la portada llevaba prometiendo desde el principio
+(«You are now the site administrator»).
+
+### Hobo no borra columnas de una tabla que no describió
+
+Al montar la activación sobre el `User` de Rails 8, `hobo:migration` ofrecía
+**borrar `email_address` y `password_digest`**, y preguntaba por terminal para
+confirmarlo: en un guion esa pregunta no la contesta nadie —la prueba de
+integración se quedó colgada veinte minutos y parecía lentitud— y delante de una
+persona es una pregunta de más.
+
+**Un modelo posee su tabla solo si la describe**, es decir si escribe su bloque
+`fields do`. Cuando Hobo solo *añade* a la tabla de otro —el lifecycle poniendo
+su estado, o `include Hobo::Model` en un modelo de una aplicación que ya
+existía— lo que Hobo no declaró es de otro: **añadir sí, borrar no**. Y para
+decirlo en voz alta hay `add_fields do ... end`.
+
+Esto vale para toda la historia de adopción, no solo para el usuario: el
+`EventPrice` de la app de Rails 8 de Imanol habría recibido una migración
+proponiendo vaciar su tabla.
+
+### El subsitio de administración es una carpeta
+
+`rails generate hobo:admin_subsite` escribe el controlador base —para
+administradores—, uno por recurso que ya tenga página, y el campo
+`administrator` si no estaba. Y poco más, porque **un subsitio ya no se registra
+en ningún sitio**: `Hobo.subsites` es «una carpeta bajo `app/controllers` con un
+controlador dentro», `hobo_routes` le pone su prefijo y las páginas son las
+derivadas de siempre. En Hobo 2 esto escribía además un taglib DRYML por
+subsitio, una hoja de estilos, un manifiesto de JavaScript y un tema.
+
+> **Rails 8 resucita la sesión dentro de `require_authentication`**, y los
+> controladores de Hobo se saltan ese filtro a propósito (para que una página
+> pública siga siendo pública). Es la tercera vez en el día que ese detalle
+> muerde en un sitio distinto: la portada, el alta y ahora un `before_action`
+> que echaba a la administradora de su propio subsitio.
+
+### Y una lección sobre las pruebas
+
+Las órdenes de generadores en las pruebas van con **la entrada estándar
+cerrada**. Una pregunta que nadie contesta es una suite colgada, no una suite que
+falla, y las dos se parecen mucho a las nueve de la noche.
 
 ## Lo siguiente, por orden
 
