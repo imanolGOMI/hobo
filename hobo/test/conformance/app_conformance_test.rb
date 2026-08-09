@@ -252,4 +252,33 @@ class AppConformanceTest < Minitest::Test
            "una aplicacion recien creada tiene que ofrecer crear el primer usuario"
   end
 
+  # --- and the second, and the third ---------------------------------------------
+  #
+  # Hobo 2 offered signup from the bar, and it is where Agility's own users came
+  # from. Hobo 3 delegates the user to Rails 8, whose generator writes a session
+  # and a password reset and **no registration**, so an application had a way to
+  # make the first person and no way to make anybody else. Nothing failed: the
+  # conformance bench, like every other test here, only ever needed one user.
+
+  def test_the_application_offers_a_way_to_get_an_account
+    @page.visit("/signup")
+
+    assert @page.has_field?("user[email_address]"),
+           "una aplicacion generada tiene que dejar darse de alta, no solo entrar"
+    assert @page.has_field?("user[password]")
+    assert @page.has_field?("user[password_confirmation]")
+  end
+
+  # And it is offered where a stranger will look for it: the bar, next to the
+  # way in. An account you can only reach by typing the url is an account
+  # nobody makes.
+  def test_the_bar_offers_it_to_a_stranger
+    stranger = Capybara::Session.new(:hobo_conformance)
+    stranger.visit("/")
+
+    assert stranger.has_link?("Sign up"), "la barra tiene que ofrecer darse de alta a quien no ha entrado"
+  ensure
+    stranger&.driver&.quit
+  end
+
 end

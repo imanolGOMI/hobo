@@ -36,6 +36,10 @@ after_bundle do
   # page that lets the first person in without a console.
   generate "authentication"
   generate "hobo:front_page"
+  # Rails' generator writes a session and a password reset and no registration.
+  # Hobo 2 had signup in the bar and an application without it is an application
+  # with exactly one user, forever.
+  generate "hobo:signup"
 
   # Rails renders its own views -- the session form, the password pages -- with
   # the application layout, and that layout knows nothing about the theme. So

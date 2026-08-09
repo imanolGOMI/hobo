@@ -138,6 +138,52 @@ class StructureTest < Minitest::Test
     assert_includes painted, "Logged in as imanol@example.com"
   end
 
+  # --- signing up ---------------------------------------------------------------
+
+  # The other half of the bar. Hobo 2 offered signup next to log in; Hobo 3 lost
+  # it, because Rails' authentication generator writes a session and a password
+  # reset and **no registration**, and the front page covers only the *first*
+  # user. Nothing failed: no test of ours ever needed a second person.
+  #
+  # The route is the switch, so a stranger only sees the offer when the
+  # application has actually drawn one.
+  def with_route(name, path)
+    Rapid::Tag.class_eval do
+      alias_method :route_path_without_stub, :route_path
+      define_method(:route_path) { |route| route == name ? path : nil }
+    end
+    yield
+  ensure
+    Rapid::Tag.class_eval do
+      alias_method :route_path, :route_path_without_stub
+      remove_method :route_path_without_stub
+    end
+  end
+
+  def test_a_stranger_is_offered_a_way_to_get_an_account
+    painted = with_route(:signup_path, "/signup") { Rapid.render(:session_links) }
+
+    assert_includes painted, %(href="/signup")
+    assert_includes painted, "Sign up"
+  end
+
+  def test_and_nothing_is_offered_when_the_application_has_no_signup
+    painted = with_route(:new_session_path, "/session/new") { Rapid.render(:session_links) }
+
+    refute_includes painted, "Sign up"
+  end
+
+  # Somebody already logged in is not offered an account.
+  def test_signing_up_is_not_offered_to_whoever_is_already_in
+    user = Struct.new(:id, :email_address).new(1, "imanol@example.com")
+
+    painted = with_route(:signup_path, "/signup") do
+      HoboRapid.with_request(nil, user) { Rapid.render(:session_links) }
+    end
+
+    refute_includes painted, "Sign up"
+  end
+
   # The user changer is a way to become anybody. Outside development it must not
   # exist -- not hidden, not disabled: absent.
   def test_the_user_changer_paints_nothing_outside_development

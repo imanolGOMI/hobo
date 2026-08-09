@@ -19,6 +19,7 @@ module HoboRapid
       # back nil and every form Hobo painted got 422.
       token = send(:form_authenticity_token) if respond_to?(:form_authenticity_token, true)
       user = send(:current_user) if respond_to?(:current_user, true)
+      user = rails_session_user if user.nil?
 
       # Hobo's `current_user` never answers nil: it answers a `Guest`, an object
       # that says no to everything. That is right for the model layer, which
@@ -43,6 +44,29 @@ module HoboRapid
       HoboRapid.with_request(token, user, messages || {}, query || {}) do
         Rapid.render(name, attributes, :this => this, **params).html_safe
       end
+    end
+
+    private
+
+    # Who Rails says you are, on a controller that never asked Hobo anything.
+    #
+    # A front page or a signup page is a plain `ApplicationController`: it does
+    # not include `Hobo::Controller::Model`, so it has no `current_user` at all,
+    # and it says `allow_unauthenticated_access` -- which in Rails 8 is a
+    # `skip_before_action :require_authentication`, and **resuming the session
+    # happens inside that filter**. So Rails had not looked at the cookie
+    # either.
+    #
+    # Between the two, the bar on the front page said "Log in" to somebody who
+    # had just registered, and creating the first user looked like it had
+    # failed. It had not: the user was in the database and the session row with
+    # it.
+    def rails_session_user
+      return nil unless defined?(::Current)
+      send(:resume_session) if ::Current.try(:session).nil? && respond_to?(:resume_session, true)
+      ::Current.try(:user) || ::Current.try(:session)&.try(:user)
+    rescue StandardError
+      nil
     end
 
   end

@@ -1,6 +1,7 @@
 require "test_helper"
 require "fileutils"
 require "tmpdir"
+require "net/http"
 
 # `hobo new` from end to end: generate an application, migrate it, and ask it
 # for a page.
@@ -72,6 +73,120 @@ class HoboNewTest < Minitest::Test
       assert_includes served, %(<div class="index-page stories">), served
       assert_includes served, "Hobo 2027"
     end
+  end
+
+  # The first five minutes, end to end: arrive at an empty application, become
+  # its administrator, and then have somebody else make an account.
+  #
+  # Against a **real server**, because being logged in is a cookie and cookies
+  # are the thing that in-process request helpers get subtly wrong: an earlier
+  # version of this drove `Rails.application.call` by hand and reported failures
+  # the running application did not have. A test that lies in that direction is
+  # worse than no test.
+  def test_the_first_person_owns_the_application_and_the_next_one_can_sign_up
+    Dir.mktmpdir do |tmp|
+      app = File.join(tmp, "prueba")
+      run_command(tmp, "#{ROOT}/hobo/bin/hobo new prueba " \
+                       "--skip-git --skip-test --skip-system-test --skip-javascript " \
+                       "--skip-hotwire --skip-jbuilder --skip-action-cable " \
+                       "--skip-action-mailbox --skip-action-text --skip-active-storage --skip-bootsnap")
+
+      with_server(app) do |http|
+        jefe = Browser.new(http)
+
+        # Nobody yet: the application asks for its administrator.
+        assert_includes jefe.get("/"), "user[password_confirmation]",
+                        "una aplicacion vacia tiene que ofrecer crear el primer usuario"
+
+        jefe.post("/first-user", "user[email_address]" => "jefe@example.com",
+                                 "user[password]" => "test1234",
+                                 "user[password_confirmation]" => "test1234")
+
+        # Created **and** logged in. Rails 8 resumes the session inside
+        # `require_authentication`, and this page skips that filter, so it used
+        # to end with a new user and a bar that said "Log in".
+        home = jefe.get("/")
+        assert_includes home, "Log out", "quien crea el primer usuario se queda dentro"
+        refute_includes home, "Register administrator",
+                        "con usuarios, la portada ya no ofrece crear el administrador"
+
+        # And somebody else can get an account, which is the half Rails'
+        # authentication generator does not write.
+        otra = Browser.new(http)
+        assert_includes otra.get("/signup"), "user[password_confirmation]",
+                        "tiene que haber una pagina de alta"
+
+        otra.post("/signup", "user[email_address]" => "otra@example.com",
+                             "user[password]" => "test1234",
+                             "user[password_confirmation]" => "test1234")
+
+        assert_includes otra.get("/"), "Log out", "quien se da de alta se queda dentro"
+      end
+    end
+  end
+
+  # A browser: a cookie jar and the authenticity token of the page it is on.
+  class Browser
+
+    def initialize(http)
+      @http = http
+      @cookies = {}
+    end
+
+    def get(path)
+      request = Net::HTTP::Get.new(path)
+      @body = send_request(request)
+    end
+
+    def post(path, params)
+      request = Net::HTTP::Post.new(path)
+      request.set_form_data(params.merge("authenticity_token" => token))
+      body = send_request(request)
+      # A form that works answers with a redirect; one that does not answers
+      # with itself, and the assertion afterwards would blame the wrong thing.
+      raise "el formulario de #{path} no redirigio:\n#{body[0, 500]}" unless @status.start_with?("30")
+      body
+    end
+
+    private
+
+    def token = @body.to_s[/name="authenticity_token" value="([^"]+)"/, 1]
+
+    def send_request(request)
+      request["Cookie"] = @cookies.map { |name, value| "#{name}=#{value}" }.join("; ")
+      response = @http.request(request)
+      @status = response.code
+      Array(response.get_fields("set-cookie")).each do |cookie|
+        name, value = cookie.split(";").first.split("=", 2)
+        @cookies[name] = value
+      end
+      response.body.to_s
+    end
+
+  end
+
+  # Boots the generated application, waits for it to answer, and takes it down.
+  def with_server(app, port = 3099)
+    pid = spawn({ "HOBODEV" => ROOT }, "bin/rails server -p #{port} -b 127.0.0.1",
+                :chdir => app, [:out, :err] => File.join(app, "log", "server.log"))
+    http = Net::HTTP.new("127.0.0.1", port)
+
+    up = 60.times.any? do
+      sleep 1
+      begin
+        http.start
+        true
+      rescue StandardError
+        false
+      end
+    end
+    raise "la aplicacion generada no arranco:\n#{File.read(File.join(app, 'log', 'server.log'))}" unless up
+
+    yield http
+  ensure
+    http&.finish if http&.started?
+    Process.kill("TERM", pid) if pid
+    Process.wait(pid) if pid
   end
 
   private

@@ -194,6 +194,18 @@ Rapid.define(:session_links) do
       tag("a", { :class => "nav-link", :href => new_session }, :link) { text t(:"session.log_in", "Log in") }
     end
   end
+
+  # And the way in for somebody who has no account yet -- **only if the
+  # application has one**. Hobo 2 put signup in the bar; Hobo 3 lost it, because
+  # Rails' authentication generator writes a session and no registration and
+  # nobody noticed the other half was missing. The route is the switch: an
+  # application that does not want people signing up simply does not draw it.
+  signup = route_path(:signup_path)
+  if user.nil? && signup
+    tag("li", { :class => "nav-item" }, :sign_up) do
+      tag("a", { :class => "nav-link", :href => signup }, :link) { text t(:"session.sign_up", "Sign up") }
+    end
+  end
 end
 
 # The user changer: become somebody else without logging out and in again.

@@ -37,6 +37,7 @@ es:
       logged_in_as: "Has entrado como %{name}"
       guest: "Invitado"
       change_user: "Cambiar de usuario"
+      sign_up: "Darse de alta"
     front:
       title: "Inicio"
       welcome: "Bienvenido"
@@ -45,6 +46,9 @@ es:
       password: "Contraseña"
       password_confirmation: "Repite la contraseña"
       register: "Crear administrador"
+      signup: "Crear una cuenta"
+      signup_blurb: "Elige un correo y una contraseña."
+      signup_button: "Darse de alta"
     errors:
       one: "1 error impidió guardar %{name}"
       many: "%{count} errores impidieron guardar %{name}"

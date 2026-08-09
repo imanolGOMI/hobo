@@ -66,17 +66,32 @@ Rapid.define(:front_page, :attrs => [:app_name, :action]) do
   end
 end
 
-# The form that makes the first person the owner of the application.
-Rapid.define(:first_user_form, :attrs => [:action]) do
+# Creating an account: the same form twice.
+#
+# Hobo 2 had two places to make a user and they were both *there*: the front
+# page asked for the site administrator while `User.count == 0`, and after that
+# anybody could sign up at `/users/signup` -- a `create :signup` step of the
+# user's lifecycle, with its link in the bar.
+#
+# Hobo 3 delegates the user to Rails 8 (decision 15), and **Rails' own
+# authentication generator writes a session and a password reset, not a
+# registration**. So the first half was here (the front page) and the second
+# half was nowhere: after the first person, an application had no way to make
+# another user except the console. The generator's own comment said "anybody
+# else signs up normally", and there was no normally.
+#
+# One tag, then, and two callers: `<first-user-form>` is this with the words of
+# somebody who is about to own the application.
+Rapid.define(:signup_form, :attrs => [:action, :heading, :blurb, :button_label, :class]) do
   field = login_field
 
-  tag("div", { :class => "first-user" }, :box) do
-    tag("h1", {}, :heading) { text t(:"front.welcome", "Welcome") }
+  tag("div", { :class => attributes[:class] || "signup" }, :box) do
+    tag("h1", {}, :heading) { text attributes[:heading] || t(:"front.signup", "Create an account") }
     tag("p", { :class => "lead" }, :blurb) do
-      text t(:"front.no_users", "Nobody is here yet. Create the first user and you will be the administrator.")
+      text attributes[:blurb] || t(:"front.signup_blurb", "Choose an email address and a password.")
     end
 
-    tag("form", { :method => "post", :action => attributes[:action] || "/", :class => "first-user-form" }, :form) do
+    tag("form", { :method => "post", :action => attributes[:action] || "/", :class => "signup-form" }, :form) do
       param(:authenticity_token) { authenticity_token_field }
 
       tag("div", { :class => "field" }, :"#{field}_field") do
@@ -94,8 +109,25 @@ Rapid.define(:first_user_form, :attrs => [:action]) do
       end
 
       tag("div", { :class => "actions" }, :actions) do
-        tag("button", { :type => "submit", :class => "btn btn-primary" }, :submit) { text t(:"front.register", "Register administrator") }
+        tag("button", { :type => "submit", :class => "btn btn-primary" }, :submit) do
+          text attributes[:button_label] || t(:"front.signup_button", "Sign up")
+        end
       end
     end
   end
+end
+
+# The same form with the words of somebody who is about to own the application.
+# It keeps its own name because the front page calls it by name, and because
+# "the first user" and "a user" are not the same event: one of them decides who
+# the administrator is.
+Rapid.define(:first_user_form, :attrs => [:action]) do
+  call_tag(:signup_form,
+           { :action => attributes[:action],
+             :class => "first-user",
+             :heading => t(:"front.welcome", "Welcome"),
+             :blurb => t(:"front.no_users",
+                         "Nobody is here yet. Create the first user and you will be the administrator."),
+             :button_label => t(:"front.register", "Register administrator") },
+           :as => :signup, :merge_params => true)
 end

@@ -1,0 +1,36 @@
+class RegistrationsController < ApplicationController
+
+  # Somebody signing up cannot be logged in yet, and Rails 8's generator puts a
+  # `require_authentication` filter on every controller.
+  allow_unauthenticated_access if respond_to?(:allow_unauthenticated_access)
+
+  def new
+    render :html => rapid_tag(:signup_form, nil, :action => create_signup_path), :layout => false
+  end
+
+  def create
+    @user = User.new(user_params)
+
+    if @user.save
+      # `, true`: Rails 8's Authentication concern keeps `start_new_session_for`
+      # **private**, so the plain `respond_to?` answered false and the guard
+      # skipped it -- the user was created and then not logged in, quietly.
+      start_new_session_for(@user) if respond_to?(:start_new_session_for, true)
+      redirect_to root_path, :notice => "Welcome"
+    else
+      flash.now[:error] = @user.errors.full_messages.to_sentence
+      render :html => rapid_tag(:signup_form, nil, :action => create_signup_path),
+             :layout => false, :status => :unprocessable_entity
+    end
+  end
+
+  private
+
+  # The columns the user model actually has, plus the two that are never
+  # columns. Written from the model rather than listed by hand, so adding a
+  # field to the user does not mean remembering this file.
+  def user_params
+    params.require(:user).permit(*User.column_names, :password, :password_confirmation)
+  end
+
+end

@@ -33,7 +33,24 @@ module HoboPermissionsHelper
     # Piece 15 delegates the user to Rails, and this is the seam.
     def rails_authenticated_user
       return nil unless defined?(::Current)
-      ::Current.try(:user) || ::Current.try(:session)&.try(:user)
+      user = ::Current.try(:user) || ::Current.try(:session)&.try(:user)
+      return user if user
+
+      # Rails 8 resumes the session inside `require_authentication`, and
+      # `allow_unauthenticated_access` **skips that filter** -- it is a
+      # `skip_before_action`. So on any page a stranger is allowed to see, Rails
+      # never looks at the cookie, and `Current.session` is nil even for
+      # somebody who is perfectly well logged in.
+      #
+      # That is every front page, every signup page, and any controller of an
+      # application that lets people look without an account. The bar said "Log
+      # in" to somebody who had just registered, and creating the first user
+      # looked like it had not worked.
+      #
+      # Resuming here is idempotent -- it is a `find_by` on a cookie -- and it
+      # is the seam piece 15 already put in for exactly this kind of difference.
+      send(:resume_session) if respond_to?(:resume_session, true)
+      ::Current.try(:session)&.try(:user)
     rescue StandardError
       nil
     end
