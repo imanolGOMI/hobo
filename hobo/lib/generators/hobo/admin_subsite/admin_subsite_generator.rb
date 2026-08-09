@@ -22,6 +22,17 @@ module Hobo
       argument :subsite, :type => :string, :default => "admin",
                :desc => "Nombre del subsitio (por defecto: admin)"
 
+      class_option :theme, :type => :string,
+                   :desc => "El tema del subsitio: clean, bootstrap (por defecto: el del sitio)"
+
+      # Hobo 2 asked for the admin subsite's theme separately, and it was a fair
+      # question: an administration is a different kind of place. A subsite with
+      # no theme of its own wears the site's.
+      def choose_a_theme
+        return if options[:theme].blank?
+        application %(    config.hobo.subsite_themes = { "#{subsite}" => :#{options[:theme]} })
+      end
+
       def create_site_controller
         template "site_controller.rb.erb",
                  File.join("app/controllers", subsite, "#{subsite}_controller.rb")
@@ -72,6 +83,7 @@ module Hobo
 
       def say_what_happened
         lines = ["", "El subsitio esta en /#{subsite}, y es para administradores."]
+        lines += ["", "Lleva el tema #{options[:theme]}; el resto del sitio, el suyo."] if options[:theme].present?
         if @added_a_field
           lines += ["", "Se le ha anadido el campo `administrator` al usuario. Para crearlo:",
                     "", "  bin/rails generate hobo:migration"]

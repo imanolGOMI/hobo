@@ -31,6 +31,10 @@ module HoboRapid
 
       query = request.query_parameters if respond_to?(:request, true) && request
 
+      # A subsite is a namespace of controllers (`Admin::StoriesController`), and
+      # that is the only place the name lives -- there is nothing to register.
+      subsite = self.class.name.to_s.split("::").first.underscore if self.class.name.to_s.include?("::")
+
       # A `Rapid::Parameter` is a param, anything else is an attribute. In DRYML
       # the two were told apart by syntax -- `<heading:>...</heading:>` against
       # `class="big"` -- and here the value says which it is, which keeps the
@@ -41,7 +45,7 @@ module HoboRapid
       params, attributes = attributes.partition { |_, value| value.is_a?(Rapid::Parameter) }
                                      .map(&:to_h)
 
-      HoboRapid.with_request(token, user, messages || {}, query || {}) do
+      HoboRapid.with_request(token, user, messages || {}, query || {}, subsite) do
         Rapid.render(name, attributes, :this => this, **params).html_safe
       end
     end

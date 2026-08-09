@@ -69,17 +69,26 @@ module Rapid
   @definitions = []
 
   class << self
-    attr_reader :tags, :definitions, :class_map
+    attr_reader :tags, :definitions
+
+    # Where the table comes from. The runtime keeps the *mechanism*; who decides
+    # is Hobo's business -- and it can be a different answer per request, because
+    # a subsite may wear another theme.
+    attr_accessor :class_map_source
+
+    def class_map = (@class_map_source ? @class_map_source.call : @class_map) || {}
 
     # `dress("index-page stories")` -> whatever the theme adds to each of those.
     def dress(names)
+      map = class_map
       tokens = names.to_s.split
-      return names if @class_map.empty? || tokens.empty?
+      return names if map.empty? || tokens.empty?
 
-      tokens.flat_map { |token| [token, *@class_map[token].to_s.split] }.uniq.join(" ")
+      tokens.flat_map { |token| [token, *map[token].to_s.split] }.uniq.join(" ")
     end
 
-    # A theme's whole vocabulary, in one call.
+    # A theme's whole vocabulary, in one call. Themes go through
+    # HoboRapid::Theme; this is the runtime's own door, for a test.
     def dress_with(map)
       @class_map = @class_map.merge(map.transform_keys(&:to_s))
     end

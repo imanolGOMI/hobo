@@ -13,6 +13,10 @@ require "hobo_rapid/theme"
 # Bootstrap; `--theme=none` gets you the roles and your own stylesheet.
 module HoboClean
 
-  HoboRapid::Theme.wears("clean")
+  # No table of class names at all: this theme's stylesheet styles the
+  # catalogue's own roles.
+  def self.dress(subsite = nil)
+    HoboRapid::Theme.wears("clean", :subsite => subsite)
+  end
 
 end

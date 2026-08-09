@@ -15,8 +15,7 @@ module HoboBootstrap
   COLUMNS = (1..12).to_h { |n| ["content-#{n}", "col-lg-#{n}"] }
                    .merge((1..12).to_h { |n| ["aside-#{n}", "col-lg-#{n}"] })
 
-  HoboRapid::Theme.wears(
-    "bootstrap", "hobo",
+  CLASSES = {
 
     # The page
     "navbar"        => "navbar navbar-expand-lg bg-body-tertiary border-bottom mb-4",
@@ -58,6 +57,12 @@ module HoboBootstrap
     "form-label"   => "form-label mb-0",
     "search"       => "d-inline-flex gap-2 align-items-center",
     **COLUMNS
-  )
+  }.freeze
+
+  # `HoboBootstrap.dress` for the site, `HoboBootstrap.dress("admin")` for a
+  # subsite that wants to look different from the rest.
+  def self.dress(subsite = nil)
+    HoboRapid::Theme.wears("bootstrap", "hobo", :subsite => subsite, **CLASSES)
+  end
 
 end

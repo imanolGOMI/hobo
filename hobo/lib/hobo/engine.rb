@@ -18,6 +18,20 @@ module Hobo
   # changed; where they live has.
   class Engine < Rails::Engine
 
+    # Which theme, for which part of the application.
+    def self.dress(theme, subsite = nil)
+      case theme.to_sym
+      when :bootstrap
+        require "hobo_bootstrap"
+        HoboBootstrap.dress(subsite)
+      when :clean
+        require "hobo_clean"
+        HoboClean.dress(subsite)
+      else
+        raise ArgumentError, "config.hobo.theme: :clean, :bootstrap o false (era #{theme.inspect})"
+      end
+    end
+
     # `bin/rails hobo:tags` is in lib/tasks/hobo_tags.rake and needs no line
     # here: a Rails engine loads `lib/tasks/**/*.rake` by itself. Saying it
     # again with `rake_tasks { load ... }` loads the file twice, and rake adds
@@ -66,10 +80,13 @@ module Hobo
       next unless theme
 
       require "hobo_rapid/tags/page"
-      case theme.to_sym
-      when :bootstrap then require "hobo_bootstrap"
-      when :clean     then require "hobo_clean"
-      else raise ArgumentError, "config.hobo.theme: :clean, :bootstrap o false (era #{theme.inspect})"
+      Hobo::Engine.dress(theme)
+
+      # And a subsite can wear another one -- Hobo 2 asked for the admin's theme
+      # separately, and it was a fair question: an administration is a different
+      # kind of place. `config.hobo.subsite_themes = { "admin" => :bootstrap }`.
+      Hash(app.config.hobo.subsite_themes).each do |subsite, subsite_theme|
+        Hobo::Engine.dress(subsite_theme, subsite.to_s)
       end
     end
 
@@ -78,8 +95,9 @@ module Hobo
     initializer "hobo.theme_assets" do |app|
       next unless app.config.respond_to?(:assets)
       app.config.assets.paths << root.join("app", "assets", "stylesheets")
-      # Whatever the theme said it wears, and nothing else.
-      app.config.assets.precompile += HoboRapid::Theme.stylesheets.map { |s| "#{s}.css" }
+      # Every stylesheet any part of the application might link: which one is
+      # used is a question asked per request, and precompiling happens once.
+      app.config.assets.precompile += HoboRapid::Theme.all_stylesheets.map { |s| "#{s}.css" }
     end
 
     # Was HoboRapid::Engine: the pages of every model, derived on boot and on
@@ -103,6 +121,8 @@ module Hobo
       # The whole site behind the login, or the models deciding page by page.
       # `hobo new --private` writes the line that turns this on.
       h.private_site = false
+      # `{ "admin" => :bootstrap }`: a subsite that looks different from the rest.
+      h.subsite_themes = {}
       h.rapid_generators_path = Pathname.new File.expand_path('lib/hobo/rapid/generators', Hobo.root)
       h.auto_taglibs_path = Pathname.new File.expand_path('app/views/taglibs/auto', Rails.root)
       h.read_only_file_system = !!ENV['HEROKU_TYPE']

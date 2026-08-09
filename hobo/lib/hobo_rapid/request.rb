@@ -15,20 +15,23 @@ module HoboRapid
 
   class << self
 
-    def with_request(token, user, flash = {}, query = {})
-      previous = [Thread.current[:hobo_rapid_token], Thread.current[:hobo_rapid_user],
-                  Thread.current[:hobo_rapid_flash], Thread.current[:hobo_rapid_query]]
-      Thread.current[:hobo_rapid_token] = token
-      Thread.current[:hobo_rapid_user] = user
-      Thread.current[:hobo_rapid_flash] = flash
-      Thread.current[:hobo_rapid_query] = query
+    KEYS = %i[hobo_rapid_token hobo_rapid_user hobo_rapid_flash hobo_rapid_query hobo_rapid_subsite].freeze
+
+    def with_request(token, user, flash = {}, query = {}, subsite = nil)
+      previous = KEYS.map { |key| Thread.current[key] }
+      values = [token, user, flash, query, subsite]
+      KEYS.each_with_index { |key, i| Thread.current[key] = values[i] }
       yield
     ensure
-      Thread.current[:hobo_rapid_token], Thread.current[:hobo_rapid_user],
-        Thread.current[:hobo_rapid_flash], Thread.current[:hobo_rapid_query] = previous
+      KEYS.each_with_index { |key, i| Thread.current[key] = previous[i] }
     end
 
     def authenticity_token = Thread.current[:hobo_rapid_token]
+
+    # Which part of the application is painting. `nil` is the site itself;
+    # "admin" is `app/controllers/admin/`. A subsite can wear another theme, and
+    # this is how the runtime knows which table of class names to use.
+    def subsite = Thread.current[:hobo_rapid_subsite]
 
     # Who is asking. Every permission question in the catalogue goes through
     # here, so when it answered nil the whole application was painted for a
