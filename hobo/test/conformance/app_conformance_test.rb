@@ -91,6 +91,7 @@ class AppConformanceTest < Minitest::Test
   # A theme that is not served is a theme that does not exist. This is the one
   # that would have caught the whole afternoon.
   def test_the_stylesheets_are_actually_served
+    needs_a_theme
     @page.visit("/")
 
     hrefs = @page.all("link[rel=stylesheet]", :visible => :all).map { |link| link[:href] }
@@ -106,6 +107,7 @@ class AppConformanceTest < Minitest::Test
   end
 
   def test_the_page_is_styled_by_bootstrap
+    needs_a_theme
     @page.visit("/")
 
     assert @page.has_css?("nav.navbar", :visible => :all), "falta la barra de navegacion del tema"
@@ -119,13 +121,41 @@ class AppConformanceTest < Minitest::Test
   # "reload"`, and the pattern anchored on `:app %>` quietly stopped matching.
   # `gsub_file` reports the file whether or not anything matched, so nothing said
   # a word and half the application went back to looking unstyled.
+  # **Whichever theme the application chose.** This used to name Bootstrap's
+  # stylesheets, because there was one theme and it was Bootstrap; with three to
+  # choose from, a test that names one of them is a test that fails for the two
+  # others while everything works. What has to hold is the property: the theme
+  # the application says it wears is the theme its layout links.
+  THEME_STYLESHEETS = { "clean" => %w[clean], "bootstrap" => %w[bootstrap hobo] }.freeze
+
+  # Which theme this application wears, from its own configuration.
+  #
+  # `false` means Hobo paints the **body** of each page and the application does
+  # its own chrome. Then the bar, the navigation and the stylesheets are not
+  # Hobo's to have, and a test that demands them is demanding that everybody
+  # take the theme -- which is the thing we just stopped doing.
+  def self.theme
+    config = File.join(APP.to_s, "config", "application.rb")
+    return "clean" unless File.exist?(config)
+    File.read(config)[/config\.hobo\.theme\s*=\s*[:"]?(\w+)/, 1] || "clean"
+  end
+
+  def themed? = self.class.theme != "false"
+
+  def needs_a_theme
+    skip "esta aplicacion pinta su propio marco (config.hobo.theme = false)" unless themed?
+  end
+
   def test_the_layout_wears_the_theme
     layout = File.join(APP, "app", "views", "layouts", "application.html.erb")
     skip "no hay layout de aplicacion en #{APP}" unless File.exist?(layout)
     erb = File.read(layout)
 
-    assert_includes erb, %(stylesheet_link_tag "bootstrap"), "el layout no carga el tema"
-    assert_includes erb, %(stylesheet_link_tag "hobo"), "el layout no carga hobo.css"
+    needs_a_theme
+
+    THEME_STYLESHEETS.fetch(self.class.theme).each do |sheet|
+      assert_includes erb, %(stylesheet_link_tag "#{sheet}"), "el layout no carga #{sheet}.css, del tema #{self.class.theme}"
+    end
     assert_includes erb, %(class="container), "el layout no trae el contenedor del tema"
   end
 
@@ -164,6 +194,7 @@ class AppConformanceTest < Minitest::Test
   # is missing the one thing every application has. Rails owns the session
   # (piece 15); saying so on screen is Hobo's.
   def test_the_bar_says_who_you_are_and_offers_a_way_out
+    needs_a_theme
     @page.visit("/stories")
 
     bar = @page.find("nav.navbar", :visible => :all).text
@@ -175,6 +206,7 @@ class AppConformanceTest < Minitest::Test
   # *look*, as each person. It was in Hobo 2's bar and it is used today, in
   # other projects, out of a gem.
   def test_the_user_changer_is_there_in_development
+    needs_a_theme
     @page.visit("/stories")
 
     assert @page.has_css?("form.dev-user-changer select", :visible => :all),
@@ -184,6 +216,7 @@ class AppConformanceTest < Minitest::Test
   # --- you can get around ------------------------------------------------------
 
   def test_the_navigation_links_to_the_models
+    needs_a_theme
     @page.visit("/")
 
     links = @page.all("nav a", :visible => :all).map(&:text).map(&:strip).reject(&:empty?)
@@ -273,6 +306,7 @@ class AppConformanceTest < Minitest::Test
   # way in. An account you can only reach by typing the url is an account
   # nobody makes.
   def test_the_bar_offers_it_to_a_stranger
+    needs_a_theme
     stranger = Capybara::Session.new(:hobo_conformance)
     stranger.visit("/")
 
