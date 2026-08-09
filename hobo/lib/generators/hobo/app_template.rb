@@ -60,7 +60,14 @@ after_bundle do
 
   route "hobo_routes"
 
-  generate "hobo:migration", "-n -m" rescue nil
+  # Rails' authentication generator leaves two migrations behind, and
+  # `hobo:migration` refuses to do anything while there are pending ones: it
+  # printed "You have 2 pending migrations" and stopped, and what came out was an
+  # application whose very first page answered 500 with "no such table: stories".
+  #
+  # The `rescue nil` that used to be on the next line is why that was quiet.
+  rails_command "db:migrate"
+  generate "hobo:migration", "-n -m"
 
   say [
     "",

@@ -22,6 +22,16 @@ module TestApp
   # One gem now (decision 11). This used to list five.
   GEMS = %w[hobo].freeze
 
+  # The example plugin (piece 17), in a Bundler group of its own.
+  #
+  # The contract says installing a plugin is adding the gem and *nothing else*,
+  # and the only way to check a claim like that is to have the same application
+  # with the gem and without it. A group Rails does not require by default gives
+  # both from one bench: `RAILS_GROUPS=hobo_plugin bin/rails runner ...` loads
+  # it, a plain run does not.
+  PLUGINS = %w[hobo_timeago].freeze
+  PLUGIN_GROUP = "hobo_plugin".freeze
+
   class << self
 
     def built? = File.exist?(File.join(PATH, "config", "environment.rb"))
@@ -81,8 +91,30 @@ module TestApp
       end
 
       Dir.chdir(PATH) { sh "bundle install" }
+      ensure_plugins
       fetch_stimulus
       puts "aplicacion de pruebas lista en #{PATH}"
+    end
+
+    # Adds the plugin group to a bench that was built before there was one, so
+    # a working tree from last week does not have to be rebuilt from scratch --
+    # and does nothing at all the second time.
+    def ensure_plugins
+      return false unless built?
+      gemfile = File.join(PATH, "Gemfile")
+      return false if File.read(gemfile).include?("group :#{PLUGIN_GROUP}")
+
+      root = File.expand_path("../..", __dir__)
+      File.open(gemfile, "a") do |f|
+        f.puts
+        f.puts "# The example plugin of piece 17. Not required by default: a test"
+        f.puts "# boots this same application with and without it."
+        f.puts %(group :#{PLUGIN_GROUP} do)
+        PLUGINS.each { |gem| f.puts %(  gem "#{gem}", :path => "#{File.join(root, gem)}") }
+        f.puts %(end)
+      end
+      Dir.chdir(PATH) { sh "bundle install" }
+      true
     end
 
     # The Stimulus runtime, fetched once, so the browser tests load the

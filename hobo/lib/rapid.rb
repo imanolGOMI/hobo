@@ -36,14 +36,29 @@ module Rapid
   # one. Hobo has always had this.
   class Boolean; end
 
+  # One definition of one tag, and where it came from.
+  #
+  # The registry is global -- a tag is looked up by name and an application has
+  # one catalogue -- so the *last* definition of a name wins, quietly. That is
+  # what makes plugins possible (piece 17: a plugin defines tags and defining
+  # them is installing them) and it is also how a stand-in from a spike ended up
+  # painting the pages of the real application when the gems were merged.
+  #
+  # So every definition says who made it. Nothing in the runtime reads this; it
+  # is for `rails hobo:tags`, which is the only way to see from outside that a
+  # name has two owners.
+  Definition = Struct.new(:name, :kind, :type, :source, :keyword_init => true)
+
   @tags = {}
   @attrs = {}
   @polymorphic = Hash.new { |h, k| h[k] = {} }
+  @definitions = []
 
   class << self
-    attr_reader :tags
+    attr_reader :tags, :definitions
 
     def define(name, attrs: [], superclass: Tag, &body)
+      record(name, :define)
       @attrs[name] = attrs
       @tags[name] = Class.new(superclass) { define_method(:content, &body) }
     end
@@ -60,10 +75,12 @@ module Rapid
 
     # <extend tag="x"> -- prepend, so `super` is <old-x>.
     def extend_tag(name, &body)
+      record(name, :extend)
       @tags.fetch(name).prepend(Module.new { define_method(:content, &body) })
     end
 
     def define_for(name, type, &body)
+      record(name, :define_for, type)
       @polymorphic[name][type] = Class.new(Tag) { define_method(:content, &body) }
     end
 
@@ -98,7 +115,18 @@ module Rapid
     # deciding to use it.
     def polymorphic?(name, this) = !polymorphic_lookup(name, dispatch_type(this), nil).nil?
 
+    # The definitions of one tag, oldest first. The last one is the one in
+    # force; anything before it has been shadowed.
+    def definitions_for(name) = @definitions.select { |d| d.name == name }
+
     private
+
+    # The file that called `define`, `define_for` or `extend_tag` -- two frames
+    # up, because this is called from them.
+    def record(name, kind, type = nil)
+      @definitions << Definition.new(:name => name, :kind => kind, :type => type,
+                                     :source => caller_locations(2, 1)&.first&.path)
+    end
 
     def polymorphic_lookup(name, type, from)
       return nil unless @polymorphic.key?(name) && type.is_a?(Module)

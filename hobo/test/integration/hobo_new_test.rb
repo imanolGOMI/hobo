@@ -35,13 +35,31 @@ class HoboNewTest < Minitest::Test
       assert_empty Dir[File.join(app, "app", "views", "stories", "*")],
                    "hobo new no deberia escribir vistas: las deriva"
 
-      # The migration is written from the model, not by hand.
-      assert_equal 1, Dir[File.join(app, "db", "migrate", "*.rb")].length, output
+      # The migration is written from the model, not by hand: one for Story, and
+      # the two Rails' authentication generator brings.
+      assert_equal 3, Dir[File.join(app, "db", "migrate", "*.rb")].length, output
+
+      # And it is *run*. `hobo:migration` refuses to work while another
+      # generator has left pending migrations, so this used to come out as an
+      # application that answered 500 on its first page -- and quietly, because
+      # the call was wrapped in `rescue nil`.
+      File.write(File.join(app, "tmp", "pending.rb"),
+                 "print ActiveRecord::Base.connection_pool.migration_context.needs_migration?")
+      pending = run_command(app, "bin/rails runner tmp/pending.rb")
+
+      assert_includes pending, "false", "hobo new deja migraciones sin correr:\n#{pending}"
 
       File.write(File.join(app, "tmp", "smoke.rb"), <<~RUBY)
         Story.create!(:title => "Hobo 2027", :body => "Sin escribir vistas")
-        env = Rack::MockRequest.env_for("http://localhost/")
+        # The index of the model, not "/": since `hobo:front_page` joined the
+        # template, the root of a fresh application is the page that asks for
+        # the first user.
+        env = Rack::MockRequest.env_for("http://localhost/stories")
         env["action_dispatch.show_exceptions"] = :none
+        # Rails blocks a request whose Host it does not recognise, and
+        # `env_for` leaves that header empty: the answer is a 403 from the
+        # middleware, which looks exactly like a permission denied and is not.
+        env["HTTP_HOST"] = "localhost"
         status, _headers, body = Rails.application.call(env)
         html = ""; body.each { |chunk| html << chunk }
         puts "STATUS \#{status}"

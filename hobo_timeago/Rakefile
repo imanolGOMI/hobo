@@ -1,0 +1,12 @@
+require "rake/testtask"
+
+# The gem under test is next door, in the working tree. No Gemfile and no
+# `bundle install`: the plugin's own suite loads `hobo` from ../hobo/lib and
+# nothing else, which is exactly what it should need.
+Rake::TestTask.new(:test) do |t|
+  t.libs << "test" << "lib" << File.expand_path("../hobo/lib", __dir__)
+  t.test_files = FileList["test/**/*_test.rb"]
+  t.warning = false
+end
+
+task :default => :test

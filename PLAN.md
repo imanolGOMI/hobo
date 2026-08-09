@@ -117,7 +117,7 @@ Fecha: 2026-08-07. No volver a discutirlas salvo que aparezca información nueva
 | 14 | Subsites | Se queda tal cual ✎ | Eje transversal de 4 subsistemas |
 | 15 | Usuario / auth | Se delega → Rails 8 | `generate authentication` ya existe |
 | 16 | `hobo_support` | Se reduce ✎ | ~230 líneas fuera de 1.089, no «casi entero» |
-| 17 | Contrato de plugin | Se queda | Engine + Railtie + taglibs + assets. 8 repos lo usan |
+| 17 | Contrato de plugin | Se queda, encogido ✎ | Engine + un `require` de tags + assets. Instalar = poner la gema |
 
 Sobreviven unas **11.000-12.000 líneas de 17.700**, la mitad reescritas.
 
@@ -630,7 +630,7 @@ Estado: `[ ]` pendiente · `[~]` en curso · `[x]` hecho
 | `[x]` | **4** | `hobo`: permisos, lifecycles, view hints, auto-actions, router, subsites | 4, 5, 6, 7, 11, 12, 14 |
 | `[x]` | **5** | El JS a Stimulus (decisión 14), `hobo_rapid` y el motor de derivación | 9, 10 |
 | `[x]` | **6** | Separado `hobo_bootstrap`: estructura a RAPID, tema en Bootstrap 5 con su contrato probado | 13a, 13b |
-| `[~]` | **7** | `hobo new`, generadores y **la fusión en una sola gema**, hechos; falta el contrato de plugin | 17 |
+| `[x]` | **7** | `hobo new`, generadores, **la fusión en una sola gema** y **el contrato de plugin** con un plugin de verdad (`hobo_timeago`) | 17 |
 
 **Riesgo asumido conscientemente:** de abajo arriba no se ve una página hasta la
 capa 6. Imanol lo acepta a cambio de hacerlo bien. El spike de la capa 3 es lo
@@ -1017,6 +1017,11 @@ El resto son tutoriales, ejemplos, documentación y tres forks de `will_paginate
 **Casi todos tienen exactamente 24 líneas de Ruby**: es el boilerplate del
 contrato de plugin (pieza 17). Sirven de banco de pruebas de ese contrato —
 cualquier decisión sobre DRYML o sobre assets **los rompe a los ocho a la vez**.
+
+Con el contrato nuevo (decisión 22) esas 24 líneas se quedan en un engine con
+dos initializers, y el trabajo de portar uno de estos ocho es **el DRYML**: sus
+`taglibs/*.dryml` pasan a un fichero de tags en Ruby. `hobo_timeago/` es el
+ejemplo terminado de a qué tiene que llegar cada uno.
 
 ---
 
@@ -2049,7 +2054,7 @@ el Hobo viejo hacía, y escritas para **fallar cuando algo falta**, no cuando al
 está mal. Corren en un navegador de verdad contra una aplicación generada:
 
 ```sh
-cd hobo && HOBO_APP=/tmp/hobo_luz rake test
+cd hobo && HOBO_APP=~/hobo_apps/hobo_luz rake test
 ```
 
 Encontró, a la primera: las tarjetas no enlazaban, la navegación no llevaba a
@@ -2138,10 +2143,10 @@ Una aplicación Rails 8 generada con `hobo new`:
 - **Filtros**: `<search-filter>` y `<filter-menu>` sobre Ransack, que suman en
   vez de turnarse.
 
-**Pruebas: 389 en **una** suite, todas en verde, + la suite de conformidad en
-navegador (`cd hobo && HOBO_APP=/tmp/hobo_luz rake test`). `/tmp/hobo_luz` se
-regeneró con el `hobo new` de hoy: el banco tiene que ser lo que sale del
-generador, no lo que salía hace tres commits.**
+**Pruebas: 409 en **una** suite (+11 en la del plugin), todas en verde, + la
+suite de conformidad en navegador (`cd hobo && HOBO_APP=~/hobo_apps/hobo_luz rake
+test`). El banco se regenera con el `hobo new` de hoy: tiene que ser lo que sale
+del generador, no lo que salía hace tres commits.**
 
 ## Una trampa del banco de pruebas, por si vuelve
 
@@ -2162,8 +2167,22 @@ no se repite, mirar ahí primero.
 # toda la suite: una gema, una suite
 rake test
 
+# la suite del plugin de ejemplo (contrato de plugin, pieza 17)
+rake test_plugin
+#   `rake` a secas corre las dos
+
+# el banco de integracion: una aplicacion de Rails de verdad en /tmp/hobo_testapp.
+# Sin el se saltan (ruidosamente) las pruebas de test/integration
+cd hobo && rake test:app          # force=1 para rehacerla
+#   lleva el plugin de ejemplo en el grupo :hobo_plugin, que Rails no requiere
+#   por defecto: RAILS_GROUPS=hobo_plugin bin/rails ... arranca la misma
+#   aplicacion con el plugin puesto
+
+# quien define cada tag y que definiciones estan tapadas
+cd ~/hobo_apps/hobo_luz && bin/rails hobo:tags
+
 # la suite de conformidad, en navegador, contra una aplicacion arrancada
-cd hobo && HOBO_APP=/tmp/hobo_luz rake test
+cd hobo && HOBO_APP=~/hobo_apps/hobo_luz rake test
 #   entra sola como admin@example.com / test1234
 #   HOBO_APP_URL cambia el puerto (por defecto 3007)
 #   HOBO_APP_USER / HOBO_APP_PASSWORD cambian el usuario
@@ -2175,7 +2194,7 @@ HOBO_TEST_NEW=1 rake test
 # (hobo/test/hobo_rapid/browser), y se salta solo si no hay Firefox
 
 # generar una aplicacion nueva contra el arbol de trabajo
-HOBODEV=/home/imanol/RubymineProjects/hobo hobo/bin/hobo new /tmp/loquesea
+HOBODEV=/home/imanol/RubymineProjects/hobo hobo/bin/hobo new ~/hobo_apps/loquesea
 ```
 
 **Al tocar una gema hay que reiniciar el servidor**: Rails recarga el código de
@@ -2190,21 +2209,28 @@ cd /tmp/videoteca3 && setsid nohup env HOBODEV=/home/imanol/RubymineProjects/hob
 
 ## La aplicación de pruebas viva
 
+⚠ **`/tmp` se vacía al reiniciar la máquina, y se vació.** El 2026-08-09 ya no
+existía ninguna de las tres aplicaciones, ni el worktree `/tmp/hobo2`, ni las
+capturas. Las de Hobo 3 se regeneran en minutos; **la de Hobo 2 no** —cuesta lo
+que dice la tabla de más abajo: sqlite3 1.3.13 compilado a mano, el parche de
+REXML, el asistente contestado por la entrada estándar—. Por eso el banco de
+conformidad vive ahora en `~/hobo_apps/`, que sobrevive.
+
 ```
-/tmp/hobo_luz          el banco de conformidad. Regenerado con el `hobo new` de
+~/hobo_apps/hobo_luz   el banco de conformidad. Regenerado con el `hobo new` de
 http://localhost:3007  hoy: tiene que ser lo que sale del generador, no lo que
                        salia hace tres commits. Un modelo Story, un usuario.
+                       admin@example.com / test1234
 
-/tmp/videoteca3        la videoteca en Hobo 3 (Rails 8.1, Ruby 3.4.6, sqlite)
-http://localhost:3009  Movie / Category / Genre / MovieGenre
+/tmp/hobo_testapp      el banco de integracion (`cd hobo && rake test:app`).
+                       Este si puede vivir en /tmp: se rehace solo.
 
-/tmp/videoteca2_app    la MISMA videoteca en Hobo 2.2.6 (Rails 4.2, Ruby 2.5.9)
-http://localhost:3008  para comparar pantalla a pantalla
-
-usuarios en las tres:  admin@example.com / test1234
-                       videoteca3 tiene ademas lector@example.com, para el
-                       selector de usuario
-capturas:              /tmp/shots_hobo2/ y /tmp/shots_hobo3/, mismos nombres
+PERDIDAS, hay que rehacerlas si se vuelve a comparar pantalla a pantalla:
+  videoteca3 (3009)    la videoteca en Hobo 3. Movie / Category / Genre /
+                       MovieGenre; se rehace con `hobo new` + tres modelos
+  videoteca2_app (3008) la MISMA en Hobo 2.2.6 (Rails 4.2, Ruby 2.5.9)
+  /tmp/hobo2           worktree de master con Hobo 2.2.6 intacto
+  capturas             /tmp/shots_hobo2/ y /tmp/shots_hobo3/
 ```
 
 ⚠ **Los puertos 3000 (`miapp`) y 3001 (`amenti_v3`) son de Imanol. No tocarlos.**
@@ -2545,6 +2571,18 @@ Visto en las capturas, ordenado por lo que más se nota:
     en otros proyectos y es lo que hace útiles los permisos. Ruta no dibujada en
     producción + `config.hobo.developer_features` + comprobación en el
     controlador.
+22. **Un plugin es un engine de Rails que define tags y trae assets, y punto.**
+    Instalarlo es ponerlo en el `Gemfile` (era la opción 1 de las que se
+    preguntaron). Se caen las otras tres cosas que hacía `rails generate
+    hobo:install_plugin`: el `<include gem="..."/>` del taglib, el `//= require`
+    del JavaScript y el `*= require` de la hoja de estilos. **Definir un tag es
+    registrarlo**, y los assets los trae el engine. Sin activación por subsitio:
+    Imanol no la ha usado nunca y para un diseño distinto usa CSS.
+23. **`bin/rails hobo:tags`**, porque el registro de tags es global. Redefinir un
+    tag del catálogo es legítimo —es *para* eso que existen los plugins— y es
+    invisible: gana el último que carga y nadie avisa. La tabla dice quién define
+    cada tag y marca `shadowed` lo que ya no pinta nada. Es la lección de la
+    fusión convertida en herramienta.
 
 ## Lo siguiente, por orden
 
@@ -2589,30 +2627,82 @@ Ninguno se ve mientras cada gema tiene su proceso. Todos son la misma forma:
 > El tercero es el más instructivo: **un suplente que sobrevive a aquello para
 > lo que suplía deja de ser un suplente y pasa a ser un impostor.**
 
-### 1. El contrato de plugin (pieza 17)
+### ~~1. El contrato de plugin (pieza 17)~~ — **hecho** (2026-08-09)
 
-`hobo_support`, `hobo_fields`, `dryml`, `hobo` y `hobo_rapid` pasan a ser una
-sola gema `hobo`. Lo que hay que tener en cuenta:
+**Un plugin es un engine de Rails que define tags y trae assets. Instalarlo es
+ponerlo en el `Gemfile`.** Eso es todo el contrato (decisión 22).
 
-- **El tema por defecto va dentro** (decisión 13): `hobo_bootstrap` también se
-  funde. Los temas *alternativos* siguen siendo gemas aparte.
-- Se tiran los andamiajes repetidos: cinco gemspec, cinco Gemfile, cinco
-  Rakefile, cinco `test_helper` (decisión 12 los daba por aceptados «hasta la
-  capa 7», y esto es la capa 7).
-- `classy_module` sigue en `hobo_support/lib/hobo_support/fixes/module.rb`
-  esperando a que caiga su último uso: **6 generadores de Thor** y
-  `hobo_support/lib/generators/hobo_support/{model,eval_template}.rb`. Esta es
-  la capa que los toca.
-- `dryml/lib/dryml/` entero (el compilador y su parser) **se conserva**: es el
-  front-end del actualizador de plantillas (decisión 6). No es código muerto.
-- Cuidado con `app_template.rb` y con `TestApp::GEMS` en
-  `hobo/test/prepare_testapp.rb`: los dos enumeran las gemas.
+En Hobo 2, `rails generate hobo:install_plugin <nombre>` tocaba **cuatro** sitios
+y una vez por subsitio: el `Gemfile`, un `//= require` en el JavaScript, un
+`*= require` en la hoja de estilos y un `<include gem="..."/>` en
+`app/views/taglibs/<subsitio>_site.dryml`. Tres de los cuatro existían porque un
+tag de DRYML vivía en un fichero que alguien tenía que nombrar. Con los tags en
+Ruby, **definir un tag es registrarlo**, y los ficheros de la gema se ejecutan
+cuando Bundler la requiere: se quedan sin nada que hacer.
 
-Con los tags en Ruby, **definir un tag ya es registrarlo**, así que el contrato
-se encoge muchísimo: un plugin es un Engine que requiere sus ficheros de tags y
-añade sus assets. Falta escribirlo y probarlo con uno de verdad.
+**Lo que se escribió**
 
-### 2. Las cadenas de interfaz a inglés, y detrás i18n
+| Qué | Dónde |
+|---|---|
+| El plugin de verdad, escrito para probar el contrato | `hobo_timeago/` — engine, `lib/hobo_timeago/tags.rb`, `app/assets`, `app/javascript`, gemspec y suite propia |
+| Procedencia en el registro: cada definición apunta al fichero que la hizo | `hobo/lib/rapid.rb` (`Rapid::Definition`, `Rapid.definitions`) |
+| La lectura de eso: quién define cada tag y qué está tapado | `hobo/lib/hobo/tag_index.rb` |
+| `bin/rails hobo:tags` | `hobo/lib/tasks/hobo_tags.rake` |
+| La prueba del «y nada más» | `hobo/test/integration/plugin_contract_test.rb` |
+
+**Cómo se prueba un «y nada más».** No mirando lo que pasa, sino lo que deja de
+pasar: el banco `/tmp/hobo_testapp` lleva el plugin en un grupo de Bundler que
+Rails no requiere por defecto, y cada prueba arranca **la misma** aplicación dos
+veces —`RAILS_GROUPS=hobo_plugin bin/rails runner …` y sin él— y compara. Con la
+gema, las fechas salen en `<time>…3 days ago</time>`; sin ella, `2026-08-01`. Y
+ningún fichero de la aplicación nombra al plugin, lo cual también se comprueba.
+
+**Lo que se decidió no portar**, porque Imanol no lo ha usado nunca: la
+activación por subsitio (para un diseño distinto, CSS) y el generador de
+instalación.
+
+**Lo que salió de aquí y no estaba previsto:** el registro de tags es global, así
+que redefinir es invisible —gana el último que carga y nadie avisa—. Eso es lo
+que dejó cinco tags de un banco de pruebas pintando las páginas de verdad durante
+la fusión. `bin/rails hobo:tags` marca `shadowed` toda definición que sigue en el
+registro y ya no pinta nada, y `Rapid.extend_tag` sigue siendo la forma honrada
+de cambiar el tag de otro: dos gemas pueden extender el mismo tag y las dos se
+ejecutan; dos que lo definan, no.
+
+```
+view_content                                hobo/lib/hobo_rapid/tags/views.rb
+  for Date                        shadowed  hobo/lib/hobo_rapid/tags/views.rb
+  for Date                                  hobo_timeago/lib/hobo_timeago/tags.rb
+
+33 tags, 47 definitions, 2 shadowed -- hobo, hobo_timeago
+```
+
+Un tropiezo que vale la pena recordar: un engine de Rails ya carga
+`lib/tasks/**/*.rake` él solo. Decirlo otra vez con `rake_tasks { load … }`
+cargaba el fichero dos veces, y rake **suma** el segundo cuerpo al primero en vez
+de reemplazarlo, así que la tarea imprimía el catálogo entero dos veces.
+
+### De paso: `hobo new` dejaba una aplicación rota (2026-08-09)
+
+Al regenerar el banco de conformidad, `/stories` respondía **500: «no such table:
+stories»**. La plantilla hace, por este orden, `hobo:resource`, `generate
+authentication` y `hobo:migration -n -m`; el generador de autenticación de Rails
+deja dos migraciones sin correr y **`hobo:migration` se niega a hacer nada
+mientras haya migraciones pendientes**: imprimía «You have 2 pending migrations»
+y paraba. La llamada estaba envuelta en `rescue nil`, así que `hobo new` decía
+«Listo» y la primera página de la aplicación era un 500.
+
+Arreglado con un `rails_command "db:migrate"` antes, y fuera el `rescue nil`.
+
+Y esto es otra vez lo mismo de siempre: la prueba que lo habría visto existe
+—`test/integration/hobo_new_test.rb`— y **se salta por defecto** porque tarda
+dos minutos. Al correrla se cayó por tres cosas a la vez, todas de meses
+distintos: las migraciones, el `Host` vacío de `Rack::MockRequest` (403 de
+`ActionDispatch::HostAuthorization`, que parece un permiso denegado y no lo es) y
+que pedía `/`, que desde que existe `hobo:front_page` ya no es el índice del
+modelo. **Una prueba lenta que no se corre no es una prueba, es una intención.**
+
+### 1. Las cadenas de interfaz a inglés, y detrás i18n
 
 Al final a propósito: es lo más mecánico y lo que menos se aprende haciendo.
 Están en `hobo_rapid/lib/hobo_rapid/derivation.rb` («Nuevo», «Editar», «Crear»,

@@ -18,6 +18,12 @@ module Hobo
   # changed; where they live has.
   class Engine < Rails::Engine
 
+    # `bin/rails hobo:tags` is in lib/tasks/hobo_tags.rake and needs no line
+    # here: a Rails engine loads `lib/tasks/**/*.rake` by itself. Saying it
+    # again with `rake_tasks { load ... }` loads the file twice, and rake adds
+    # the second body to the same task instead of replacing it -- so the task
+    # ran twice and printed the whole catalogue twice.
+
     # Was HoboRapid::Engine: the Stimulus half of the catalogue, handed to the
     # application. An engine's `app/javascript` is on nobody's path and its pins
     # are in nobody's import map unless it says so -- and until it did, none of

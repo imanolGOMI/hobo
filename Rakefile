@@ -14,9 +14,21 @@ RUBY = File.join(RbConfig::CONFIG['bindir'], RbConfig::CONFIG['ruby_install_name
 # runs them.
 GEM = "hobo".freeze
 
+# `hobo_timeago` is the exception, and it is not part of the gem: it is a plugin
+# (piece 17), written to be the proof that the contract is what it says it is.
+# It has its own gemspec and its own suite because a plugin has to be able to
+# live outside this repository, and a plugin nobody can test without the whole
+# repository does not.
+PLUGIN = "hobo_timeago".freeze
+
 desc "Run the test suite"
 task :test do
   exit(1) unless system("cd #{GEM} && #{RUBY} -S rake test")
+end
+
+desc "Run the example plugin's suite (the plugin contract)"
+task :test_plugin do
+  exit(1) unless system("cd #{PLUGIN} && #{RUBY} -S rake test")
 end
 
 desc "Run the integration tests (agility_bootstrap)"
@@ -60,4 +72,4 @@ task :gems, :action, :force do |t, args|
   end
 end
 
-task :default => :test
+task :default => [:test, :test_plugin]
