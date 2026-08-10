@@ -17,7 +17,12 @@ TEMPLATE = File.expand_path("../lib/generators/hobo/app_template.rb", __dir__)
 # `rails new` sees them -- an unknown flag there is an error -- and handed to the
 # template through the environment. Without a flag the template asks, and with
 # no terminal to ask in it takes the default.
-HOBO_FLAGS = /\A--(no-)?(theme|activation-email|invite-only|private|admin|search|wizard|git)\z|\A--(locale|locales|front|admin-name|theme|behaviour)=|\A--(skip|generate)-migration\z/
+#
+# Las de lista van con `=` y comas -- `--locales=en,es`, `--plugins=jquery_ui` --
+# y no separadas por espacios: aqui se decide bandera a bandera que es de Hobo y
+# que es de `rails new`, y un valor suelto detras de una bandera no se distingue
+# de un argumento de Rails.
+HOBO_FLAGS = /\A--(no-)?(theme|activation-email|invite-only|private|admin|search|wizard|git)\z|\A--(locale|locales|front|admin-name|theme|behaviour|plugins)=|\A--(skip|generate)-migration\z/
 
 command = ARGV.shift
 
@@ -49,6 +54,8 @@ else
       --behaviour=<nombre>   Quien ejecuta el comportamiento de las paginas.
                              `stimulus` viene dentro; hobo_jquery se responde
                              --behaviour=jquery.
+      --plugins=a,b          Los demas plugins que tengas instalados, p.ej.
+                             --plugins=jquery_ui.
       --activation-email     El alta deja la cuenta apagada y manda un correo
                              con la clave para encenderla.
       --invite-only          No hay alta publica: un administrador invita.

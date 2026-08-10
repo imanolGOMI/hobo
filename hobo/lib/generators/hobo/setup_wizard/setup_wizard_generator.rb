@@ -381,8 +381,11 @@ module Hobo
       # por cada uno, y por defecto no: tener una gema instalada no es haberla
       # pedido, y muchas veces es solo una dependencia de otra.
       def choose_extras
-        given = options[:plugins]
-        return Array(given).map(&:to_s) if given
+        # `--plugins jquery_ui timeago` y `--plugins=jquery_ui,timeago` son la
+        # misma respuesta, como en los idiomas.
+        given = Array(options[:plugins]).flat_map { |p| p.to_s.split(/[\s,]+/) }.reject(&:empty?)
+        return given if given.any?
+        return [] if options[:plugins]
 
         Hobo::Plugins.of(:tags).filter_map do |plugin|
           next if gemfile.include?(plugin.gem_name)
