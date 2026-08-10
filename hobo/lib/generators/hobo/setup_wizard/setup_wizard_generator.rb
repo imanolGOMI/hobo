@@ -1,5 +1,6 @@
 require "rails/generators"
 require "generators/hobo/user_options"
+require "hobo/plugins"
 require "hobo_rapid/translation"
 require "fileutils"
 
@@ -35,7 +36,9 @@ module Hobo
       include UserOptions
 
       class_option :theme, :type => :string,
-                   :desc => "clean (por defecto), bootstrap, o none"
+                   :desc => "clean (el que viene dentro), none, o el de una gema instalada"
+      class_option :behaviour, :type => :string,
+                   :desc => "stimulus (el que viene dentro), o el de una gema instalada"
       class_option :admin, :type => :boolean,
                    :desc => "Un subsitio de administracion"
       class_option :admin_name, :type => :string,
@@ -68,6 +71,7 @@ module Hobo
         say "\nHobo\n", :green if interactive?
 
         @theme = choose_theme
+        @behaviour = choose_behaviour
         @invite_only = yes_or_no?(:invite_only,
                                   "Solo se entra por invitacion? (un administrador invita; no hay alta publica)", false)
         @activation_email = @invite_only ? false : yes_or_no?(:activation_email, "El alta tiene que confirmarse por correo?", false)
@@ -91,26 +95,36 @@ module Hobo
 
       # --- what the answers mean -------------------------------------------------
 
-      # Un tema que no viene dentro **se instala**, que es lo que significa ser
-      # un plugin: la gema en el Gemfile es la instalacion (decision 22). Hobo 2
-      # hacia esto mismo -- elegias bootstrap y te anadia `gem "hobo_bootstrap"`.
+      # Lo que se ha elegido y no viene dentro **se instala**, que es lo que
+      # significa ser un plugin: la gema en el Gemfile es la instalacion
+      # (decision 22). Hobo 2 hacia esto mismo -- elegias bootstrap y te anadia
+      # `gem "hobo_bootstrap"`.
       #
-      # `clean` no pasa por aqui porque es el de Hobo y viene dentro.
-      def the_theme_gem
-        return if %w[clean none].include?(@theme)
-        return say("  el Gemfile ya lleva hobo_#{@theme}") if
-          File.read(File.join(destination_root, "Gemfile")).include?("hobo_#{@theme}")
+      # `clean` y `stimulus` no pasan por aqui porque son los de Hobo y vienen
+      # dentro. Del resto, cada uno sabe de donde sale: del arbol de trabajo si
+      # se esta escribiendo, y de rubygems si no.
+      def the_plugin_gems
+        chosen_plugins.each do |plugin|
+          next say("  el Gemfile ya lleva #{plugin.gem_name}") if
+            File.read(File.join(destination_root, "Gemfile")).include?(plugin.gem_name)
 
-        say_step "El tema"
-
-        # Con HOBODEV puesto, del arbol de trabajo; si no, de rubygems. Es lo
-        # mismo que hace `hobo new` con la gema principal.
-        dev = ENV["HOBODEV"]
-        if dev && File.directory?(File.join(dev, "..", "hobo_#{@theme}"))
-          gem "hobo_#{@theme}", :path => File.expand_path(File.join(dev, "..", "hobo_#{@theme}"))
-        else
-          gem "hobo_#{@theme}"
+          say_step "El plugin #{plugin.name}"
+          plugin.path ? gem(plugin.gem_name, :path => plugin.path) : gem(plugin.gem_name)
+          @installed_something = true
         end
+      end
+
+      # Y se instala aqui mismo, no al final.
+      #
+      # Todo lo que viene despues arranca `bin/rails` en otro proceso -- la
+      # migracion, la portada -- y un Gemfile con una gema que no esta instalada
+      # hace que Bundler pare ese proceso antes de empezar. Lo que se veia era el
+      # asistente quejandose de la base de datos por una gema que acababa de
+      # anadir el mismo.
+      def the_bundle
+        return unless @installed_something
+
+        inside(destination_root) { run "bundle install" }
       end
 
       def write_the_configuration
@@ -135,7 +149,13 @@ module Hobo
         return say("  (no hay #{layout}: el tema solo vestira las paginas de Hobo)", :yellow) unless
           File.exist?(File.join(destination_root, layout))
 
-        sheets = @theme == "bootstrap" ? %w[bootstrap hobo] : %w[clean]
+        # Que hojas de estilo pide el tema **lo dice el tema**, en su gemspec:
+        #
+        #   s.metadata["hobo_plugin_stylesheets"] = "bootstrap hobo"
+        #
+        # Aqui habia `@theme == "bootstrap" ? %w[bootstrap hobo] : %w[clean]`, y
+        # era el ultimo sitio de Hobo donde estaba escrito el nombre de un tema.
+        sheets = theme_plugin&.stylesheets || [@theme]
         return say("  el layout ya lleva el tema") if File.read(File.join(destination_root, layout)).include?(%(stylesheet_link_tag "#{sheets.first}"))
 
         links = sheets.map { |s| %(<%= stylesheet_link_tag "#{s}" %>) }.join("\n\\1")
@@ -267,6 +287,16 @@ module Hobo
 
       private
 
+      # Los plugins que hay que instalar: los elegidos que no vienen dentro.
+      # `clean`, `stimulus` y `none` no son gemas.
+      def chosen_plugins
+        [@theme, @behaviour].compact.filter_map do |name|
+          Hobo::Plugins.all.find { |plugin| plugin.name == name }
+        end
+      end
+
+      def theme_plugin = Hobo::Plugins.of(:theme).find { |plugin| plugin.name == @theme }
+
       def interactive?
         return true if options[:wizard]
         return false if options[:wizard] == false
@@ -299,13 +329,61 @@ module Hobo
         said.empty? ? default : said
       end
 
+      # El tema, y **la lista no esta escrita aqui**.
+      #
+      # Estaba: `[c]lean, [b]ootstrap, [n]inguno`, con lo que un tema que no
+      # fuera de Hobo no existia para el asistente por muy instalado que
+      # estuviera. Ahora las respuestas son las gemas que se han encontrado
+      # (Hobo::Plugins), mas `clean`, que viene dentro, y `none`, que no es un
+      # tema sino la respuesta de quien tiene su propio layout.
       def choose_theme
-        given = options[:theme]
-        return given if given.present?
-        return "clean" unless interactive?
+        answers = [["clean", "el que trae Hobo"]] +
+                  Hobo::Plugins.of(:theme).map { |plugin| [plugin.name, plugin.describe] } +
+                  [["none", "ninguno: tu layout, tus hojas de estilo"]]
 
-        said = ask("Tema: [c]lean (el de Hobo), [b]ootstrap, [n]inguno? [c]").to_s.strip.downcase
-        { "b" => "bootstrap", "n" => "none" }.fetch(said[0].to_s, "clean")
+        choose(:theme, "El tema:", answers, "clean")
+      end
+
+      # Y quien ejecuta el comportamiento que las paginas describen -- el `+` de
+      # un formulario, el desplegable que abre un campo nuevo.
+      #
+      # No se pregunto nunca hasta ahora porque no habia nada que elegir. La
+      # pregunta aparece **sola** el dia que hay una gema que se ofrece: con
+      # solo Stimulus no se pregunta, porque una pregunta con una respuesta no
+      # es una pregunta, es un tramite.
+      #
+      # Y no hay opcion de "ninguno", igual que en Hobo 2: un formulario sin
+      # comportamiento es un formulario al que le faltan la mitad de las cosas,
+      # y eso no es una eleccion, es una averia.
+      def choose_behaviour
+        answers = [["stimulus", "el que trae Rails, y viene dentro de Hobo"]] +
+                  Hobo::Plugins.of(:behaviour).map { |plugin| [plugin.name, plugin.describe] }
+
+        choose(:behaviour, "Quien ejecuta el comportamiento de las paginas:", answers, "stimulus")
+      end
+
+      # Una pregunta cuyas respuestas se saben al preguntarla y no al escribirla.
+      #
+      # Numerada y no por letras: `[c]lean, [b]ootstrap` funcionaba porque la
+      # lista era fija, y con dos gemas que empiecen por la misma letra deja de
+      # funcionar. Vale el numero o el nombre entero.
+      def choose(flag, title, answers, default)
+        given = options[flag]
+        return given if given.present?
+        # Una sola respuesta no se pregunta.
+        return default if answers.size == 1 || !interactive?
+
+        say "\n#{title}"
+        answers.each_with_index do |(name, describe), i|
+          say "  #{i + 1}. #{name}#{" -- #{describe}" if describe.present?}"
+        end
+
+        said = ask("Cual? [#{default}]").to_s.strip.downcase
+        return default if said.empty?
+
+        names = answers.map(&:first)
+        return names[said.to_i - 1] if said.to_i.between?(1, names.size)
+        names.include?(said) ? said : default
       end
 
       # The languages, and which of them is the default -- one question when

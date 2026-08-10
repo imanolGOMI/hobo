@@ -22,6 +22,18 @@ class SetupWizardTest < Minitest::Test
 
   def answer(generator, name) = generator.instance_variable_get(:"@#{name}")
 
+  # Un asistente con alguien delante que contesta siempre lo mismo, y que se
+  # acuerda de si le han preguntado -- que es la mitad de lo que hay que
+  # comprobar de una pregunta que a veces no se hace.
+  def answering(said)
+    generator = Hobo::Generators::SetupWizardGenerator.new([], :wizard => false)
+    generator.define_singleton_method(:interactive?) { true }
+    generator.define_singleton_method(:asked) { @asked }
+    generator.define_singleton_method(:say) { |*| }
+    generator.define_singleton_method(:ask) { |*| @asked = true; said }
+    generator
+  end
+
   # Hobo 2 gave every application `/search` and the box in the bar without
   # asking, and a question with a default of "no" was taking it away from
   # everybody who did not read it.
@@ -31,6 +43,62 @@ class SetupWizardTest < Minitest::Test
 
   def test_no_search_takes_the_box_away
     assert_equal false, answer(wizard(:search => false), :search)
+  end
+
+  # --- el tema y el comportamiento -------------------------------------------
+  #
+  # Las dos preguntas cuyas respuestas **no estan escritas en el asistente**:
+  # salen de las gemas que hay instaladas (Hobo::Plugins). Lo que se comprueba
+  # aqui es lo que pasa cuando no hay ninguna, que es el caso de una maquina
+  # recien puesta: los dos que vienen dentro.
+
+  def test_the_theme_that_comes_inside
+    assert_equal "clean", answer(wizard, :theme)
+  end
+
+  def test_the_behaviour_that_comes_inside
+    assert_equal "stimulus", answer(wizard, :behaviour)
+  end
+
+  # Y lo que viene dentro no se instala: no es una gema.
+  def test_nothing_to_install_for_what_comes_inside
+    assert_empty wizard.send(:chosen_plugins)
+  end
+
+  def test_none_is_an_answer_to_the_theme
+    assert_equal "none", answer(wizard(:theme => "none"), :theme)
+  end
+
+  # La pregunta acepta el numero o el nombre entero. Por letras funcionaba
+  # mientras la lista era fija; con dos gemas que empiecen por la misma letra,
+  # no.
+  THREE_ANSWERS = [["clean", "el de dentro"], ["verde", "una gema"], ["none", "ninguno"]].freeze
+
+  def test_an_answer_by_its_number
+    assert_equal "verde", answering("2").send(:choose, :nada, "?", THREE_ANSWERS, "clean")
+  end
+
+  def test_an_answer_by_its_name
+    assert_equal "verde", answering("verde").send(:choose, :nada, "?", THREE_ANSWERS, "clean")
+  end
+
+  # Un Enter es lo que promete el corchete.
+  def test_an_empty_answer_takes_the_default
+    assert_equal "clean", answering("").send(:choose, :nada, "?", THREE_ANSWERS, "clean")
+  end
+
+  # Y algo que no esta en la lista no inventa nada.
+  def test_an_answer_nobody_offered
+    assert_equal "clean", answering("morado").send(:choose, :nada, "?", THREE_ANSWERS, "clean")
+  end
+
+  # Una pregunta con una sola respuesta no se hace. Es el caso del
+  # comportamiento mientras no haya ninguna gema que lo ejecute.
+  def test_a_question_with_one_answer_is_not_a_question
+    generator = answering("")
+
+    assert_equal "stimulus", generator.send(:choose, :behaviour, "?", [["stimulus", "el de dentro"]], "stimulus")
+    refute generator.asked, "no hay nada que elegir y aun asi ha preguntado"
   end
 
   # --- the languages ---------------------------------------------------------

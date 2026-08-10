@@ -216,6 +216,7 @@ module Hobo
 end
 
 require 'hobo/model'
+require 'hobo/plugins'
 require 'hobo/routes'
 require 'hobo/engine'
 

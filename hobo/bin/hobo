@@ -17,7 +17,7 @@ TEMPLATE = File.expand_path("../lib/generators/hobo/app_template.rb", __dir__)
 # `rails new` sees them -- an unknown flag there is an error -- and handed to the
 # template through the environment. Without a flag the template asks, and with
 # no terminal to ask in it takes the default.
-HOBO_FLAGS = /\A--(no-)?(theme|activation-email|invite-only|private|admin|search|wizard|git)\z|\A--(locale|locales|front|admin-name|theme)=|\A--(skip|generate)-migration\z/
+HOBO_FLAGS = /\A--(no-)?(theme|activation-email|invite-only|private|admin|search|wizard|git)\z|\A--(locale|locales|front|admin-name|theme|behaviour)=|\A--(skip|generate)-migration\z/
 
 command = ARGV.shift
 
@@ -41,9 +41,14 @@ else
     Opciones de Hobo (si no las pones, te pregunta):
 
       --theme=clean          El tema de Hobo: css propio, sin dependencias.
-      --theme=bootstrap      Bootstrap 5.
       --theme=none           Ni pagina ni estilos: Hobo pinta el cuerpo con sus
                              clases y tu layout lo envuelve.
+      --theme=<nombre>       Cualquier otro tema que tengas instalado: la
+                             pregunta los ofrece solos (p.ej. hobo_bootstrap
+                             se responde --theme=bootstrap).
+      --behaviour=<nombre>   Quien ejecuta el comportamiento de las paginas.
+                             `stimulus` viene dentro; hobo_jquery se responde
+                             --behaviour=jquery.
       --activation-email     El alta deja la cuenta apagada y manda un correo
                              con la clave para encenderla.
       --invite-only          No hay alta publica: un administrador invita.
