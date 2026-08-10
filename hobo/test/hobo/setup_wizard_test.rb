@@ -78,20 +78,30 @@ class SetupWizardTest < Minitest::Test
   end
 
   # --- the initial migration -------------------------------------------------
+  #
+  # This one is decided at the end and not with the rest: until the wizard has
+  # written its part, there is nothing to say about what the database is
+  # missing. A fresh application with no flags is missing nothing -- Rails wrote
+  # `users` and `sessions` and migrated them already -- and asking there earned
+  # a "nothing to change" straight after the answer.
+
+  def test_the_migration_is_not_decided_with_the_other_questions
+    assert_nil answer(wizard, :migration)
+  end
 
   # With nobody to ask, the migration runs: an application whose columns are not
   # there fails on its first page, and that was the state `hobo new` used to
   # leave behind.
   def test_the_migration_runs_when_nobody_answers
-    assert_equal :migrate, answer(wizard, :migration)
+    assert_equal :migrate, wizard.send(:choose_migration)
   end
 
   def test_skip_migration
-    assert_equal :skip, answer(wizard(:skip_migration => true), :migration)
+    assert_equal :skip, wizard(:skip_migration => true).send(:choose_migration)
   end
 
   def test_generate_migration_writes_it_without_running_it
-    assert_equal :generate, answer(wizard(:generate_migration => true), :migration)
+    assert_equal :generate, wizard(:generate_migration => true).send(:choose_migration)
   end
 
   # --- git -------------------------------------------------------------------

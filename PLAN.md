@@ -2923,7 +2923,7 @@ sobraba una:
 
 | Pregunta de Hobo 2 | Qué se hizo |
 |---|---|
-| La migración inicial: `[s]kip, [g]enerate, [m]igrate` | **Recuperada.** El asistente la hace él; antes solo imprimía un recordatorio, y lo que el asistente acababa de escribir —un lifecycle, la columna de administrador— son columnas que la base no tenía |
+| La migración inicial: `[s]kip, [g]enerate, [m]igrate` | **Recuperada.** El asistente la hace él; antes solo imprimía un recordatorio, y lo que el asistente acababa de escribir —un lifecycle, la columna de administrador— son columnas que la base no tenía. Se pregunta **al final y solo si hay algo que migrar**: en una aplicación sin banderas no lo hay —las tablas son de Rails y ya están aplicadas—, y preguntar allí se ganaba un «nada que cambiar» justo después de la respuesta. Y **en otro proceso**: los modelos que el asistente acaba de escribir están en disco, no en memoria, así que preguntárselo a las clases cargadas responde por la versión anterior |
 | Los idiomas (lista) y el idioma por defecto | **Recuperadas las dos.** `--locales en es --locale=es`; con más de uno escribe también `config.i18n.available_locales`, sin lo cual `I18n.locale = :es` revienta |
 | ¿Repositorio git? | **Recuperada.** `rails new` deja el repo, pero todo lo del asistente viene después: sin esto el primer commit no contiene la aplicación |
 | ¿Caja de búsqueda? | **Retirada como pregunta**, porque en Hobo 2 **no lo era**: toda aplicación tenía `/search` y la caja en la barra sin que nadie preguntara. Se pone siempre; `--no-search` la quita |
