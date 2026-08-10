@@ -219,4 +219,42 @@ class ControllerTest < Minitest::Test
     assert_equal false, PlainHelper.new.logged_in?
   end
 
+  # --- el layout ----------------------------------------------------------------
+  #
+  # Con un tema puesto, las paginas de Hobo son el documento entero, asi que el
+  # layout de la aplicacion no las envuelve. Esto lo resolvia la pagina derivada
+  # mirando lo que habia pintado, y no cubria el caso que dice el manual:
+  # escribir `app/views/books/index.html.erb` con tres lineas para anadir unos
+  # filtros. Ahi Rails aplicaba el layout y salian **dos documentos anidados**,
+  # con dos <head> y por tanto dos import maps -- Stimulus registrado dos veces.
+
+  # Estas pruebas corren **sin aplicacion de Rails**, como el resto del fichero,
+  # asi que el tema no se pone en la configuracion: se pone la respuesta.
+  def painting(whole_documents)
+    Hobo.singleton_class.alias_method(:pages_are_whole_documents_original?, :pages_are_whole_documents?)
+    Hobo.define_singleton_method(:pages_are_whole_documents?) { whole_documents }
+    yield
+  ensure
+    Hobo.singleton_class.alias_method(:pages_are_whole_documents?, :pages_are_whole_documents_original?)
+    Hobo.singleton_class.remove_method(:pages_are_whole_documents_original?)
+  end
+
+  # Sin aplicacion no hay tema, y la pregunta se contesta igual: la gema tiene
+  # que poder cargarse fuera de Rails, que es la condicion de todo este fichero.
+  def test_outside_rails_nothing_paints_a_whole_document
+    refute Hobo.pages_are_whole_documents?
+  end
+
+  def test_a_hobo_controller_asks_for_no_layout_when_it_paints_the_document
+    controller = controller_class.new
+
+    painting(true) { assert_equal false, controller.send(:_layout, controller.lookup_context, [], nil) }
+  end
+
+  def test_and_lets_the_layout_wrap_it_when_there_is_no_theme
+    controller = controller_class.new
+
+    painting(false) { assert_nil controller.send(:_layout, controller.lookup_context, [], nil) }
+  end
+
 end

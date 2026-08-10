@@ -34,6 +34,24 @@ module Hobo
           helper_method :model, :current_user
           before_action :set_no_cache_headers
 
+          # Con un tema puesto, las paginas de Hobo **son el documento entero**
+          # -- `<html>`, `<head>`, la barra --, asi que el layout de la
+          # aplicacion no las envuelve.
+          #
+          # La pagina derivada ya lo resolvia mirando lo que habia pintado. Lo
+          # que no: **la vista que escribe la aplicacion**. Poner tres lineas en
+          # `app/views/books/index.html.erb` para anadir unos filtros --que es lo
+          # que dice el manual-- devolvia dos documentos anidados, con dos
+          # `<head>` y por tanto dos import maps: Stimulus registrado dos veces,
+          # y el `+` de un formulario anadiendo dos filas.
+          #
+          # Se decide aqui y no despues de pintar porque Rails elige el layout
+          # **antes** de renderizar la plantilla. Y una aplicacion que quiera el
+          # suyo lo dice como en cualquier controlador de Rails:
+          #
+          #   layout "application"
+          layout -> { Hobo.pages_are_whole_documents? ? false : nil }
+
           rescue_from ActiveRecord::RecordNotFound, :with => :not_found unless Rails.env.development?
 
           rescue_from Hobo::PermissionDeniedError,         :with => :permission_denied

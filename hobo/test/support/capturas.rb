@@ -18,7 +18,7 @@ CONFIG = {
 }.fetch(VERSION)
 
 BASE = "http://localhost:#{CONFIG[:port]}"
-OUT = File.expand_path("~/hobo_apps/#{CONFIG[:app]}/doc/capturas")
+OUT = File.expand_path("~/RubymineProjects/hobo_apps/#{CONFIG[:app]}/doc/capturas")
 FileUtils.mkdir_p(OUT)
 
 # Las mismas seis pantallas en las dos, con el mismo nombre de fichero: es lo

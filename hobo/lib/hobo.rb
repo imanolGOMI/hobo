@@ -105,6 +105,23 @@ module Hobo
       self
     end
 
+    # Si las paginas de Hobo son el documento entero o solo el cuerpo.
+    #
+    # Con un tema, `<page>` pinta desde el `<!DOCTYPE>`: la barra, el menu y el
+    # pie son suyos. Sin tema (`config.hobo.theme = false`) lo que sale es el
+    # cuerpo, y entonces el layout de la aplicacion es exactamente lo que hace
+    # falta.
+    #
+    # Lo pregunta el controlador para decidir si envolver o no, y tiene que
+    # poder responderse **antes** de pintar, porque Rails elige el layout antes
+    # de renderizar la plantilla.
+    def pages_are_whole_documents?
+      return false unless defined?(Rails) && Rails.respond_to?(:application) && Rails.application
+      !!Rails.application.config.hobo.theme
+    rescue StandardError
+      false
+    end
+
     # Lo que se le dice a quien trae un modelo de Hobo 2 con `attr_accessible`.
     #
     # Una vez por modelo, con el fichero delante, y diciendo **qué cambia**: no
