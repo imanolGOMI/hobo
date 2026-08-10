@@ -18,8 +18,17 @@ module HoboPermissionsHelper
     #
     # `defined?(super)` is the whole fix: if anybody up the chain answers this,
     # they are the authority.
+    # Y `|| guest_user`, que costó una tarde en una aplicación de verdad: quien
+    # manda arriba puede contestar **nil**. Rails 8 pone `Current.user`, que es
+    # nil mientras nadie ha entrado; Devise hace lo mismo. Y para Hobo nadie no
+    # es nil, es un `Guest`: un objeto que dice que no a todo.
+    #
+    # Sin esto, un permiso escrito como los escribe Hobo -- `acting_user.
+    # signed_up?`, `acting_user.administrator?` -- revienta con «undefined
+    # method for nil» en cuanto pasa por allí alguien sin identificar. En Amenti
+    # eran 24 modelos.
     def current_user
-      return super if defined?(super)
+      return super || guest_user if defined?(super)
       # simple one-hit-per-request cache
       @current_user ||= rails_authenticated_user || hobo_session_user || guest_user
     end
