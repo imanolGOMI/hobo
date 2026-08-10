@@ -15,6 +15,12 @@ CONFIG = {
   "3" => { :port => 3001, :app => "hobo3_mi_app",
            :login_path => "/session/new",
            :fields => { "email_address" => "admin@example.com", "password" => "test1234" } },
+  "2c" => { :port => 3002, :app => "hobo2_mi_app_clean",
+            :login_path => "/login",
+            :fields => { "login" => "admin@example.com", "password" => "test1234" } },
+  "3c" => { :port => 3003, :app => "hobo3_mi_app_clean",
+            :login_path => "/session/new",
+            :fields => { "email_address" => "admin@example.com", "password" => "test1234" } },
 }.fetch(VERSION)
 
 BASE = "http://localhost:#{CONFIG[:port]}"

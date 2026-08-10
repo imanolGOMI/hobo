@@ -1,97 +1,126 @@
-/* The Clean theme: Hobo's own, and the default.
+/* El tema Clean: el de Hobo, y el que viene por defecto.
  *
- * It styles the **roles** the catalogue writes -- `index-page`, `content-header`,
- * `field-list`, `action`, `record-actions` -- and nothing else. No framework, no
- * class names from anybody else in your html, nothing to download.
+ * Es **el port de `hobo_clean` de Hobo 2**, que era el aspecto con el que se
+ * reconocía una aplicación de Hobo: la banda azul de arriba, las pestañas
+ * oscuras del menú con la actual levantada en claro, y la columna de contenido
+ * en blanco cálido sobre azul muy pálido.
  *
- * It is meant to be read and changed: 200 lines, one section per part of a page.
- * If you want Bootstrap instead, `hobo new --theme=bootstrap`; if you want to do
- * it all yourself, `--theme=none`.
+ * Lo que cambia respecto a aquel es **cómo está hecho**, no cómo se ve:
+ *
+ *   - los degradados eran cuatro PNG de 30 y 300 píxeles repetidos en
+ *     horizontal, porque en 2010 no había otra manera. Aquí son
+ *     `linear-gradient`, así que la gema no lleva imágenes y la banda se adapta
+ *     a cualquier altura.
+ *   - el ancho era `960px` fijo. Aquí es un máximo, y por debajo se estrecha.
+ *   - aquel tema traía 224 líneas de DRYML que **redefinían la página entera**.
+ *     Este no redefine nada: viste los papeles que escribe el catálogo
+ *     (`index-page`, `content-header`, `field-list`, `action`), que es lo que
+ *     un tema es en Hobo 3.
+ *
+ * La paleta es la de Hobo 2, tal cual, porque es la mitad de la identidad.
  */
 
 :root {
-  --hobo-ink: #1c1f23;
-  --hobo-muted: #667085;
-  --hobo-line: #e4e7ec;
+  /* La paleta de hobo_clean, con sus nombres de siempre. */
+  --hobo-ink: #193440;          /* el azul casi negro del texto */
+  --hobo-muted: #5b7080;
+  --hobo-line: #cfd8dd;
   --hobo-bg: #ffffff;
-  --hobo-soft: #f7f8fa;
-  --hobo-accent: #2f5cff;
+  --hobo-soft: #fcfff5;         /* el blanco cálido de la columna de contenido */
+  --hobo-sky: #acd3e6;          /* el azul de la banda */
+  --hobo-navy-top: #3e547a;     /* las pestañas del menú */
+  --hobo-navy-bottom: #242e42;
+  --hobo-header-top: #3b5f87;
+  --hobo-accent: #5b8ba0;       /* los botones */
   --hobo-danger: #c8342b;
-  --hobo-radius: 6px;
+  --hobo-radius: 4px;
   --hobo-gap: 1rem;
 }
 
+/* El degradado de la página: azul arriba, blanco a los 300 píxeles. Era
+   `url(300-ACD3E6-fff.png) repeat-x`. */
 body {
-  margin: 0;
   color: var(--hobo-ink);
-  background: var(--hobo-bg);
-  font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  background: linear-gradient(180deg, var(--hobo-sky) 0, #ffffff 300px) no-repeat #ffffff;
+  font-family: "Lucida Grande", "Trebuchet MS", system-ui, -apple-system, Arial, sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin: 0 0 1.25rem;
 }
 
-a { color: var(--hobo-accent); text-decoration: none; }
-a:hover { text-decoration: underline; }
+h1, h2, h3, h4 { font-weight: normal; }
+a { color: var(--hobo-ink); }
 
-/* --- the bar ------------------------------------------------------------- */
+/* --- la banda y las pestañas -------------------------------------------------
+   La cabecera era `url(101-3B5F87-ACD3E6.png) repeat-x #3F606E` y cada pestaña
+   `url(30-3E547A-242E42.png)`. La actual venía en claro y con borde blanco por
+   tres lados, que es lo que la levanta. */
 
 .navbar {
-  border-bottom: 1px solid var(--hobo-line);
-  background: var(--hobo-soft);
+  color: #ffffff;
+  background: linear-gradient(180deg, var(--hobo-header-top) 0, var(--hobo-sky) 101px) no-repeat #3f606e;
   margin-bottom: 1.5rem;
 }
 
 .navbar-inner {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: var(--hobo-gap);
-  max-width: 72rem;
+  max-width: 60rem;
   margin: 0 auto;
-  padding: 0.6rem 1.25rem;
+  padding: 0.75rem 1.25rem 0;
 }
 
-.brand { font-weight: 600; color: var(--hobo-ink); }
+.brand { font-size: 1.5rem; color: #ffffff; border: 0; }
+.brand:hover { color: #ffffff; text-decoration: none; }
 
-.nav { display: flex; align-items: center; gap: 0.75rem; list-style: none; margin: 0; padding: 0; }
-/* Un solo margen automatico en toda la barra, y en el menu: asi la busqueda y
-   la cuenta quedan juntas a la derecha. Estaba aqui, y al llegar la caja de
-   buscar -que tambien lo llevaba- el hueco se repartia entre las dos y la caja
-   se quedaba en el centro. */
+.nav { display: flex; align-items: flex-end; gap: 0.25rem; list-style: none; margin: 0; padding: 0; }
 .main-nav { margin-right: auto; }
-.nav-link { color: var(--hobo-muted); padding: 0.25rem 0; }
-.nav-link.current { color: var(--hobo-ink); font-weight: 600; }
+
+.nav-link {
+  display: block;
+  padding: 0.4rem 0.9rem;
+  color: #ffffff;
+  background: linear-gradient(180deg, var(--hobo-navy-top) 0, var(--hobo-navy-bottom) 30px) no-repeat var(--hobo-navy-bottom);
+  border: 1px solid transparent;
+  border-radius: var(--hobo-radius) var(--hobo-radius) 0 0;
+  text-decoration: none;
+}
+
+.nav-link:hover { background: var(--hobo-ink); color: #ffffff; }
+
+/* La pestaña en la que estás: en claro, con el borde blanco que la separa de
+   las demás. Es lo que hace que el menú se lea como pestañas y no como botones. */
+.nav-link.current,
+.nav-link.current:hover {
+  color: #222;
+  background: linear-gradient(180deg, #dbe1e5 0, #fcfef5 30px) no-repeat #fcfef5;
+  border-color: #ffffff #ffffff transparent;
+}
+
+.account-nav .nav-link { background: none; border: 0; color: #ffffff; }
+.account-nav .nav-link:hover { background: none; text-decoration: underline; }
 
 .subnav { border-bottom: 1px solid var(--hobo-line); margin-bottom: 1.5rem; }
 
-/* --- the page ------------------------------------------------------------ */
+/* --- la columna ---------------------------------------------------------------
+   `body { width: 960px; margin: 0 auto }` y `.section.content { background:
+   #FCFFF5 }`. Aquí el ancho es un máximo y no una medida fija. */
 
-.container { max-width: 72rem; margin: 0 auto; padding: 0 1.25rem 3rem; }
-
-.columns { display: flex; flex-wrap: wrap; gap: 1.5rem; align-items: flex-start; }
-.content, .aside { flex: 1 1 100%; min-width: 0; }
-
-/* Twelfths, said as they are meant: `content-9` is three quarters. */
-.content-1  { flex-basis: 8.33% }   .content-2  { flex-basis: 16.6% }
-.content-3  { flex-basis: 25% }     .content-4  { flex-basis: 33.3% }
-.content-5  { flex-basis: 41.6% }   .content-6  { flex-basis: 50% }
-.content-7  { flex-basis: 58.3% }   .content-8  { flex-basis: 66.6% }
-.content-9  { flex-basis: 74% }     .content-10 { flex-basis: 83.3% }
-.content-11 { flex-basis: 91.6% }   .content-12 { flex-basis: 100% }
-.aside-1 { flex-basis: 8.33% }  .aside-2 { flex-basis: 16.6% }
-.aside-3 { flex-basis: 22% }    .aside-4 { flex-basis: 30% }
-.aside-5 { flex-basis: 41.6% }  .aside-6 { flex-basis: 50% }
-
-@media (max-width: 45rem) {
-  .content, .aside { flex-basis: 100%; }
-}
-
-.aside-box {
-  display: block;
+.container {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem;
+  background: var(--hobo-soft);
   border: 1px solid var(--hobo-line);
   border-radius: var(--hobo-radius);
-  padding: 1rem;
-  background: var(--hobo-soft);
 }
 
-.page-footer { border-top: 1px solid var(--hobo-line); margin-top: 3rem; }
+.columns { display: flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap; }
+.content { flex: 1 1 24rem; min-width: 0; }
+.aside { flex: 0 0 13rem; background: #e5e5e5; padding: 1.25rem; border-radius: var(--hobo-radius); }
+.page-footer { max-width: 60rem; margin: 1rem auto; padding: 0 1.25rem; color: var(--hobo-muted); }
 
 /* --- the head of a page --------------------------------------------------- */
 
@@ -226,7 +255,14 @@ button[type=submit]:not(.action-delete):not(.action-edit):not(.nav-link) {
   border-color: var(--hobo-accent);
   color: #fff;
 }
-.action.new:hover, .action.submit:hover { filter: brightness(1.08); }
+/* `#193440` al pasar por encima, como en hobo_clean: el boton se oscurece hacia
+   el color del texto en vez de aclararse. */
+.action.new:hover, .action.submit:hover,
+button[type=submit]:not(.action-delete):not(.action-edit):not(.nav-link):hover {
+  background: var(--hobo-ink);
+  border-color: var(--hobo-ink);
+  color: #fff;
+}
 .action.delete { color: var(--hobo-danger); border-color: var(--hobo-danger); background: var(--hobo-bg); }
 .action.small { padding: 0.2rem 0.5rem; font-size: 0.9rem; }
 
