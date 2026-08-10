@@ -351,7 +351,7 @@ class AutoActionsIntegrationTest < Minitest::Test
     file = write_in_app(File.join("tmp", "probe.rb"), script)
     written << file
 
-    `cd #{TestApp::PATH} && bin/rails runner #{file} 2>&1`
+    TestApp.run("bin/rails runner #{file}")
   ensure
     written.each do |path|
       FileUtils.rm_f(path)

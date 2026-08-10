@@ -2223,24 +2223,23 @@ cd /tmp/videoteca3 && setsid nohup env HOBODEV=/home/imanol/RubymineProjects/hob
   bin/rails server -p 3009 -b 0.0.0.0 >> log/server.log 2>&1 < /dev/null &
 ```
 
-## Las cinco aplicaciones vivas (2026-08-09)
+## El banco de comparación (2026-08-10)
 
-Para poder mirar, no para pasar pruebas. Todas en `~/hobo_apps/`, que sobrevive
-a un reinicio; `/tmp` no.
+Para poder mirar, no para pasar pruebas. Todo en `~/hobo_apps/`, que sobrevive a
+un reinicio; `/tmp` no. Las cinco de la tanda anterior (`hobo_luz`,
+`rails8_hobo`, `rails8_baseline`, `agility2`, `agility3`) se borraron a petición
+de Imanol; lo que se guardó de ellas está escrito aquí.
 
 | Puerto | Qué | Cómo se arranca |
 |---:|---|---|
-| **3007** | `hobo_luz`: lo que sale de `hobo new` hoy. El banco de conformidad | `HOBODEV=... bin/rails server -p 3007` |
-| **3010** | `rails8_hobo`: una app Rails 8 ajena **con** la gema añadida | `bin/rails server -p 3010` |
-| **3011** | `rails8_baseline`: la **misma** app sin la gema, para comparar | `bin/rails server -p 3011` |
-| **3012** | `agility2`: Agility en **Hobo 2.2.6**, Rails 4.2, Ruby 2.5.9 | `RBENV_VERSION=2.5.9 bundle exec rails server -p 3012` |
-| **3013** | `agility3`: la misma Agility portada a Hobo 3 | `HOBODEV=... bin/rails server -p 3013` |
+| **3000** | `hobo2_mi_app`: **el patrón**. Hobo 2.2.6 recién generado con el asistente contestado a mano, con la biblioteca dentro. `git@github.com:imanolGOMI/hobo2_mi_app.git` | `cd ~/hobo_apps/hobo2_mi_app && RBENV_VERSION=2.5.9 bundle exec rails server -p 3000` |
+| **3001** | `prueba_nueva_hobo3`: la de Imanol, hecha con el `hobo new` de hoy | suya |
 
-Usuarios: `admin@example.com` / `test1234` en 3007 y 3013;
-`admin@lastdance-events.com` / `test1234` en 3010 y 3011. La de Hobo 2 (3012)
-pide crear el usuario en su propia pantalla de alta.
+Usuario del 3000: `admin@example.com` / `test1234` (el primer administrador es
+el de Imanol y no se toca).
 
-⚠ **Los puertos 3000, 3001 y 3002 son de Imanol. No tocarlos.**
+⚠ **Los puertos los da Imanol.** El 3000 y el 3001 son estos porque él lo pidió;
+antes eran suyos y no se tocaban. Preguntar antes de ocupar uno.
 
 **Cómo se volvió a levantar la de Hobo 2**, que es lo que más cuesta:
 `~/hobo_apps/hobo2_gems` es una copia plana (sin git del repo) de `master`, con
@@ -2251,6 +2250,23 @@ pide crear el usuario en su propia pantalla de alta.
 2012: con esa rexml, `NEW_REX` sale falso y todo DRYML es «malformed XML». Con
 la rexml de la propia Ruby 2.5 (3.1.7.4) funciona. Falta `gem "blankslate"`, que
 `hobo_support` usa y nadie declara.
+
+Y dos cosas más, del día que se volvió a hacer desde cero (2026-08-10):
+
+- **El ejecutable `hobo` no arranca**: el RubyGems 2.7.6 de esa Ruby muere con
+  `uninitialized constant Gem::BundlerVersionFinder` antes de llegar a su
+  primera línea. `RUBYOPT=-rbundler` lo desbloquea. El comando completo es
+  `HOBODEV=~/hobo_apps/hobo2_gems RAILS_VERSION=4.2.11.3 RUBYOPT=-rbundler hobo
+  new <app> --skip-wizard --skip-bundle -d sqlite3`, y luego
+  `bundle exec rails generate hobo:setup_wizard` con las respuestas por la
+  entrada estándar, una por línea.
+- **Las gemas publicadas de Hobo 2 ya no sirven en un Ruby moderno**, y esto es
+  el argumento entero de este proyecto en una línea: el parser de DRYML usa
+  `REXML::Parsers::BaseParser::NAME_STR`, que **no existe en ninguna REXML
+  actual** —hoy se llama `QNAME_STR`—. Por eso la aplicación del banco apunta a
+  la copia parcheada y no a rubygems: no es una comodidad de desarrollo, es que
+  `gem "hobo", "2.2.6"` no levanta. Con Ruby 1.9.3 sí, y por eso `amenti_v2`
+  sigue en pie.
 
 ## La aplicación de pruebas viva
 
@@ -2891,6 +2907,59 @@ vez de mirar*—:
 | El subsitio elegía sus controladores por **una lista de nombres** | El día que la portada se llamó `portada`, le hizo un controlador de administración. Ahora mira si el fichero incluye `Hobo::Controller::Model` |
 | El modelo de usuario se llevaba el lifecycle **siempre** | Y ese lifecycle llama a un mailer que, sin activación, nadie ha escrito |
 | En un método *endless*, `def x = y if z` aplica el `if` a la **definición** | El generador ni cargaba |
+
+## El asistente, pregunta por pregunta contra el de Hobo 2 (2026-08-10)
+
+Para poder comparar hacía falta una aplicación de Hobo 2 **recién hecha**, no
+una de 2017: se montó una con el asistente de 2.2.6 contestado a mano, pregunta
+por pregunta. Vive en `~/hobo_apps/hobo2_mi_app` (Ruby 2.5.9, Rails 4.2.11.3),
+tiene una biblioteca dentro —autor, categoría, etiqueta, libro, la unión
+libro-etiqueta y el préstamo— y está en
+`git@github.com:imanolGOMI/hobo2_mi_app.git`. **Es el patrón contra el que se
+compara**: lo que se cambie aquí no debería romper nada de lo que allí se ve.
+
+Puestas las dos listas de preguntas una al lado de la otra, faltaban cuatro y
+sobraba una:
+
+| Pregunta de Hobo 2 | Qué se hizo |
+|---|---|
+| La migración inicial: `[s]kip, [g]enerate, [m]igrate` | **Recuperada.** El asistente la hace él; antes solo imprimía un recordatorio, y lo que el asistente acababa de escribir —un lifecycle, la columna de administrador— son columnas que la base no tenía |
+| Los idiomas (lista) y el idioma por defecto | **Recuperadas las dos.** `--locales en es --locale=es`; con más de uno escribe también `config.i18n.available_locales`, sin lo cual `I18n.locale = :es` revienta |
+| ¿Repositorio git? | **Recuperada.** `rails new` deja el repo, pero todo lo del asistente viene después: sin esto el primer commit no contiene la aplicación |
+| ¿Caja de búsqueda? | **Retirada como pregunta**, porque en Hobo 2 **no lo era**: toda aplicación tenía `/search` y la caja en la barra sin que nadie preguntara. Se pone siempre; `--no-search` la quita |
+| Nombre del recurso de usuario | Sigue sin preguntarse: el modelo lo escribe Rails y se llama `User` |
+| Tema de jQuery-UI · ¿solo DRYML? · ¿ignorar autogenerados? | Siguen fuera: no hay jQuery-UI, no hay DRYML, no hay autogenerados |
+
+Y una cosa más que sobraba, vista por Imanol al lanzar el generador nuevo: **el
+modelo `Story` de ejemplo**. Lo escribía `hobo new` antes de preguntar nada, así
+que lo que pasaba por pantalla era un modelo de usuario, una pregunta sobre la
+migración y un `Story` apareciendo dentro de ella. Hobo 2 **nunca** creó un
+modelo que no le hubieras pedido. Fuera: `hobo new` deja la autenticación, la
+portada, el tema y lo que digan las respuestas, y el primer modelo lo escribes
+tú con `hobo:resource`. El ejemplo pasó a las pruebas, que son quienes lo
+necesitan.
+
+Y **un fallo que solo se ve en una aplicación de verdad**: elegir castellano
+dejaba la aplicación rota. Rails trae los formatos de fecha del inglés y de
+ninguno más, así que `l(fecha)` en español levanta *translation missing:
+es.date.formats.default* y **cualquier listado con una fecha responde 500**. En
+Hobo 2 el asistente lo avisa en texto amarillo al terminar y nada más; en el
+banco se descubrió al entrar en `/loans`. Ahora `hobo.es.yml` trae ese suelo
+—formatos, meses, días—, y si la aplicación tiene `rails-i18n`, gana ella.
+Prueba: `test_a_date_can_be_shown_in_spanish`.
+
+> Es otra vez la misma lección, y por eso está aquí: **una aplicación generada
+> por Hobo no ve lo que Hobo rompe en el idioma que no es el suyo.** La suite
+> corre en inglés.
+
+Lo que queda anotado de esa comparación, sin hacer todavía:
+
+- **El usuario no tiene nombre.** `bin/rails generate authentication` escribe
+  `email_address` y `password_digest`, y Hobo enseña un registro por su campo
+  `name`: sin él, `User#to_s` devuelve «User 1» en la barra, en los enlaces y en
+  los títulos. En Hobo 2 el modelo traía `name :string, :required, :unique`. Se
+  arregla en `hobo:user_model` con `add_fields` —la tabla es de Rails y Hobo
+  solo le suma (decisión 26)— y el formulario de alta lo hereda.
 
 ## Lo siguiente, por orden
 

@@ -52,7 +52,7 @@ class ActionViewIntegrationTest < Minitest::Test
     file = File.join(TestApp::PATH, "tmp", "probe.rb")
     FileUtils.mkdir_p(File.dirname(file))
     File.write(file, script)
-    `cd #{TestApp::PATH} && bin/rails runner #{file} 2>&1`
+    TestApp.run("bin/rails runner #{file}")
   ensure
     FileUtils.rm_f(file)
   end

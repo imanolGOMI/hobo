@@ -43,13 +43,33 @@ class I18nIntegrationTest < Minitest::Test
     RUBY
   end
 
+  # Choosing a language used to be enough to break the application: Rails ships
+  # date formats for English only, and `l(date)` in any other language raises
+  # "translation missing: es.date.formats.default" -- so **every list with a
+  # date on it answered 500**. Found in an application built with the old Hobo,
+  # which asked the same question and warned about this in yellow text nobody
+  # reads.
+  def test_a_date_can_be_shown_in_spanish
+    assert_equal "10/08/2026", runner(<<~RUBY)
+      I18n.locale = :es
+      print I18n.l(Date.new(2026, 8, 10))
+    RUBY
+  end
+
+  def test_the_months_have_spanish_names
+    assert_equal "agosto", runner(<<~RUBY)
+      I18n.locale = :es
+      print I18n.t("date.month_names")[8]
+    RUBY
+  end
+
   private
 
   def runner(script)
     file = File.join(TestApp::PATH, "tmp", "probe.rb")
     FileUtils.mkdir_p(File.dirname(file))
     File.write(file, script)
-    `cd #{TestApp::PATH} && bin/rails runner #{file} 2>&1`.strip
+    TestApp.run("bin/rails runner #{file}").strip
   ensure
     FileUtils.rm_f(file)
   end

@@ -31,6 +31,11 @@ module BrowserBench
           begin
             require "capybara"
             require "selenium-webdriver"
+            # Capybara serves the page under test itself, and it needs a server
+            # to do it. Without this the bench did not skip: it **errored**,
+            # once per test, with Capybara's own message about adding puma --
+            # which is not a failure of anything under test.
+            require "puma"
             nil
           rescue LoadError => e
             "falta una gema del banco de navegador (#{e.message}): `cd hobo && rake test:app`"

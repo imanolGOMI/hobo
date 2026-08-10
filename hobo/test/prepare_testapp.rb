@@ -59,6 +59,21 @@ module TestApp
       "no hay aplicacion de pruebas en #{PATH}: montala con `cd hobo && rake test:app`"
     end
 
+    # A command **inside the test application**, with the gem's own bundle out
+    # of the way.
+    #
+    # Run the suite with `bundle exec` -- which is how anybody runs it -- and
+    # BUNDLE_GEMFILE names this gem's Gemfile. Every `bin/rails` launched from a
+    # test inherits it, so the application boots against *this* gem's
+    # dependencies: no propshaft, and it dies in `config/environments/
+    # development.rb` with `undefined method 'assets'`, a file nobody in this
+    # repository wrote. Five integration tests failed at once with a message
+    # that pointed nowhere near the cause.
+    def run(command)
+      full = "cd #{PATH} && #{command} 2>&1"
+      defined?(Bundler) ? Bundler.with_unbundled_env { `#{full}` } : `#{full}`
+    end
+
     def build(force: false)
       FileUtils.rm_rf(PATH) if force
       return puts("ya existe en #{PATH}") if built?
@@ -90,7 +105,7 @@ module TestApp
         f.puts "Rails.application.configure { config.hosts.clear }"
       end
 
-      Dir.chdir(PATH) { sh "bundle install" }
+      bundle_in(PATH)
       ensure_plugins
       fetch_stimulus
       puts "aplicacion de pruebas lista en #{PATH}"
@@ -113,8 +128,28 @@ module TestApp
         PLUGINS.each { |gem| f.puts %(  gem "#{gem}", :path => "#{File.join(root, gem)}") }
         f.puts %(end)
       end
-      Dir.chdir(PATH) { sh "bundle install" }
+      bundle_in(PATH)
       true
+    end
+
+    # `bundle install` **for the application**, and this is not the same as
+    # running it in its directory: `bundle exec rake test:app` exports
+    # BUNDLE_GEMFILE pointing at the gem's own Gemfile, the child bundler obeys
+    # it, and what gets installed is this gem's dependencies again. The
+    # application ends up with no Gemfile.lock and no propshaft, and it fails
+    # much later with `undefined method 'assets'` in an environment file nobody
+    # touched.
+    #
+    # `with_unbundled_env` is the whole fix: the child gets the environment of a
+    # shell that never ran bundler.
+    def bundle_in(path)
+      Dir.chdir(path) do
+        if defined?(Bundler)
+          Bundler.with_unbundled_env { sh "bundle install" }
+        else
+          sh "bundle install"
+        end
+      end
     end
 
     # The Stimulus runtime, fetched once, so the browser tests load the

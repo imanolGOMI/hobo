@@ -19,6 +19,13 @@
 
 module HoboRapid
 
+  # The languages Hobo itself speaks: English, written at the point of use, and
+  # whatever `config/locales/*.yml` the gem ships. The setup wizard asks it so
+  # it can warn that a third language will show English buttons until somebody
+  # writes the file.
+  TRANSLATED_LOCALES = (["en"] + Dir[File.expand_path("../../config/locales/hobo.*.yml", __dir__)]
+                                   .map { |path| File.basename(path)[/\Ahobo\.(.+)\.yml\z/, 1] }).uniq.freeze
+
   module Translation
 
     # `t` inside a tag. The key is relative to `hobo.`, so the tags never write

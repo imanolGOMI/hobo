@@ -10,6 +10,67 @@
 # «película». Una aplicación arregla el suyo con `view_hints`, o pisando estas
 # claves.
 es:
+  # Los formatos de fecha, que **no** son decoración: `l(fecha)` sin ellos
+  # levanta «translation missing: es.date.formats.default», y con eso se cae
+  # cualquier listado que enseñe una fecha. Rails solo trae los del inglés; el
+  # resto vive en la gema `rails-i18n`, que una aplicación puede no tener.
+  #
+  # Si la tiene, gana ella: sus ficheros se cargan después de los de las gemas.
+  # Esto es el suelo, para que elegir español no deje la aplicación rota.
+  date:
+    formats:
+      default: "%d/%m/%Y"
+      short: "%d de %b"
+      long: "%d de %B de %Y"
+    day_names: [domingo, lunes, martes, miércoles, jueves, viernes, sábado]
+    abbr_day_names: [dom, lun, mar, mié, jue, vie, sáb]
+    # El primer hueco es el mes cero, que no existe: I18n indexa por número de
+    # mes. En linea no se puede escribir, porque `[~, enero]` no es YAML valido.
+    month_names:
+      -
+      - enero
+      - febrero
+      - marzo
+      - abril
+      - mayo
+      - junio
+      - julio
+      - agosto
+      - septiembre
+      - octubre
+      - noviembre
+      - diciembre
+    abbr_month_names:
+      -
+      - ene
+      - feb
+      - mar
+      - abr
+      - may
+      - jun
+      - jul
+      - ago
+      - sep
+      - oct
+      - nov
+      - dic
+    order:
+      - :day
+      - :month
+      - :year
+  time:
+    formats:
+      default: "%d/%m/%Y %H:%M"
+      short: "%d %b %H:%M"
+      long: "%d de %B de %Y %H:%M"
+    am: "am"
+    pm: "pm"
+  support:
+    array:
+      words_connector: ", "
+      two_words_connector: " y "
+      last_word_connector: " y "
+
   hobo:
     actions:
       create: "Crear"

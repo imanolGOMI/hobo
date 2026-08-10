@@ -17,7 +17,7 @@ TEMPLATE = File.expand_path("../lib/generators/hobo/app_template.rb", __dir__)
 # `rails new` sees them -- an unknown flag there is an error -- and handed to the
 # template through the environment. Without a flag the template asks, and with
 # no terminal to ask in it takes the default.
-HOBO_FLAGS = /\A--(no-)?(theme|activation-email|invite-only|private|admin|search|wizard)\z|\A--(locale|front|admin-name|theme)=|\A--(skip|generate)-migration\z/
+HOBO_FLAGS = /\A--(no-)?(theme|activation-email|invite-only|private|admin|search|wizard|git)\z|\A--(locale|locales|front|admin-name|theme)=|\A--(skip|generate)-migration\z/
 
 command = ARGV.shift
 
@@ -49,15 +49,17 @@ else
       --invite-only          No hay alta publica: un administrador invita.
       --private              Todo el sitio detras del login. Sin esto, cada
                              modelo decide quien ve sus paginas.
-      --locale=es            El idioma de la aplicacion. Hobo trae sus cadenas
-                             en ingles y en espanol.
+      --locales=en,es        Los idiomas de la aplicacion. Hobo trae sus
+                             cadenas en ingles y en espanol.
+      --locale=es            El idioma por defecto (y con el solo, el unico).
       --admin                Un subsitio de administracion en /admin.
-      --search               Una caja de busqueda en la barra, que busca en
-                             todos los modelos del sitio.
+      --no-search            Quitar la caja de busqueda de la barra, que por
+                             defecto busca en todos los modelos del sitio.
       --front=home           Nombre del controlador de portada.
       --admin-name=staff     Nombre del subsitio de administracion.
       --skip-migration       No generar la migracion inicial (o
       --generate-migration   generarla sin ejecutarla).
+      --git/--no-git         Dejar el trabajo del asistente en un commit.
       --wizard/--no-wizard   Preguntar siempre, o no preguntar nunca. Por
                              defecto pregunta si hay terminal.
 

@@ -37,21 +37,28 @@ gems = %w[hobo]
 append_to_file "Gemfile", (["", "# Hobo"] + gems.map(&gem_line) + [""]).join("\n")
 
 after_bundle do
-  # One worked example, so `bin/rails server` shows something on the first run.
-  generate "hobo:resource", "story title:string body:text published_on:date"
-
+  # There used to be a `Story` model here -- "one worked example, so
+  # `bin/rails server` shows something on the first run". It came out: **Hobo 2
+  # never created a model you had not asked for**, and this one arrived before
+  # the wizard had asked anything, so what you watched go by was a user model, a
+  # question about a migration, and a model called Story appearing in it. An
+  # application you did not write is not a nice welcome, it is something to
+  # delete before you start.
+  #
   # Rails owns the user, the session and the passwords (piece 15).
   generate "authentication"
-
-  # And the wizard does the rest: the questions, and what the answers mean.
-  generate "hobo:setup_wizard", *answers.map { |a| a.sub(/\A--no-theme\z/, "--theme=none") }
 
   # Rails' authentication generator leaves two migrations behind, and
   # `hobo:migration` refuses to do anything while there are pending ones: it
   # printed "You have 2 pending migrations" and stopped, and what came out was an
   # application whose very first page answered 500 with "no such table: stories".
+  # So this happens **before** the wizard, which is what ends up asking for the
+  # initial migration.
   rails_command "db:migrate"
-  generate "hobo:migration", "-n -m" unless answers.include?("--skip-migration")
+
+  # And the wizard does the rest: the questions, and what the answers mean --
+  # the initial migration among them, which is why there is nothing after this.
+  generate "hobo:setup_wizard", *answers.map { |a| a.sub(/\A--no-theme\z/, "--theme=none") }
 
   say [
     "",
@@ -60,13 +67,12 @@ after_bundle do
     "  cd #{app_name}",
     "  bin/rails server",
     "",
-    "There is a Story model with its pages, and not one view written: Hobo",
-    "derives them from what the model says. When a page has to be different,",
-    "write its template and Hobo steps aside.",
+    "La primera pagina te pedira que crees el primer usuario.",
     "",
-    "The first page will ask you to create the first user.",
+    "Y para el primer modelo, con sus paginas y sin escribir una vista:",
     "",
     "  bin/rails generate hobo:resource task title:string done:boolean",
+    "  bin/rails generate hobo:migration",
     "",
     "Y si mas adelante quieres cambiar de tema, anadir un subsitio o cerrar el",
     "sitio con llave, las mismas preguntas siguen ahi:",

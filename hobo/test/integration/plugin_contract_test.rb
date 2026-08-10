@@ -132,7 +132,7 @@ class PluginContractTest < Minitest::Test
 
   def rails(command, groups: nil)
     env = groups ? "RAILS_GROUPS=#{groups} " : ""
-    `cd #{TestApp::PATH} && #{env}bin/rails #{command} 2>&1`.strip
+    TestApp.run("#{env}bin/rails #{command}").strip
   end
 
 end

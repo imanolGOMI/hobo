@@ -11,7 +11,18 @@ module Hobo
     argument :name, :type => :string, :optional => true
 
     include Rails::Generators::Migration
-    include Generators::HoboSupport::ThorShell
+    # `::Generators` and not `Generators`: this class is inside `module Hobo`,
+    # and the day something else defined `Hobo::Generators` -- which is where
+    # every other generator lives -- Ruby started looking for
+    # `Hobo::Generators::HoboSupport` and Rails answered with a warning nobody
+    # was going to read:
+    #
+    #   [WARNING] Could not load generator "generators/hobo/migration/..."
+    #
+    # and then behaved as if the generator did not exist. It appeared the day
+    # the wizard learnt to call this one, because that is the day both were
+    # loaded into the same process.
+    include ::Generators::HoboSupport::ThorShell
 
     # the Rails::Generators::Migration.next_migration_number gives a NotImplementedError
     # in Rails 3.0.0.beta4, so we need to implement the logic of ActiveRecord.
@@ -48,7 +59,7 @@ module Hobo
     def migrate
       return if migrations_pending?
 
-      generator = Generators::Hobo::Migration::Migrator.new(lambda{|c,d,k,p| extract_renames!(c,d,k,p)})
+      generator = ::Generators::Hobo::Migration::Migrator.new(lambda{|c,d,k,p| extract_renames!(c,d,k,p)})
       up, down = generator.generate
 
       if up.blank?
@@ -160,7 +171,7 @@ module Hobo
     end
 
     def migration_name
-      name || Generators::Hobo::Migration::Migrator.default_migration_name
+      name || ::Generators::Hobo::Migration::Migrator.default_migration_name
     end
 
   end

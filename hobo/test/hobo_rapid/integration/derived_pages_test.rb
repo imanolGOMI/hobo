@@ -78,7 +78,12 @@ class DerivedPagesTest < Minitest::Test
 
     assert_includes output, %(<div class="index-page stories">), output
     assert_includes output, "<h2>Stories</h2>"
-    assert_includes output, %(<table class="table table-striped table-bordered">)
+    # The role, not somebody's class names. This asked for `table table-striped
+    # table-bordered` -- Bootstrap's -- and stopped being true the day the
+    # catalogue started writing what a thing **is** and let a theme dress it
+    # (piece 13b). The default theme is `clean` now, and a test that names
+    # Bootstrap here is a test that only passes under one theme.
+    assert_includes output, %(<table class="collection-table")
     assert_equal 3, output.scan("<tr>").length, "dos filas y una cabecera"
   end
 
@@ -147,7 +152,7 @@ class DerivedPagesTest < Minitest::Test
 
     assert_includes output, "STATUS 200", output
     assert_includes output, %(<div class="index-page stories">), output
-    assert_includes output, %(<table class="table)
+    assert_includes output, %(<table class="collection-table)
     assert_includes output, "La luz de Hobo"
   end
 
@@ -214,7 +219,7 @@ class DerivedPagesTest < Minitest::Test
     File.write(file, script)
     written << file
 
-    `cd #{TestApp::PATH} && bin/rails runner #{file} 2>&1`
+    TestApp.run("bin/rails runner #{file}")
   ensure
     written.to_a.each do |path|
       FileUtils.rm_f(path)
