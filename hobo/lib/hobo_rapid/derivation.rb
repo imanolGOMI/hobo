@@ -285,7 +285,12 @@ module HoboRapid
                 children.each do |child|
                   tag("section", { :class => "collection-section #{child}" }, :"#{child}_section") do
                     tag("div", { :class => "header-line" }) do
-                      tag("h3", {}, :"#{child}_heading") { text child.humanize }
+                      # Por el mismo camino que las etiquetas de los campos:
+                      # `child.humanize` decía «Book tags» en una ficha en la
+                      # que todo lo demás estaba en castellano, porque
+                      # humanizaba el nombre de la asociación en vez de
+                      # preguntarle a Rails cómo se llama.
+                      tag("h3", {}, :"#{child}_heading") { text HoboRapid::Derivation.label_for(model, child) }
                     end
                     with_field(child) { call_tag(:view, { :force => true }, :as => :"#{child}_collection") }
                   end
@@ -463,9 +468,27 @@ module HoboRapid
                 # came out empty and nothing complained.
                 call_tag(:model_form, {}, :as => :form_fields)
 
-                tag("div", { :class => "actions" }, :actions) do
-                  tag("button", { :type => "submit", :class => "action new" }, :submit) do
+                # El pie del formulario: guardar **y volver sin guardar**.
+                #
+                # Faltaba lo segundo, y en Hobo 2 estaba: un formulario del que
+                # solo se sale enviándolo o con el botón de atrás del navegador
+                # no está terminado. Y va en su propia franja -- `form-actions`,
+                # que es el nombre que usaba aquel tema -- porque separar los
+                # botones de los campos es lo que hace que se vean como botones
+                # de la página y no como un campo más.
+                #
+                # `submit` y no `new`: el papel de este botón es enviar. Con
+                # `new` se vestía como el «Nuevo libro» del listado, que es otra
+                # cosa que casualmente también es azul.
+                tag("div", { :class => "actions form-actions" }, :actions) do
+                  tag("button", { :type => "submit", :class => "action submit" }, :submit) do
                     text(new_record ? t(:"actions.create", "Create") : t(:"actions.save", "Save"))
+                  end
+                  back = new_record ? path_for(model) : path_for(this)
+                  if back
+                    tag("a", { :href => back, :class => "action cancel" }, :cancel) do
+                      text t(:"actions.cancel", "Cancel")
+                    end
                   end
                 end
               end

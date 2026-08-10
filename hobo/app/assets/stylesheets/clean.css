@@ -156,6 +156,24 @@ textarea { min-height: 8rem; }
 
 .actions { display: flex; gap: 0.5rem; align-items: center; margin-top: 1.25rem; }
 
+/* El pie de un formulario, en su propia franja. Hobo 2 lo llamaba
+   `form-actions` y lo pintaba en gris, y tenia razon: los botones que deciden
+   que pasa con lo que acabas de escribir no deben parecer un campo mas. */
+.form-actions {
+  margin-top: 1.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--hobo-line);
+  background: var(--hobo-soft);
+  border-radius: var(--hobo-radius);
+}
+.action.cancel {
+  background: none;
+  border-color: transparent;
+  color: var(--hobo-muted, inherit);
+  opacity: 0.8;
+}
+.action.cancel:hover { opacity: 1; text-decoration: underline; }
+
 /* --- what you press -------------------------------------------------------- */
 
 /* `:not(...)` and not a bare `button[type=submit]`: the delete of a row **is** a
@@ -224,8 +242,16 @@ button[type=submit]:not(.action-delete):not(.action-edit):not(.nav-link) {
 
 /* --- the box that searches the whole site -------------------------------------- */
 
-.site-search-form { display: flex; gap: 0.5rem; align-items: center; }
-.site-search .search-input { max-width: 12rem; }
+/* A la derecha de la barra, como en Hobo 2, y el campo y el boton pegados: son
+   una pieza, no dos cosas sueltas separadas por un hueco. */
+.site-search { margin-left: auto; }
+.site-search-form { display: flex; align-items: stretch; }
+.site-search .search-input {
+  max-width: 12rem;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  margin-right: -1px;
+}
 /* Escrita para quien no ve la pagina, escondida para quien la ve: encima del
    campo ya esta el placeholder. */
 .search-label {
@@ -238,7 +264,10 @@ button[type=submit]:not(.action-delete):not(.action-edit):not(.nav-link) {
 }
 .search-submit {
   border: 1px solid var(--hobo-line);
-  border-radius: var(--hobo-radius);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-top-right-radius: var(--hobo-radius);
+  border-bottom-right-radius: var(--hobo-radius);
   background: var(--hobo-soft);
   color: inherit;
   padding: 0.35rem 0.75rem;

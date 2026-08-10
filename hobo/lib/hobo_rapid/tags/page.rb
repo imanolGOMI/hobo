@@ -23,7 +23,17 @@ module HoboRapid
 
   module PageSupport
 
-    def app_name = "Hobo"
+    # El nombre de la aplicación, que es el de la aplicación y no el de la
+    # herramienta: la barra de `hobo3_mi_app` decía «Hobo». Lo sabe Rails, y el
+    # controlador de la portada ya lo pasaba a mano -- lo que faltaba era que
+    # las páginas derivadas, que no pasan nada, lo tuvieran también.
+    def app_name
+      return "Hobo" unless defined?(Rails) && Rails.respond_to?(:application) && Rails.application
+
+      Rails.application.class.module_parent_name.titleize
+    rescue StandardError
+      "Hobo"
+    end
     def subsite = nil
     def base_url = ""
     def csrf_meta_tag = nil
@@ -180,7 +190,15 @@ end
 Rapid.define(:main_nav, :attrs => [:current, :class]) do
   tag("ul", { :class => attributes[:class] || "navbar-nav" }, :items) do
     HoboRapid.navigable_models.each do |model, path|
-      label = model.name.demodulize.underscore.humanize.pluralize
+      # Como se llama el modelo **en el idioma de la aplicación**. Todo lo demás
+      # de la página pasa por aquí -- el título, el «8 libros», las columnas --
+      # y solo la barra seguía diciendo «Books» en una aplicación en castellano,
+      # porque humanizaba el nombre de la clase en vez de preguntar.
+      label = if model.respond_to?(:model_name)
+                model.model_name.human(:count => 2)
+              else
+                model.name.demodulize.underscore.humanize.pluralize
+              end
       current = { :class => "nav-link current", :"aria-current" => "page" } if label == attributes[:current]
 
       tag("li", { :class => "nav-item" }, :"#{model.name.demodulize.underscore}_item") do

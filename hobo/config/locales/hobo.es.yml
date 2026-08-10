@@ -79,6 +79,7 @@ es:
       delete: "Borrar"
       confirm_delete: "¿Seguro?"
       dismiss: "Cerrar"
+      cancel: "Cancelar"
     index:
       count_one: "1 %{name}"
       count: "%{count} %{name}"
@@ -121,4 +122,7 @@ es:
       one: "1 error impidió guardar %{name}"
       many: "%{count} errores impidieron guardar %{name}"
     associations:
-      new_option: "Nuevo %{name}…"
+      # «Añadir» y no «Nuevo»: el género del nombre no se sabe desde aquí, y
+      # salía «Nuevo etiqueta…» y «Nuevo categoría…» en el selector de cada
+      # formulario. Un verbo lo esquiva sin tener que resolverlo.
+      new_option: "Añadir %{name}…"

@@ -43,6 +43,11 @@ module HoboBootstrap
     "card"           => "card",
     "inline"         => "d-inline",
 
+    # El pie de un formulario: su propia franja, separada de los campos. Es lo
+    # que el tema de Hobo 2 llamaba `form-actions` y pintaba en gris.
+    "form-actions" => "d-flex gap-2 align-items-center mt-4 pt-3 border-top bg-body-tertiary p-3 rounded",
+    "cancel"       => "btn-link text-secondary",
+
     # What you press
     "action"   => "btn",
     "new"      => "btn-primary",
@@ -59,11 +64,14 @@ module HoboBootstrap
 
     # The search box. `search-label` is written and then hidden: a screen reader
     # needs to be told what the box is, and everybody else has the placeholder.
-    "site-search"      => "me-2",
-    "site-search-form" => "d-flex gap-2 align-items-center",
+    # `ms-auto`: a la derecha de la barra, como en Hobo 2, y no pegada al menú.
+    # `input-group`: el campo y el botón son **una** pieza; sueltos y con
+    # separación parecen dos cosas que no tienen que ver.
+    "site-search"      => "ms-auto me-2",
+    "site-search-form" => "input-group input-group-sm",
     "search-label"     => "visually-hidden",
-    "search-input"     => "form-control form-control-sm",
-    "search-submit"    => "btn btn-sm btn-outline-secondary",
+    "search-input"     => "form-control",
+    "search-submit"    => "btn btn-outline-secondary",
 
     # And the × of a flash message. **Not** `btn-close`, which draws its own ×
     # with a background image: there would be two.
