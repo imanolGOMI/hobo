@@ -107,3 +107,10 @@
 .input-many .btn { flex: 0 0 auto; }
 
 .first-user { max-width: 32rem; margin: 3rem auto; }
+
+/* El nombre de una tarjeta: en negrita y sin subrayar, y **subrayado al pasar
+   por encima**, que es donde hace falta saber que se puede pulsar.
+   Aqui y no en la tabla de clases porque la de Bootstrap para quitar el
+   subrayado lleva `!important`, asi que ninguna otra clase puede devolverlo:
+   hace falta una regla con mas peso. */
+.card-link:hover { text-decoration: underline !important; }
