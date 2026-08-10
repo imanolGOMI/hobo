@@ -122,6 +122,15 @@ end if defined?(HoboFields::Types::Text)
 
 # The hidden field is the Rails trick: without it an unticked box sends nothing
 # at all, and the model never learns it was unticked.
+# Y una contraseña se edita en un campo de contraseña, **vacío**.
+#
+# Vacío a propósito: devolver el secreto al navegador para que lo reenvíe es
+# escribirlo en el html en cada edición, y quien no toque el campo no quiere
+# cambiarla. Sin esto salía un `<input type="text" value="la-contraseña">`.
+Rapid.define_for(:input_content, HoboFields::Types::PasswordString) do
+  tag("input", { :type => "password", :autocomplete => "new-password" }.merge(attributes).merge(:value => nil))
+end if defined?(HoboFields::Types::PasswordString)
+
 Rapid.define_for(:input_content, Rapid::Boolean) do
   tag("input", { :type => "hidden", :name => attributes[:name], :value => "0" })
   ticked = { :checked => true } if this

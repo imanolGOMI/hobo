@@ -146,6 +146,17 @@ Rapid.define(:record_view_content) do
 end
 
 
+# Una contraseña **no se pinta**, y esto no es una cuestión de estilo: sin esta
+# línea la vista por defecto hace `this.to_s`, así que un campo declarado
+# `password :clave` salía escrito en la página a quien tuviera permiso de verlo
+# -- y en una página derivada lo tiene cualquiera que pueda ver el registro.
+#
+# Lo encontró la matriz de tipos: no aparece pintando un `string`, aparece
+# cuando pruebas los diecisiete.
+Rapid.define_for(:view_content, HoboFields::Types::PasswordString) do
+  text("••••••")
+end if defined?(HoboFields::Types::PasswordString)
+
 # A `has_many` paints as a list of the views of its members. Anything that
 # answers to `each` and is not a string counts.
 Rapid.define(:collection_view, :attrs => [:tag]) do

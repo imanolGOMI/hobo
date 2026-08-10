@@ -6,7 +6,15 @@ module HoboFields
       include SanitizeHtml
 
       def to_html(xmldoctype = true)
-        require 'redcloth'
+        # Como el de :markdown, y por la misma razon: RedCloth no viene con
+        # Hobo, asi que sin ella lo que salia era `LoadError: cannot load such
+        # file -- redcloth` en mitad de una pagina derivada. Eso no le dice a
+        # nadie que su modelo declara un campo `:textile`.
+        begin
+          require 'redcloth'
+        rescue LoadError
+          raise "a :textile field needs RedCloth: add `gem \"RedCloth\"` to the Gemfile"
+        end
 
         if blank?
           ""
