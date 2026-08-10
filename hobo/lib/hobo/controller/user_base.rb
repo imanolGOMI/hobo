@@ -7,8 +7,23 @@ module Hobo
         base.class_eval do
           singleton_class.prepend(UserActions)
 
-          skip_before_action :login_required, :only => [:login, :signup, :do_signup, :forgot_password, :reset_password, :do_reset_password,
-                                                        :accept_invitation, :do_accept_invitation]
+          # Las puertas de entrada: las paginas que **tienen** que verse sin
+          # haber entrado, porque son las que dejan entrar.
+          puertas = [:login, :signup, :do_signup, :forgot_password, :reset_password,
+                     :do_reset_password, :accept_invitation, :do_accept_invitation]
+
+          # `:raise => false` porque `login_required` es el filtro de Hobo 2 y
+          # una aplicacion que use la autenticacion de Rails 8 no lo tiene: sin
+          # esto, un `hobo_user_controller` traido de Hobo 2 tumbaba la
+          # aplicacion entera con «Before process_action callback
+          # :login_required has not been defined». Visto portando Amenti.
+          skip_before_action :login_required, :only => puertas, :raise => false
+
+          # Y lo mismo para el de Rails 8, que es el que pide login en una
+          # aplicacion de hoy. Una de las dos existira.
+          if respond_to?(:allow_unauthenticated_access)
+            allow_unauthenticated_access :only => puertas, :raise => false
+          end
 
           prepend AccountFlash
         end
