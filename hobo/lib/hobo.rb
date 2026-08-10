@@ -61,6 +61,29 @@ module Hobo
       themes[name.to_sym] = block
     end
 
+    # Y quien ejecuta el comportamiento que el catalogo describe.
+    #
+    # Hobo trae el suyo con Stimulus, porque es lo que trae Rails. Si hay otro
+    # -- `hobo_jquery` -- se apunta aqui al cargarse, y **Hobo deja de pinchar
+    # el suyo**: con los dos escuchando, el `+` de un input-many añadiria dos
+    # filas.
+    #
+    # No hay opcion de "ninguno", igual que en Hobo 2: un formulario sin
+    # comportamiento es un formulario donde faltan la mitad de las cosas, y eso
+    # no es una eleccion, es un fallo.
+    def behaviours
+      @behaviours ||= {}
+    end
+
+    def behaviour(name, describe: nil, javascript: nil)
+      behaviours[name.to_sym] = { :describe => describe, :javascript => javascript }
+    end
+
+    # Cual manda. El de Stimulus solo si no se ha apuntado ningun otro.
+    def behaviour_in_use
+      behaviours.keys.first || :stimulus
+    end
+
     # Lo que se le dice a quien trae un modelo de Hobo 2 con `attr_accessible`.
     #
     # Una vez por modelo, con el fichero delante, y diciendo **qué cambia**: no

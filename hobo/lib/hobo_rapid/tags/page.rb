@@ -179,6 +179,15 @@ Rapid.define(:javascript, :attrs => [:name]) do
     entry = attributes[:name].to_s
     entry = "application" unless HoboRapid.pinned?(entry)
     raw helpers.javascript_importmap_tags(entry)
+
+    # Y quien lleve el comportamiento, si no es Stimulus.
+    #
+    # Con Stimulus no hace falta decir nada: la aplicacion hace
+    # `eagerLoadControllersFrom("controllers")` y sus controladores se cargan
+    # solos. Cualquier otro -- `hobo_jquery` -- es un modulo que nadie importa,
+    # asi que se importa aqui. Una linea, y solo cuando hay otro.
+    modulo = Hobo.behaviours[Hobo.behaviour_in_use]&.dig(:javascript) if defined?(Hobo)
+    raw %(<script type="module">import "#{modulo}"</script>) if modulo
   else
     src = asset_path_for(attributes[:name], "js")
     tag("script", { :src => src, :defer => true }) if src

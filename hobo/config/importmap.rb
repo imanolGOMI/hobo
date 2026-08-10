@@ -10,6 +10,10 @@
 # Pinned one by one rather than with `pin_all_from`, which resolves its argument
 # against the application's asset roots and quietly finds nothing when the files
 # belong to an engine.
+# Y **solo si el comportamiento lo lleva Stimulus**. Con `hobo_jquery` puesto
+# lo lleva jQuery, y pinchar los dos seria tener dos implementaciones
+# escuchando el mismo boton: el `+` de un input-many añadiria dos filas.
+if Hobo.behaviour_in_use == :stimulus
 Dir[File.expand_path("../app/javascript/controllers/*_controller.js", __dir__)].sort.each do |file|
   name = File.basename(file, ".js")
   pin "controllers/#{name}", :to => "controllers/#{name}.js"
@@ -20,4 +24,5 @@ end
 # cada controlador, que es lo que garantiza que se cargue: la aplicacion hace
 # `eagerLoadControllersFrom("controllers")` y con que cargue uno, el modulo se
 # ejecuta una vez.
-pin "controllers/rapid_bridge", :to => "controllers/rapid_bridge.js"
+  pin "controllers/rapid_bridge", :to => "controllers/rapid_bridge.js"
+end
