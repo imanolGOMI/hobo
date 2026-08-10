@@ -27,6 +27,11 @@ Gem::Specification.new do |s|
   s.add_development_dependency('rake', ['>= 13.0'])
   s.add_development_dependency('minitest', ['>= 5.0'])
   s.add_development_dependency('sqlite3', ['>= 2.0'])
+  # `has_secure_password` la pide, y la prueba de las contrasenas heredadas de
+  # Hobo 2 la necesita para comprobar que la conversion a bcrypt es de verdad.
+  # No es dependencia de la gema: una aplicacion la trae porque Rails la pone
+  # en su Gemfile al generar la autenticacion.
+  s.add_development_dependency('bcrypt', ['~> 3.1'])
   s.add_development_dependency('capybara', ['>= 3.0'])
   s.add_development_dependency('selenium-webdriver', ['>= 4.0'])
 

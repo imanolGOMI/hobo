@@ -459,3 +459,17 @@ module Hobo
   end
 
 end
+
+# `Guest` la carga el controlador, y eso bastaba mientras solo la usara él. Una
+# aplicación traída de Hobo 2 trae su `app/models/guest.rb` -- lo generaba
+# `hobo:assets` -- que dice `class Guest < Hobo::Model::Guest`, y ahí la clase
+# base todavía no existía: la aplicación no arrancaba. Se carga con el modelo,
+# que es de donde cuelga.
+require 'hobo/model/guest'
+
+# El autenticador de Hobo 2 -- `hobo_user_model` lo incluye -- y las contraseñas
+# heredadas. Los dos estaban en la gema y no los cargaba nadie, así que una
+# aplicación traída de Hobo 2 no arrancaba: su `guest.rb` y su `user.rb` no
+# encontraban su clase base.
+require 'hobo/model/user_base'
+require 'hobo/model/legacy_password'

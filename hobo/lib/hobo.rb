@@ -45,6 +45,60 @@ module Hobo
 
     attr_accessor :engines, :stable_cache
 
+    # Lo que se le dice a quien trae un modelo de Hobo 2 con `attr_accessible`.
+    #
+    # Una vez por modelo, con el fichero delante, y diciendo **qué cambia**: no
+    # que la línea sobra, sino que la superficie de lo asignable ya no es esa.
+    # Un aviso que solo dijera «esto está obsoleto» se ignora; uno que dice
+    # dónde mirar, no.
+    def warn_about_mass_assignment(model, method, names)
+      @mass_assignment_warned ||= {}
+      key = "#{model.name}##{method}"
+      return if @mass_assignment_warned[key]
+
+      @mass_assignment_warned[key] = true
+      file = "app/models/#{model.name.underscore}.rb"
+      campos = names.reject { |n| n.is_a?(Hash) }.map(&:to_s).join(", ")
+
+      message = [
+        "",
+        "AVISO  #{model.name}: `#{method}` ya no hace nada.",
+        "       Decia que columnas se podian asignar en masa (#{campos}).",
+        "       En Hobo eso lo dicen los permisos del modelo:",
+        "       create_permitted? y update_permitted?.",
+        "       Revisa #{file} -- ahora se puede asignar todo lo que el permiso deje.",
+        "",
+      ].join("\n")
+
+      defined?(Rails) && Rails.logger ? Rails.logger.warn(message) : nil
+      warn(message)
+    end
+
+    # Y lo que se le dice a quien trae un modelo con Paperclip.
+    #
+    # Distinto del de `attr_accessible`: aquello no hacía nada desde hace doce
+    # años y esto **sí funcionaba ayer**. El aviso tiene que decir que los
+    # adjuntos están parados, no que hay una línea obsoleta.
+    def warn_about_paperclip(model, attachment)
+      @paperclip_warned ||= {}
+      key = "#{model.name}##{attachment}"
+      return if @paperclip_warned[key]
+
+      @paperclip_warned[key] = true
+      message = [
+        "",
+        "AVISO  #{model.name}: `has_attached_file :#{attachment}` esta parado.",
+        "       Paperclip se dejo de mantener en 2018 y su relevo es",
+        "       ActiveStorage, que viene dentro de Rails.",
+        "       La aplicacion arranca, pero **ese adjunto no funciona**.",
+        "       Para convertirlo:  bin/rails generate hobo:update --attachments",
+        "",
+      ].join("\n")
+
+      defined?(Rails) && Rails.logger ? Rails.logger.warn(message) : nil
+      warn(message)
+    end
+
     def raw_js(s)
       RawJs.new(s)
     end
