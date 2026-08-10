@@ -202,13 +202,23 @@ module HoboRapid
 
         Rapid.define_for(:card, model) do
           tag("div", { :class => "card #{model.name.demodulize.underscore}" }, :card) do
-            tag("h3", {}, :heading) do
+            # Con su nombre de papel, para que un tema pueda vestirlo: el
+            # enlace de una tarjeta salía subrayado y en peso normal, donde el
+            # de Hobo 2 iba en negrita y limpio.
+            tag("h3", { :class => "card-title" }, :heading) do
               # A card nobody can click is a list nobody can use. The link is a
               # param of its own so a theme can change it without losing it.
               param(:name) do
                 path = path_for(this)
                 if path
-                  tag("a", { :href => path }, :link) { call_tag(:name_view, {}, :as => :name_view) }
+                  # Con su papel, `card-link`, porque el enlace de una tarjeta
+                  # no se ve como un enlace dentro de un texto: va en negrita y
+                  # sin subrayar -- la caja entera ya dice que es un sitio al
+                  # que ir. Bootstrap subraya todos los enlaces, así que sin
+                  # esto no había manera de quitárselo.
+                  tag("a", { :href => path, :class => "card-link" }, :link) do
+                    call_tag(:name_view, {}, :as => :name_view)
+                  end
                 else
                   call_tag(:name_view, {}, :as => :name_view)
                 end

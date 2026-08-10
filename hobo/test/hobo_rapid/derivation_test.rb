@@ -80,7 +80,9 @@ class DerivationTest < Minitest::Test
   def test_a_card_shows_the_name_as_its_heading
     html = render(:card, story)
 
-    assert_includes html, "<h3>"
+    # `card-title` y no un `<h3>` pelado: es un papel, para que un tema pueda
+    # vestir el título de la tarjeta sin tener que ir a por la etiqueta.
+    assert_includes html, %(<h3 class="card-title">)
     assert_includes html, "Primera historia"
   end
 

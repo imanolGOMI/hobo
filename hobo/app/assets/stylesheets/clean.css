@@ -121,13 +121,29 @@ a:hover { text-decoration: underline; }
 .collection-table tbody tr:hover { background: var(--hobo-soft); }
 .collection-table td.actions, .collection-table th.actions { width: 1%; white-space: nowrap; text-align: right; }
 
+/* La caja con fondo, como la de Hobo 2: una tarjeta sin fondo sobre una pagina
+   blanca es un rectangulo con una raya, y no se lee como una pieza. */
 .card {
   border: 1px solid var(--hobo-line);
   border-radius: var(--hobo-radius);
+  background: var(--hobo-soft);
   padding: 1rem;
   margin-bottom: var(--hobo-gap);
 }
-.card h3 { margin: 0 0 0.5rem; font-size: 1.1rem; }
+.card h3, .card-title { margin: 0; font-size: 1.1rem; }
+.card dl { margin: 0.5rem 0 0; }
+/* Y el nombre **sin subrayar**: dentro de una caja que ya es un sitio al que
+   ir, el subrayado sobra y ensucia. Se subraya al pasar por encima, que es
+   donde hace falta saber que se puede pulsar. */
+.card h3 a, .card-title a, .card-link {
+  text-decoration: none;
+  font-weight: 700;
+}
+.card h3 a:hover, .card-title a:hover, .card-link:hover { text-decoration: underline; }
+
+/* Y separadas entre si, no pegadas: son cosas distintas. */
+.collection-cards { display: flex; flex-direction: column; gap: 0.25rem; }
+.collection-cards .card { margin-bottom: 0; }
 
 .collection-view { list-style: none; margin: 0; padding: 0; }
 .collection-section { margin-top: 2rem; }

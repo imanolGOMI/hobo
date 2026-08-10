@@ -45,7 +45,13 @@ module HoboBootstrap
     "field-list"     => "row",
     "field-label"    => "col-sm-3",
     "field-value"    => "col-sm-9",
-    "card"           => "card",
+    # `bg-body-tertiary` y su relleno: una `card` de Bootstrap 5 es blanca y sin
+    # margen interior, así que sobre una página blanca queda un rectángulo con
+    # una raya. La de Hobo 2 tenía fondo, y se leía como una pieza.
+    "card"             => "card bg-body-tertiary p-3",
+    "collection-cards" => "d-flex flex-column gap-2 mb-3",
+    "card-title"       => "h5 mb-0",
+    "card-link"        => "text-decoration-none fw-semibold",
     "inline"         => "d-inline",
 
     # El pie de un formulario: su propia franja, separada de los campos. Es lo
