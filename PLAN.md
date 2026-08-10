@@ -2268,6 +2268,55 @@ Y dos cosas más, del día que se volvió a hacer desde cero (2026-08-10):
   `gem "hobo", "2.2.6"` no levanta. Con Ruby 1.9.3 sí, y por eso `amenti_v2`
   sigue en pie.
 
+## Las variantes de `hobo new`, en ramas (decidido con Imanol, 2026-08-10)
+
+Una aplicación por variante **no** es un repositorio por variante: son **ramas
+del mismo repositorio**, con el mismo nombre en `hobo2_mi_app` y en
+`hobo3_mi_app`. Así `git diff clean bootstrap` es documentación, y GitHub
+enseña el README de la rama en la que estás, con sus capturas.
+
+**El criterio para decidir qué comparte rama**: dos opciones caben juntas si se
+ven en **pantallas distintas** —el idioma en el texto, el tema en la caja, el
+subsitio en `/admin`—. No caben cuando una tapa a la otra: `--private` esconde
+la portada, así que en esa rama no se puede mirar el alta pública.
+
+Con eso, once ramas se quedan en cuatro, y cada una deja de ser «un flag» para
+ser **un tipo de aplicación**. Y las órdenes van con todo escrito, negativos
+incluidos: `main` no es «sin banderas», es «con los valores por defecto», y una
+rama que no lo dice cambia de sentido en silencio el día que cambie un
+predeterminado.
+
+| Rama | `hobo new mi_app …` |
+|---|---|
+| `main` | `--theme=clean --behaviour=stimulus --no-invite-only --no-activation-email --no-admin --no-private --locales=en --search` |
+| `bootstrap` | `--theme=bootstrap --behaviour=stimulus --activation-email --no-invite-only --admin --no-private --locales=en,es --locale=es --search` |
+| `jquery` | `--theme=clean --behaviour=jquery --plugins=jquery_ui --no-invite-only --no-activation-email --no-admin --no-private --locales=en --search` |
+| `cerrado` | `--theme=clean --behaviour=stimulus --invite-only --no-activation-email --no-admin --private --locales=en --no-search` |
+
+Los ocho ejes quedan cubiertos: tema (`main`, `bootstrap`), comportamiento
+(`main`, `jquery`), plugins de tags (`jquery`), alta —pública, por correo, por
+invitación— (`main`, `bootstrap`, `cerrado`), subsitio (`bootstrap`), sitio
+privado (`cerrado`), idiomas (`bootstrap`) y buscador (`main`, `cerrado`).
+
+**`jquery` es la que más vale de las cuatro**, y no por jQuery: es idéntica a
+`main` salvo por quién ejecuta el JavaScript, así que *cualquier* diferencia
+visible entre las dos es un fallo. Es la prueba del contrato neutro convertida
+en rama.
+
+Lo que **no** tiene rama, y por qué:
+
+- **`--theme=none`.** No es «no se pinta nada» —Hobo pinta el cuerpo con sus
+  clases y tu layout pone lo demás—, pero como rama no sirve: no hay pareja en
+  Hobo 2 con la que comparar y lo que se ve es una página sin estilos. Donde
+  importa es en **otro ejercicio**: añadir Hobo a una aplicación de Rails que ya
+  existe y ya tiene su layout. Eso no es `hobo new`.
+- **`clean_sidemenu`**, el tema de menú lateral de Hobo 2. No está portado. Eso
+  no es una rama, es trabajo pendiente.
+
+Cada rama se genera con su orden y se deja **huérfana**: así es literalmente la
+salida de un comando y no algo editado a mano. La base de datos no está
+versionada, así que al cambiar de rama hay que `bin/rails db:reset`.
+
 ## La aplicación de pruebas viva
 
 ⚠ **`/tmp` se vacía al reiniciar la máquina, y se vació.** El 2026-08-09 ya no
