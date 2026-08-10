@@ -42,6 +42,18 @@ module HoboRapid
         (%w[email_address email login name] & columns).first || "email_address"
       end
 
+      # And what it calls the person. Hobo shows a record by its `name`, so a
+      # user model that has one has to be **asked** for one -- otherwise the
+      # account is created nameless and shows up as "User 1" everywhere.
+      #
+      # `nil` when the model has no such column, which is the case in an
+      # application that added Hobo to a user of its own: the form then asks for
+      # what there is, as it did before.
+      def display_name_field
+        columns = user_model.respond_to?(:column_names) ? user_model.column_names : []
+        "name" if columns.include?("name") && login_field != "name"
+      end
+
     end
 
   end
@@ -52,8 +64,9 @@ Rapid::Tag.include(HoboRapid::Tags::FrontPageSupport)
 Rapid.define(:front_page, :attrs => [:app_name, :action]) do
   in_page(attributes[:app_name] || t(:"front.title", "Home")) do
     tag("div", { :class => "front-page" }, :body) do
-      call_tag(:flash_messages, {}, :as => :flash)
-
+      # Los mensajes los pinta `<page>`, que es por donde pasa esto: pintarlos
+      # otra vez aquí es verlos **dos veces** -- «You are now the site
+      # administrator» duplicado, que es justo la primera pantalla que ve nadie.
       if no_users_yet?
         call_tag(:first_user_form, { :action => attributes[:action] }, :as => :first_user)
       else
@@ -89,7 +102,7 @@ Rapid.define(:signup_form, :attrs => [:action, :heading, :blurb, :button_label, 
   # asks an administrator only for the address, and asks the person who accepts
   # it only for a password. It is one form because it is one thing -- making an
   # account -- asked in two sittings.
-  wanted = Array(attributes[:fields] || %w[login password]).map(&:to_s)
+  wanted = Array(attributes[:fields] || %w[name login password]).map(&:to_s)
 
   tag("div", { :class => attributes[:class] || "signup" }, :box) do
     tag("h1", {}, :heading) { text attributes[:heading] || t(:"front.signup", "Create an account") }
@@ -99,6 +112,16 @@ Rapid.define(:signup_form, :attrs => [:action, :heading, :blurb, :button_label, 
 
     tag("form", { :method => "post", :action => attributes[:action] || "/", :class => "signup-form" }, :form) do
       param(:authenticity_token) { authenticity_token_field }
+
+      # El nombre primero, como en el alta de Hobo 2: nombre, correo,
+      # contraseña, repetir contraseña.
+      if wanted.include?("name") && (person = display_name_field)
+        tag("div", { :class => "field" }, :name_field) do
+          tag("label", { :for => "user_#{person}" }, :name_label) { text t(:"front.name", "Name") }
+          tag("input", { :type => "text", :name => "user[#{person}]",
+                         :id => "user_#{person}", :required => true })
+        end
+      end
 
       if wanted.include?("login")
         tag("div", { :class => "field" }, :"#{field}_field") do

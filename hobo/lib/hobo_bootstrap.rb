@@ -56,6 +56,24 @@ module HoboBootstrap
     "form-select"  => "form-select",
     "form-label"   => "form-label mb-0",
     "search"       => "d-inline-flex gap-2 align-items-center",
+
+    # The search box. `search-label` is written and then hidden: a screen reader
+    # needs to be told what the box is, and everybody else has the placeholder.
+    "site-search"      => "me-2",
+    "site-search-form" => "d-flex gap-2 align-items-center",
+    "search-label"     => "visually-hidden",
+    "search-input"     => "form-control form-control-sm",
+    "search-submit"    => "btn btn-sm btn-outline-secondary",
+
+    # And the × of a flash message. **Not** `btn-close`, which draws its own ×
+    # with a background image: there would be two.
+    "flash"          => "alert d-flex align-items-center",
+    "flash-notice"   => "alert-success",
+    "flash-error"    => "alert-danger",
+    "flash-alert"    => "alert-warning",
+    "flash-text"     => "flex-grow-1",
+    "flash-dismiss"  => "btn btn-sm btn-link p-0 ms-3 text-decoration-none",
+    "flash-messages" => "mt-3",
     **COLUMNS
   }.freeze
 

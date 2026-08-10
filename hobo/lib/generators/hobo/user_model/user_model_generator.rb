@@ -21,15 +21,22 @@ module Hobo
       argument :name, :type => :string, :default => "User",
                :desc => "El modelo de las personas (por defecto: User)"
 
+      # There is always something to teach it, and it is the person's **name**.
+      #
+      # `bin/rails generate authentication` writes an address and a password
+      # digest, and that is all Rails needs to let somebody in. Hobo shows a
+      # record by its `name` field, so a user without one is "User 1" -- in the
+      # bar, in every link to them, in every page title -- and the form that
+      # asks for the first user asks for an address and a password and never for
+      # a name. Hobo 2's user model declared `name :string, :required, :unique`
+      # and this is what became of it.
+      #
+      # The lifecycle on top of that, only when there is one to write: it calls
+      # a mailer, and without `--activation-email` or `--invite-only` nobody
+      # generated one.
       def teach_the_model
-        # Without either answer there is nothing to teach: an account is made
-        # and it works, which is what `User.new` already does. A lifecycle here
-        # would call a mailer nobody generated.
-        return say("Sin --activation-email ni --invite-only el modelo no necesita nada.", :yellow) unless
-          activation_email? || invite_only?
-
         return complain_about_the_missing_model unless user_exists?
-        return say("#{user_file} ya tiene un lifecycle de Hobo.", :yellow) if already_taught?
+        return say("#{user_file} ya es un modelo de Hobo.", :yellow) if already_taught?
 
         # `indent`: `inject_into_class` puts the text in as it comes, and a
         # model with everything flush against the margin reads like a mistake.
@@ -37,10 +44,9 @@ module Hobo
       end
 
       def remind_about_the_migration
-        return unless activation_email? || invite_only?
         say [
           "",
-          "El lifecycle anade dos columnas al usuario. Para crearlas:",
+          "El modelo tiene columnas nuevas. Para crearlas:",
           "",
           "  bin/rails generate hobo:migration",
           "",
@@ -50,11 +56,38 @@ module Hobo
       private
 
       def already_taught?
-        File.read(File.join(destination_root, user_file)).include?("lifecycle do")
+        File.read(File.join(destination_root, user_file)).include?("include Hobo::Model")
       end
 
       def model_lines
         lines = ["include Hobo::Model", ""]
+
+        # El nombre, siempre. Ver arriba: sin él una persona es «User 1» en toda
+        # la aplicación, y el alta no lo pide porque no existe.
+        lines << "# How this person is shown: Hobo names a record by its `name`, and"
+        lines << "# Rails' user model has only an address."
+        lines << "add_fields do"
+        lines << "  name :string, :required"
+        lines << "end"
+        lines << ""
+
+        unless activation_email? || invite_only?
+          # Sin lifecycle, quien decide quién puede hacer qué es esto y no hay
+          # nada más. Los permisos de Hobo **deniegan por defecto**, así que un
+          # modelo con `include Hobo::Model` y sin ellos es una aplicación donde
+          # nadie puede darse de alta.
+          lines.concat(<<~'RUBY'.lines.map(&:chomp))
+            # --- Permissions ---
+            #
+            # Signing up is open, and after that a person is the only one who can
+            # change their own account.
+            def create_permitted?  = true
+            def update_permitted?  = acting_user == self
+            def destroy_permitted? = false
+            def view_permitted?(_field) = true
+          RUBY
+          return lines.join("\n") + "\n"
+        end
 
         if invite_only?
           lines << "# Who may invite. The first person in is the administrator, which is"

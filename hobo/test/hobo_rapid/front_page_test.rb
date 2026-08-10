@@ -29,6 +29,21 @@ class FrontPageTest < Minitest::Test
     HoboTest.clean_up(:User) if Object.const_defined?(:User) && Object.const_get(:User) == User
   end
 
+  # Un modelo de usuario que sí tiene nombre, que es lo que deja el generador de
+  # Hobo cuando le añade a `User` lo que Rails no le pone.
+  class NamedUser
+    def self.column_names = %w[id name email_address password_digest]
+  end
+
+  def with_a_named_user
+    HoboTest.clean_up(:User)
+    Object.const_set(:User, NamedUser)
+    yield
+  ensure
+    HoboTest.clean_up(:User)
+    Object.const_set(:User, User)
+  end
+
   # Con llaves, y a proposito: `Rapid.render(:x, :a => 1)` sin ellas manda `:a`
   # a los **params**, no a los atributos, porque `render` tiene keywords. Es la
   # misma trampa que anota el PLAN para `call_tag`.
@@ -42,6 +57,30 @@ class FrontPageTest < Minitest::Test
     assert_includes html, %(name="user[email_address]")
     assert_includes html, %(name="user[password]")
     assert_includes html, %(name="user[password_confirmation]")
+  end
+
+  # And for the person's **name** when the model has one.
+  #
+  # `bin/rails generate authentication` writes an address and a password digest
+  # and nothing else, so the form asked for those and the account came out
+  # nameless -- and Hobo shows a record by its `name`, which made every person
+  # in the application "User 1". Hobo 2's user model declared `name` and its
+  # form asked for it, which is why nobody had ever seen this.
+  def test_it_asks_for_a_name_when_the_model_has_one
+    with_a_named_user do
+      html = signup
+
+      assert_includes html, %(name="user[name]")
+      # First, as in Hobo 2: name, address, password, password again.
+      assert html.index(%(name="user[name]")) < html.index(%(name="user[email_address]")),
+             "el nombre va antes que el correo"
+    end
+  end
+
+  # And not when it does not: an application that added Hobo to a user model of
+  # its own gets asked for what its model has.
+  def test_it_does_not_invent_a_name_field
+    refute_includes signup, %(name="user[name]")
   end
 
   def test_it_posts_where_it_is_told
@@ -88,6 +127,22 @@ class FrontPageTest < Minitest::Test
     html = with_users(0) { Rapid.render(:front_page, { :action => "/first-user" }) }
 
     assert_includes html, "administrator"
+  end
+
+  # Los mensajes, **una vez**. La portada pintaba los suyos y además va dentro
+  # de `<page>`, que ya los pinta: lo primero que veía cualquiera al crear el
+  # administrador era «You are now the site administrator» dos veces seguidas.
+  #
+  # Con `<page>` cargada a propósito, porque el fallo solo existe cuando la hay:
+  # sin tema, `in_page` pinta el contenido a secas y no había con qué duplicar.
+  def test_the_flash_is_painted_once_inside_the_page
+    require "hobo_rapid/tags/page"
+
+    html = HoboRapid.with_request(nil, nil, { :notice => "Ya estas dentro" }) do
+      with_users(1) { Rapid.render(:front_page, {}) }
+    end
+
+    assert_equal 1, html.scan("Ya estas dentro").length, html
   end
 
   def test_and_stops_offering_it_once_somebody_is

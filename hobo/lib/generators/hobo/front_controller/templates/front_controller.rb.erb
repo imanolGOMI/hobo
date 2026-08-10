@@ -24,7 +24,12 @@ class <%= controller_class_name %> < ApplicationController
       # **private**, so the plain `respond_to?` answered false and the guard
       # skipped it -- the user was created and then not logged in, quietly.
       start_new_session_for(@user) if respond_to?(:start_new_session_for, true)
-      redirect_to root_path, :notice => "You are now the site administrator"
+      # A través de I18n: la aplicación puede estar en cualquier idioma, y este
+      # es el primer mensaje que enseña. El inglés va como `:default`, que es
+      # como Hobo escribe sus cadenas (ver hobo_rapid/translation.rb).
+      redirect_to root_path,
+                  :notice => I18n.t("hobo.front.you_are_the_administrator",
+                                    :default => "You are now the site administrator")
     else
       flash.now[:error] = @user.errors.full_messages.to_sentence
       render :html => rapid_tag(:front_page, nil, :action => create_first_user_path),

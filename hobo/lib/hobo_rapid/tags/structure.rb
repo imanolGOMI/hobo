@@ -43,7 +43,20 @@ Rapid.define(:flash_message, :attrs => [:type]) do
   message = flash_messages[kind] || flash_messages[kind.to_s]
   next if message.blank?
 
-  tag("div", { :class => "flash flash-#{kind}", :role => "alert" }, :message) { text message }
+  # Con su × para quitarlo. Un aviso que no se puede cerrar y que se queda en
+  # pantalla hasta la siguiente página es de las cosas que más cansan de una
+  # aplicación, y no basta con pintar el botón que pinta Bootstrap: ese necesita
+  # el JavaScript de Bootstrap, que una aplicación con el tema `clean` no tiene.
+  # Lo cierra un controlador de Stimulus, que es lo que Hobo trae.
+  tag("div", { :class => "flash flash-#{kind}", :role => "alert",
+               :"data-controller" => "rapid-dismiss" }, :message) do
+    tag("span", { :class => "flash-text" }, :text) { text message }
+    tag("button", { :type => "button", :class => "flash-dismiss",
+                    :"data-action" => "rapid-dismiss#dismiss",
+                    :"data-rapid-dismiss-target" => "button",
+                    :hidden => true,
+                    :"aria-label" => t(:"actions.dismiss", "Dismiss") }, :dismiss) { raw "&times;" }
+  end
 end
 
 # Every message the application left, in the order it left them.
@@ -221,16 +234,27 @@ Rapid.define(:search_box, :attrs => [:placeholder, :label]) do
   action = route_path(:site_search_path)
   next unless action
 
-  tag("form", { :method => "get", :action => action, :class => "site-search" }, :form) do
-    tag("label", { :for => "site-search-query", :class => "form-label" }, :label) do
-      text(attributes[:label] || t(:"search.label", "Search"))
-    end
-    tag("input", { :type => "search", :name => "query", :id => "site-search-query",
-                   :class => "form-control",
-                   :value => HoboRapid.query_parameters["query"],
-                   :placeholder => attributes[:placeholder] || t(:"search.placeholder", "Search") }, :input)
-    tag("button", { :type => "submit", :class => "action search" }, :submit) do
-      text t(:"search.button", "Search")
+  # La forma es la de Hobo 2 -- contenedor, formulario, etiqueta e input -- y los
+  # nombres son roles, no clases de nadie. Lo que había aquí antes era
+  # `form-control` y `form-label`, que son de Bootstrap: en el tema `clean` no
+  # significan nada, y en el de Bootstrap el botón llevaba además el rol
+  # `search`, que ese tema viste como **la caja entera**. De ahí el botón con
+  # sus separaciones y su `inline-flex` a media altura.
+  #
+  # La etiqueta se escribe y el tema la esconde: hay que decirle a un lector de
+  # pantalla qué es esa caja, y encima de ella ya está el `placeholder`.
+  tag("div", { :class => "site-search" }, :box) do
+    tag("form", { :method => "get", :action => action, :class => "site-search-form" }, :form) do
+      tag("label", { :for => "site-search-query", :class => "search-label" }, :label) do
+        text(attributes[:label] || t(:"search.label", "Search"))
+      end
+      tag("input", { :type => "search", :name => "query", :id => "site-search-query",
+                     :class => "search-input",
+                     :value => HoboRapid.query_parameters["query"],
+                     :placeholder => attributes[:placeholder] || t(:"search.placeholder", "Search") }, :input)
+      tag("button", { :type => "submit", :class => "search-submit" }, :submit) do
+        text t(:"search.button", "Search")
+      end
     end
   end
 end

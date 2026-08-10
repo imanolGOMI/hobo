@@ -2992,6 +2992,32 @@ Lo que queda anotado de esa comparación, sin hacer todavía:
   arregla en `hobo:user_model` con `add_fields` —la tabla es de Rails y Hobo
   solo le suma (decisión 26)— y el formulario de alta lo hereda.
 
+## Una idea de Imanol, para mucho más adelante: Bootstrap fuera
+
+> «Cada vez veo más lógico tener `hobo_bootstrap` en un plugin que en el código
+> de Hobo, y dejar solo el código principal con `hobo_clean`; aunque el
+> instalador pueda preguntarte por Bootstrap y eso instale la gema.»
+
+Es lo que la pieza 17 hace posible y lo que la 13b dejó a un paso: un tema ya es
+**una tabla de clases y una hoja**, y eso es exactamente lo que cabe en una gema
+con su engine. Hoy los dos viven dentro (`lib/hobo_bootstrap.rb`,
+`lib/hobo_clean.rb`) porque la decisión 11 juntó las seis gemas en una y no
+tenía sentido volver a partirla el mismo día.
+
+Lo que haría falta el día que se haga:
+
+- `hobo_bootstrap` como gema aparte, generada con `rails generate hobo:plugin`,
+  con su `CLASSES` y su `bootstrap.css`
+- el asistente pregunta el tema como ahora, y con `bootstrap` **añade la gema al
+  Gemfile** en vez de encender una opción
+- `config.hobo.theme = :bootstrap` deja de conocer el nombre: el tema se
+  registra solo al cargarse la gema (`HoboRapid::Theme.wears`)
+
+Ganancia real: el núcleo deja de contener las clases de un framework de terceros
+—que es justo el acoplamiento que la pieza 13b vino a romper—, y quien no quiera
+Bootstrap no se lo lleva ni en el gem. **No ahora**: primero hay que terminar de
+comparar las dos aplicaciones, y cada gema nueva es una cosa más que versionar.
+
 ## Lo siguiente, por orden
 
 **El criterio de aceptación está completo**: la videoteca se construye sin

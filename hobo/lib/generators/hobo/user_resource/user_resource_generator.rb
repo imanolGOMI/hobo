@@ -20,10 +20,15 @@ module Hobo
       argument :name, :type => :string, :default => "User",
                :desc => "El modelo de las personas (por defecto: User)"
 
-      # Only when there is something to teach it: a plain signup needs no
-      # lifecycle, and a model with one but no mailer is a signup that raises.
+      # Always: the model that `bin/rails generate authentication` writes has an
+      # address and a password and no **name**, and Hobo shows a record by its
+      # name. The columns it is missing turn up in the migration the wizard asks
+      # about, which is where columns are supposed to turn up.
+      #
+      # The lifecycle on top of that is what needs an answer: it calls a mailer,
+      # and without one of the two flags nobody generated one.
       def generate_the_model
-        invoke "hobo:user_model", [name], options if activation_email? || invite_only?
+        invoke "hobo:user_model", [name], options
       end
 
       def generate_the_mailer

@@ -78,6 +78,7 @@ es:
       edit: "Editar"
       delete: "Borrar"
       confirm_delete: "¿Seguro?"
+      dismiss: "Cerrar"
     index:
       count_one: "1 %{name}"
       count: "%{count} %{name}"

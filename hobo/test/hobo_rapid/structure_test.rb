@@ -201,6 +201,27 @@ class StructureTest < Minitest::Test
     assert_includes painted, %(name="query")
   end
 
+  # Y lo que escribe son **papeles**, no las clases de nadie.
+  #
+  # Escribía `form-control` y `form-label` -- que son de Bootstrap -- y le ponía
+  # al botón el papel `search`, que el tema de Bootstrap viste como *la caja
+  # entera*: de ahí un botón con `inline-flex` y separaciones propias de un
+  # contenedor. Con el tema `clean` no significaban nada y la caja salía suelta.
+  # Es exactamente lo que la pieza 13b vino a quitar, colado por la puerta de
+  # atrás.
+  def test_the_box_is_written_in_roles
+    painted = with_route(:site_search_path, "/search") { Rapid.render(:search_box) }
+
+    assert_includes painted, %(class="site-search")
+    assert_includes painted, %(class="search-input")
+    assert_includes painted, %(class="search-label")
+    assert_includes painted, %(class="search-submit")
+
+    refute_includes painted, "form-control"
+    refute_includes painted, "form-label"
+    refute_includes painted, %(class="action search")
+  end
+
   # And it says what you last looked for, so the page you land on is about the
   # question you asked.
   def test_the_box_remembers_the_question

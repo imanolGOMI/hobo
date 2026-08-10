@@ -222,6 +222,30 @@ button[type=submit]:not(.action-delete):not(.action-edit):not(.nav-link) {
 .action-delete { color: var(--hobo-danger); opacity: 0.75; }
 .action-delete:hover { opacity: 1; }
 
+/* --- the box that searches the whole site -------------------------------------- */
+
+.site-search-form { display: flex; gap: 0.5rem; align-items: center; }
+.site-search .search-input { max-width: 12rem; }
+/* Escrita para quien no ve la pagina, escondida para quien la ve: encima del
+   campo ya esta el placeholder. */
+.search-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.search-submit {
+  border: 1px solid var(--hobo-line);
+  border-radius: var(--hobo-radius);
+  background: var(--hobo-soft);
+  color: inherit;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+.search-submit:hover { border-color: var(--hobo-accent); }
+
 /* --- filters ---------------------------------------------------------------- */
 
 .filters { display: flex; flex-wrap: wrap; gap: var(--hobo-gap); margin-bottom: 1.25rem; }
@@ -232,6 +256,8 @@ button[type=submit]:not(.action-delete):not(.action-edit):not(.nav-link) {
 
 .flash-messages:empty { display: none; }
 .flash {
+  display: flex;
+  align-items: center;
   border: 1px solid var(--hobo-line);
   border-left: 3px solid var(--hobo-accent);
   border-radius: var(--hobo-radius);
@@ -239,6 +265,20 @@ button[type=submit]:not(.action-delete):not(.action-edit):not(.nav-link) {
   margin-bottom: var(--hobo-gap);
   background: var(--hobo-soft);
 }
+.flash-text { flex: 1; }
+/* La × para quitarlo de en medio. Llega oculta y la enseña Stimulus: sin
+   JavaScript, un boton que no cierra nada es peor que no tenerlo. */
+.flash-dismiss {
+  border: 0;
+  background: none;
+  color: inherit;
+  opacity: 0.5;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0 0 0 1rem;
+  cursor: pointer;
+}
+.flash-dismiss:hover { opacity: 1; }
 .flash-error, .error-messages { border-left-color: var(--hobo-danger); }
 .error-messages { border: 1px solid var(--hobo-danger); border-radius: var(--hobo-radius); padding: 0.75rem 1rem; margin-bottom: var(--hobo-gap); }
 .error-messages h2 { font-size: 1rem; margin: 0 0 0.5rem; }
