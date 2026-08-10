@@ -2992,6 +2992,49 @@ Lo que queda anotado de esa comparación, sin hacer todavía:
   arregla en `hobo:user_model` con `add_fields` —la tabla es de Rails y Hobo
   solo le suma (decisión 26)— y el formulario de alta lo hereda.
 
+## ¿Y recuperar el lenguaje DRYML? Anotado, sin decidir (2026-08-10)
+
+Preguntado por Imanol: *«¿costaría mucho recuperar el lenguaje? ¿no merece la
+pena?»*. Lo que se sabe hoy, para retomarlo cuando él diga.
+
+**Lo que hay en el árbol**, sin cargar: 3.585 líneas en `hobo/lib/dryml`.
+
+| | Líneas | Estado |
+|---|---:|---|
+| `template.rb` | 1029 | El compilador: árbol → Ruby. Es **lo que habría que reapuntar** a Rapid |
+| `template_environment.rb` | 661 | El runtime viejo. Casi todo ya es Rapid: `Context`, `Scope`, `Parameter` |
+| `parser/` | ~400 | Sano. Funciona con `NAME_STR` → `QNAME_STR`, el parche probado el 2026-08-10 en la app de Hobo 2 |
+| `railtie/template_handler.rb` | 13 | El enganche con Rails. Ya escrito |
+| el resto | ~1400 | Generador de taglibs, doc, legacy: se tira |
+
+Y el acoplamiento con el ActionView antiguo es **menor de lo que parecía**: 15
+referencias en total a `@output_buffer` / `concat` / `capture`. Lo que el código
+generado llama es `merge_attrs`, `scope` y `call_tag_parameter`, y esos tres
+existen ya en Rapid con otro nombre.
+
+**El dato que cambia la pregunta:** el trabajo duro es el mismo en los dos
+caminos. Convertir DRYML a Rapid una vez (el actualizador, decisión 6) y
+compilarlo en cada petición (el lenguaje vivo) comparten lo único difícil: **el
+mapeo de cada construcción de DRYML a una llamada de Rapid** — qué es
+exactamente un `<def tag="x" for="Date">` con sus params, sus `merge-attrs` y su
+`<old-x/>`. Escrito ese mapeo, el actualizador es «recorrer el árbol y escribir
+un fichero» y el lenguaje es «recorrer el árbol y evaluar», más un handler que
+ya está. Así que: **hoy costaría mucho; después del actualizador, casi nada.**
+
+Recomendación anotada, para discutirla con el mapeo delante:
+
+- **Hacer el actualizador primero**, que es lo que este plan ya dice.
+- Si después se quiere el lenguaje, que salga como **gema aparte**
+  (`hobo_dryml`), no en el núcleo — el mismo razonamiento que Imanol hizo con
+  Bootstrap. Quien migra una aplicación vieja la instala; quien empieza de cero,
+  no.
+- Razones para no ponerlo en el centro: **nadie fuera lo conoce** (ningún editor
+  lo resalta, ninguna herramienta lo escribe) y eso fue parte de por qué Hobo se
+  quedó solo; y su parser es XML de 2012, que ya ha mordido dos veces esta misma
+  semana.
+- Razón de peso a favor, para no barrerla: las **88 vistas DRYML de `amenti_v2`
+  seguirían funcionando sin tocarlas**.
+
 ## Una idea de Imanol, para mucho más adelante: Bootstrap fuera
 
 > «Cada vez veo más lógico tener `hobo_bootstrap` en un plugin que en el código
