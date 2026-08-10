@@ -3066,6 +3066,70 @@ Recomendación anotada, para discutirla con el mapeo delante:
 - Razón de peso a favor, para no barrerla: las **88 vistas DRYML de `amenti_v2`
   seguirían funcionando sin tocarlas**.
 
+### Y la pregunta de verdad, que es otra (2026-08-10)
+
+Imanol, después de catorce años escribiendo Rails:
+
+> «DRYML tenía un concepto muy claro: escribir menos HTML, menos código. Slim es
+> "mejor" o al menos escribes menos, pero **Slim no puede definir tags
+> reutilizables**, que era lo que DRYML sí tenía. ¿No sería mejor recuperar
+> DRYML? ¿O un *dryslim*, que evite mantener todo el sistema de plantillas y
+> solo añada lo de extender tags? ¿O DRYML 2.0?»
+
+Tres caminos: **(A)** revivir DRYML, **(B)** un añadido sobre un motor que ya
+existe, **(C)** un lenguaje nuevo. La recomendación es la **B**, y el argumento
+que la decide es este:
+
+**En Hobo 3 la mayor parte del HTML no se escribe.** Las páginas se derivan del
+modelo, así que el lenguaje de plantillas solo gobierna el 10–20% que se
+personaliza. Mantener un lenguaje entero —parser, compilador, integración,
+mensajes de error, herramientas que nadie tiene— para gobernar esa minoría es
+una cuenta que no sale, y es la misma cuenta que dejó a Hobo solo.
+
+Y la parte única de DRYML —lo que Slim no tiene— **ya está construida y
+probada**: `param`, `extend_tag`, `define_for(tipo)` y `this`. Lo que falta no
+es semántica. Es poder escribir el marcado **en Slim en vez de en Ruby**:
+
+```ruby
+# hoy, para rellenar un hueco de una página derivada
+Rapid.markup { tag("div", { :class => "aviso" }) { text "Quedan 3" } }
+```
+
+```slim
+/ lo que debería poder escribirse
+= hobo :index_page, @libros do |p|
+  - p.filters do
+    .aviso Quedan 3
+```
+
+**Las dos piezas que faltan**, las dos pequeñas:
+
+1. **Params desde tu plantilla.** Que el bloque de un `param` pueda ser marcado
+   capturado de la vista (`capture`) en lugar de Ruby. Es un método en el
+   helper, y con él ERB, Slim o HAML sirven para rellenar cualquier hueco de
+   cualquier página derivada. El puente en sí ya existe (`rapid_tag`, con
+   `Rapid.markup` para los params); lo que falta es esa captura.
+2. **Tags escritos como plantilla.** Que `app/views/tags/card_book.html.slim` se
+   registre solo como `Rapid.define_for(:card, Book)`. Con eso los tags
+   reutilizables se escriben en Slim y **siguen siendo tags de Hobo**:
+   extensibles, con despacho por tipo y con sus params.
+
+Lo que hay que decir en contra, para que la decisión sea justa: DRYML tenía una
+densidad que esto no alcanza del todo —`<view:body/>` dentro del marcado, con el
+contexto implícito— y su `<extend>` dejaba modificar un tag ajeno **escribiendo
+marcado**, mientras que aquí extender sigue siendo una línea de Ruby aunque el
+contenido sea Slim. Si al usarlo se queda corto, el lenguaje se puede añadir
+encima: el mapeo DRYML→Rapid hay que escribirlo igual para el actualizador, así
+que esa puerta no se cierra.
+
+**Orden acordado:**
+
+1. **El puente de plantillas** (las dos piezas de arriba). Lo que más cambia el
+   día a día y lo más barato.
+2. **El actualizador** con `amenti_v2` (decisión 6), que sigue siendo el punto
+   pendiente.
+3. Y **con el mapeo delante**, decidir sobre el lenguaje. No antes.
+
 ## Una idea de Imanol, para mucho más adelante: Bootstrap fuera
 
 > «Cada vez veo más lógico tener `hobo_bootstrap` en un plugin que en el código
@@ -3098,8 +3162,18 @@ comparar las dos aplicaciones, y cada gema nueva es una cosa más que versionar.
 escribir vistas —salvo tres líneas para decir por dónde se filtra—, funciona, y
 se parece a la de Hobo 2. Lo que queda es empaquetar y pulir.
 
-**Los cuatro puntos de esta lista están hechos** (2026-08-09). Lo que queda
-anotado, sin orden y sin prisa:
+**Lo siguiente, decidido con Imanol el 2026-08-10, y por este orden:**
+
+1. **El puente de plantillas.** Params rellenados desde tu propia plantilla
+   (Slim, ERB, HAML) y tags escritos como plantilla. Ver «la pregunta de verdad»
+   más arriba: es lo que queda de DRYML que merece la pena, sin lenguaje que
+   mantener.
+2. **El actualizador** de plantillas DRYML (decisión 6), con `amenti_v2`.
+3. **Decidir sobre el lenguaje** —gema `hobo_dryml` de compatibilidad, o nada—
+   con el mapeo delante y no antes.
+
+**Los cuatro puntos de la lista anterior están hechos** (2026-08-09). Lo que
+queda anotado, sin orden y sin prisa:
 
 - ~~El `belongs_to` que no enlazaba y la caja de búsqueda~~ **hechos**. Un
   registro es un sitio: `<view>` lo enlaza cuando hay ruta. Y la búsqueda global
