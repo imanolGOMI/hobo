@@ -84,6 +84,27 @@ module Hobo
       behaviours.keys.first || :stimulus
     end
 
+    # Y lo que un plugin necesita **en todas las paginas**: su hoja de estilos y
+    # su modulo de javascript.
+    #
+    #   Hobo.brings(:stylesheet => "hobo_jquery_ui", :javascript => "hobo_jquery_ui")
+    #
+    # `<page>` los enlaza detras de los del tema. Faltaba: un plugin podia poner
+    # sus ficheros donde el pipeline los viera -- eso ya lo hacia su engine --
+    # pero nadie los enlazaba, asi que la hoja de estilos de un plugin no se
+    # cargaba en ninguna pagina y su javascript no lo importaba nadie. Se veia
+    # como "el plugin no hace nada", que es el peor de los sintomas porque no
+    # senala a ningun sitio.
+    def brought
+      @brought ||= { :stylesheets => [], :javascript => [] }
+    end
+
+    def brings(stylesheet: nil, javascript: nil)
+      brought[:stylesheets] |= [stylesheet.to_s] if stylesheet
+      brought[:javascript] |= [javascript.to_s] if javascript
+      self
+    end
+
     # Lo que se le dice a quien trae un modelo de Hobo 2 con `attr_accessible`.
     #
     # Una vez por modelo, con el fichero delante, y diciendo **qué cambia**: no

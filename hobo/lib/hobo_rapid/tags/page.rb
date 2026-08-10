@@ -36,7 +36,23 @@ module HoboRapid
     end
     def subsite = nil
     def base_url = ""
-    def csrf_meta_tag = nil
+    # El token de Rails, en la cabecera de la pagina.
+    #
+    # Estaba a `nil` -- un hueco que nunca se lleno -- y no se notaba porque los
+    # formularios llevan el suyo en un campo oculto. Lo que no funciona sin esto
+    # es **cualquier POST desde javascript**: no hay de donde sacar el token y
+    # Rails contesta 422. Lo encontro `sortable-collection` al guardar el orden
+    # nuevo, que es exactamente ese caso.
+    #
+    # El token ya viaja: `rapid_tag` lo deja en HoboRapid para el resto del
+    # render, porque los formularios tambien lo necesitan.
+    def csrf_meta_tag
+      token = HoboRapid.authenticity_token if defined?(HoboRapid)
+      return nil if token.nil? || token.to_s.empty?
+
+      %(<meta name="csrf-param" content="authenticity_token">) +
+        %(<meta name="csrf-token" content="#{CGI.escapeHTML(token.to_s)}">)
+    end
 
     # Assets go through Rails' own resolver, which is the only thing that knows
     # where a file ends up: Propshaft serves digested names, and a hardcoded
@@ -89,6 +105,11 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
         # no theme at all -- simply adds nothing here.
         HoboRapid::Theme.stylesheets.each_with_index do |sheet, i|
           call_tag(:stylesheet, { :name => sheet }, :as => :"theme_stylesheet_#{i}")
+        end
+        # Y las de los plugins, entre el tema y la aplicacion: un plugin puede
+        # pisar al tema y la aplicacion puede pisarlos a los dos.
+        (defined?(Hobo) ? Hobo.brought[:stylesheets] : []).each do |sheet|
+          call_tag(:stylesheet, { :name => sheet }, :as => :"plugin_stylesheet_#{sheet}")
         end
         call_tag(:stylesheet, { :name => subsite || "application" }, :as => :app_stylesheet)
       end
@@ -186,8 +207,15 @@ Rapid.define(:javascript, :attrs => [:name]) do
     # `eagerLoadControllersFrom("controllers")` y sus controladores se cargan
     # solos. Cualquier otro -- `hobo_jquery` -- es un modulo que nadie importa,
     # asi que se importa aqui. Una linea, y solo cuando hay otro.
-    modulo = Hobo.behaviours[Hobo.behaviour_in_use]&.dig(:javascript) if defined?(Hobo)
-    raw %(<script type="module">import "#{modulo}"</script>) if modulo
+    modulos = []
+    if defined?(Hobo)
+      modulos << Hobo.behaviours[Hobo.behaviour_in_use]&.dig(:javascript)
+      # Y el de cualquier otro plugin que traiga javascript propio.
+      modulos.concat(Hobo.brought[:javascript])
+    end
+    modulos.compact.uniq.each do |modulo|
+      raw %(<script type="module">import "#{modulo}"</script>)
+    end
   else
     src = asset_path_for(attributes[:name], "js")
     tag("script", { :src => src, :defer => true }) if src

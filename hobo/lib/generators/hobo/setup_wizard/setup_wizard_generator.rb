@@ -39,6 +39,8 @@ module Hobo
                    :desc => "clean (el que viene dentro), none, o el de una gema instalada"
       class_option :behaviour, :type => :string,
                    :desc => "stimulus (el que viene dentro), o el de una gema instalada"
+      class_option :plugins, :type => :array,
+                   :desc => "Los demas plugins que quieres, p.ej. --plugins jquery_ui"
       class_option :admin, :type => :boolean,
                    :desc => "Un subsitio de administracion"
       class_option :admin_name, :type => :string,
@@ -72,6 +74,7 @@ module Hobo
 
         @theme = choose_theme
         @behaviour = choose_behaviour
+        @extras = choose_extras
         @invite_only = yes_or_no?(:invite_only,
                                   "Solo se entra por invitacion? (un administrador invita; no hay alta publica)", false)
         @activation_email = @invite_only ? false : yes_or_no?(:activation_email, "El alta tiene que confirmarse por correo?", false)
@@ -290,9 +293,17 @@ module Hobo
       # Los plugins que hay que instalar: los elegidos que no vienen dentro.
       # `clean`, `stimulus` y `none` no son gemas.
       def chosen_plugins
-        [@theme, @behaviour].compact.filter_map do |name|
+        ([@theme, @behaviour] + Array(@extras)).compact.filter_map do |name|
           Hobo::Plugins.all.find { |plugin| plugin.name == name }
         end
+      end
+
+      # El Gemfile, o nada: el asistente tiene que poder responder sus preguntas
+      # tambien donde no hay aplicacion, que es como lo prueban sus pruebas.
+      def gemfile
+        @gemfile ||= File.read(File.join(destination_root, "Gemfile"))
+      rescue StandardError
+        ""
       end
 
       def theme_plugin = Hobo::Plugins.of(:theme).find { |plugin| plugin.name == @theme }
@@ -360,6 +371,24 @@ module Hobo
                   Hobo::Plugins.of(:behaviour).map { |plugin| [plugin.name, plugin.describe] }
 
         choose(:behaviour, "Quien ejecuta el comportamiento de las paginas:", answers, "stimulus")
+      end
+
+      # Y los demas plugins que haya instalados: los que no compiten por nada.
+      #
+      # El tema es uno y quien ejecuta el comportamiento tambien, asi que son
+      # preguntas de elegir. Un plugin que solo trae tags -- `hobo_jquery_ui`,
+      # con su calendario -- no compite con ninguno, asi que es un si o un no
+      # por cada uno, y por defecto no: tener una gema instalada no es haberla
+      # pedido, y muchas veces es solo una dependencia de otra.
+      def choose_extras
+        given = options[:plugins]
+        return Array(given).map(&:to_s) if given
+
+        Hobo::Plugins.of(:tags).filter_map do |plugin|
+          next if gemfile.include?(plugin.gem_name)
+          plugin.name if yes_or_no?(:"plugin_#{plugin.name}",
+                                    "Instalar #{plugin.gem_name}? (#{plugin.describe})", false)
+        end
       end
 
       # Una pregunta cuyas respuestas se saben al preguntarla y no al escribirla.
