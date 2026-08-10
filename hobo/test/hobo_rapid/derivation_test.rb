@@ -1,4 +1,5 @@
 require "test_helper"
+require "cgi"
 require "rapid/param_contract"
 require "hobo_rapid/derivation"
 
@@ -394,9 +395,8 @@ class DerivationTest < Minitest::Test
   def test_the_form_offers_the_children_as_a_list_you_can_grow
     html = render(:model_form, story)
 
-    assert_includes html, %(data-controller="rapid-input-many")
-    assert_includes html, %(data-rapid-input-many-prefix-value="story[tasks]")
-    assert_includes html, %(data-rapid-input-many-target="template")
+    assert_includes CGI.unescapeHTML(html), %({"input-many":{"prefix":"story[tasks]")
+    assert_includes html, %(data-rapid-target="input-many:template")
     assert_includes html, %(name="story[tasks][0][done]")
   end
 

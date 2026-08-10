@@ -197,7 +197,7 @@ Rapid.define(:input_many, :attrs => [:minimum, :prefix, :fields, :add_label, :re
           end
 
   row = lambda do |record, index, target|
-    attrs = { :class => "input-many-item", :"data-rapid-input-many-target" => target }
+    attrs = { :class => "input-many-item", **HoboRapid::Behaviour.target("input-many", target) }
     attrs[:hidden] = true if target == "template"
 
     tag("div", attrs, :"item_#{index}") do
@@ -222,20 +222,19 @@ Rapid.define(:input_many, :attrs => [:minimum, :prefix, :fields, :add_label, :re
       # styles the plain forms Rails paints turned them into big blue primary
       # buttons -- the same rule that was eating the delete glyph.
       tag("button", { :type => "button", :class => "action small add-item",
-                      :"data-action" => "rapid-input-many#add" }, :add) do
+                      **HoboRapid::Behaviour.action("input-many", "add") }, :add) do
         text(attributes[:add_label] || "+")
       end
       tag("button", { :type => "button", :class => "action small remove-item",
-                      :"data-action" => "rapid-input-many#remove" }, :remove) do
+                      **HoboRapid::Behaviour.action("input-many", "remove") }, :remove) do
         text(attributes[:remove_label] || "−")
       end
     end
   end
 
   tag("div", { :class => "input-many",
-               :"data-controller" => "rapid-input-many",
-               :"data-rapid-input-many-prefix-value" => prefix,
-               :"data-rapid-input-many-minimum-value" => minimum }, :input_many) do
+               **HoboRapid::Behaviour.declare("input-many", :prefix => prefix, :minimum => minimum) },
+      :input_many) do
     row.call(blank, -1, "template") if blank
 
     if members.any?
@@ -258,7 +257,7 @@ Rapid.define(:input_many, :attrs => [:minimum, :prefix, :fields, :add_label, :re
     # lack the key, which reads as "leave the collection alone", and the rows
     # the user deleted come back on the next page. The controller enables it
     # only while there are none.
-    tag("div", { :"data-rapid-input-many-target" => "empty", :hidden => true }, :empty) do
+    tag("div", { **HoboRapid::Behaviour.target("input-many", "empty"), :hidden => true }, :empty) do
       tag("input", { :type => "hidden", :class => "empty-input", :name => prefix, :value => "" })
     end
   end
@@ -306,7 +305,7 @@ Rapid.define(:select_one_or_new, :attrs => [:name, :new_label, :fields, :limit, 
                                               :blank_message, :sort), :as => :select) if blank.nil? || fields.empty? || fields_prefix.nil?
 
   tag("div", { :class => "select-one-or-new",
-               :"data-controller" => "rapid-select-one-or-new" }, :select_one_or_new) do
+               **HoboRapid::Behaviour.declare("select-one-or-new") }, :select_one_or_new) do
     new_label = attributes[:new_label] ||
                 t(:"associations.new_option", "New %{name}\u2026",
                   :name => HoboRapid::Derivation.title_of(member_class).downcase)
@@ -317,15 +316,17 @@ Rapid.define(:select_one_or_new, :attrs => [:name, :new_label, :fields, :limit, 
              :as => :select,
              # The select is the tag's own; what this adds is the extra option
              # and the two data attributes that hand it to Stimulus.
+             # `change->` no se escribe: el evento natural de un <select> es
+             # cambiar, que es lo que se supone cuando no se dice otra cosa.
              :select => Rapid.parameter(
-               :attributes => { :"data-rapid-select-one-or-new-target" => "select",
-                                :"data-action" => "change->rapid-select-one-or-new#change" }),
+               :attributes => HoboRapid::Behaviour.target("select-one-or-new", "select")
+                                .merge(HoboRapid::Behaviour.action("select-one-or-new", "change"))),
              :extra_options => Rapid.markup do
                tag("option", { :value => HoboRapid::NEW_RECORD_OPTION }, :new_option) { text new_label }
              end)
 
     tag("div", { :class => "new-record",
-                 :"data-rapid-select-one-or-new-target" => "fields",
+                 **HoboRapid::Behaviour.target("select-one-or-new", "fields"),
                  :hidden => true }, :fields) do
       fields.each do |field|
         with_field(field, blank) do

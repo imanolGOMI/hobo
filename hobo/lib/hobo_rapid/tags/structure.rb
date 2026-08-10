@@ -49,11 +49,11 @@ Rapid.define(:flash_message, :attrs => [:type]) do
   # el JavaScript de Bootstrap, que una aplicación con el tema `clean` no tiene.
   # Lo cierra un controlador de Stimulus, que es lo que Hobo trae.
   tag("div", { :class => "flash flash-#{kind}", :role => "alert",
-               :"data-controller" => "rapid-dismiss" }, :message) do
+               **HoboRapid::Behaviour.declare("dismiss") }, :message) do
     tag("span", { :class => "flash-text" }, :text) { text message }
     tag("button", { :type => "button", :class => "flash-dismiss",
-                    :"data-action" => "rapid-dismiss#dismiss",
-                    :"data-rapid-dismiss-target" => "button",
+                    **HoboRapid::Behaviour.action("dismiss", "dismiss"),
+                    **HoboRapid::Behaviour.target("dismiss", "button"),
                     :hidden => true,
                     :"aria-label" => t(:"actions.dismiss", "Dismiss") }, :dismiss) { raw "&times;" }
   end
@@ -323,8 +323,8 @@ Rapid.define(:dev_user_changer, :attrs => [:limit]) do
   tag("form", { :method => "get", :action => action, :class => "dev-user-changer" }, :form) do
     tag("select", { :name => field, :class => "form-select",
                     :"aria-label" => t(:"session.change_user", "Change user"),
-                    :"data-controller" => "rapid-autosubmit",
-                    :"data-action" => "change->rapid-autosubmit#submit" }, :select) do
+                    **HoboRapid::Behaviour.declare("autosubmit"),
+                    **HoboRapid::Behaviour.action("autosubmit", "submit") }, :select) do
       tag("option", { :value => "" }) { text t(:"session.guest", "Guest") }
       people.each do |person|
         value = person.send(field).to_s

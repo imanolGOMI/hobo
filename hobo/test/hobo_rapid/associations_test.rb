@@ -1,4 +1,5 @@
 require "test_helper"
+require "cgi"
 require "rapid/param_contract"
 require "hobo_rapid/tags/associations"
 
@@ -202,15 +203,22 @@ class AssociationsTest < Minitest::Test
     Rapid::Context.capture { outer.with_field(:movie_genres, film) { outer.call_tag(:input_many) } }
   end
 
-  def test_it_speaks_the_dom_the_stimulus_controller_reads
+  # El marcado dice **que es** y **que se le puede hacer**, sin nombrar a quien
+  # lo ejecuta. Antes decia `data-controller="rapid-input-many"`, que es
+  # vocabulario de Stimulus, y eso ataba el catalogo a un framework: no podia
+  # haber otra implementacion. Es el contrato de Hobo 2, con su mismo nombre.
+  def test_it_speaks_the_contract_and_not_a_framework
     html = input_many_html
 
-    assert_includes html, %(data-controller="rapid-input-many")
-    assert_includes html, %(data-rapid-input-many-prefix-value="film[movie_genres]")
-    assert_includes html, %(data-rapid-input-many-target="template")
-    assert_includes html, %(data-rapid-input-many-target="item")
-    assert_includes html, %(data-action="rapid-input-many#add")
-    assert_includes html, %(data-action="rapid-input-many#remove")
+    # El JSON viaja escapado dentro del atributo, que es lo correcto en html y
+    # lo que el navegador desescapa al leer `dataset.rapid`.
+    assert_includes CGI.unescapeHTML(html), %({"input-many":{"prefix":"film[movie_genres]")
+    assert_includes html, %(data-rapid-target="input-many:template")
+    assert_includes html, %(data-rapid-target="input-many:item")
+    assert_includes html, %(data-rapid-action="input-many:add")
+    assert_includes html, %(data-rapid-action="input-many:remove")
+
+    refute_includes html, "data-controller", "el catalogo no nombra a Stimulus"
   end
 
   # Without a template row an empty collection can never grow: there is nothing
@@ -219,7 +227,7 @@ class AssociationsTest < Minitest::Test
     film.movie_genres = []
     html = input_many_html
 
-    assert_includes html, %(data-rapid-input-many-target="template")
+    assert_includes html, %(data-rapid-target="input-many:template")
     assert_includes html, %(name="film[movie_genres][-1][genre_id]")
   end
 
@@ -268,7 +276,7 @@ class AssociationsTest < Minitest::Test
   def test_an_emptied_collection_can_say_it_is_empty
     html = input_many_html
 
-    assert_includes html, %(data-rapid-input-many-target="empty")
+    assert_includes html, %(data-rapid-target="input-many:empty")
     assert_includes html, %(name="film[movie_genres]")
   end
 
@@ -334,9 +342,9 @@ class AssociationsTest < Minitest::Test
     html = painted_on_track(:select_one_or_new, :style)
 
     assert_includes html, %(<option value="__new__")
-    assert_includes html, %(data-controller="rapid-select-one-or-new")
-    assert_includes html, %(data-rapid-select-one-or-new-target="select")
-    assert_includes html, %(data-rapid-select-one-or-new-target="fields")
+    assert_includes CGI.unescapeHTML(html), %({"select-one-or-new":{}})
+    assert_includes html, %(data-rapid-target="select-one-or-new:select")
+    assert_includes html, %(data-rapid-target="select-one-or-new:fields")
   end
 
   # `:accessible => true` is the model saying this one may be *created* from

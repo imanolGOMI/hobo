@@ -15,6 +15,8 @@ module HoboRapid
 
   EDIT_LINK_BASE = "https://github.com/Hobo/hobodoc/edit/master/hobo_rapid"
 
+  # El contrato del comportamiento, que el catalogo escribe en el marcado.
+  require 'hobo_rapid/behaviour'
   require 'hobo_rapid/theme'
   require 'hobo_rapid/previous_uri_filter'
   require 'hobo_rapid/tags/front_page'

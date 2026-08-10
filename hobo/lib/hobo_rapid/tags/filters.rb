@@ -144,7 +144,7 @@ Rapid.define(:filter_menu, :attrs => [:field, :param, :options, :label, :all_lab
   # element, and the fallback button it has to hide is a sibling of the select,
   # not a child of it.
   tag("form", { :method => "get", :class => "filter-menu",
-                :"data-controller" => "rapid-autosubmit" }, :form) do
+                **HoboRapid::Behaviour.declare("autosubmit") }, :form) do
     hidden_filters(key)
 
     if attributes[:label]
@@ -152,7 +152,7 @@ Rapid.define(:filter_menu, :attrs => [:field, :param, :options, :label, :all_lab
     end
 
     tag("select", { :name => "q[#{key}]", :class => "form-select",
-                    :"data-action" => "change->rapid-autosubmit#submit" }, :select) do
+                    **HoboRapid::Behaviour.action("autosubmit", "submit") }, :select) do
       tag("option", { :value => "" }) { text(attributes[:all_label] || t(:"filters.all", "All")) }
       choices.each do |label, value|
         selected = { :selected => true } if value.to_s == chosen.to_s
@@ -163,7 +163,7 @@ Rapid.define(:filter_menu, :attrs => [:field, :param, :options, :label, :all_lab
     # Without JavaScript the menu still works: the button is there, and the
     # controller takes it away when it connects.
     tag("button", { :type => "submit", :class => "action filter",
-                    :"data-rapid-autosubmit-target" => "fallback" }, :submit) do
+                    **HoboRapid::Behaviour.target("autosubmit", "fallback") }, :submit) do
       text t(:"filters.filter", "Filter")
     end
   end

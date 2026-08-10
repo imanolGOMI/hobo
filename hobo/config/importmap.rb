@@ -14,3 +14,10 @@ Dir[File.expand_path("../app/javascript/controllers/*_controller.js", __dir__)].
   name = File.basename(file, ".js")
   pin "controllers/#{name}", :to => "controllers/#{name}.js"
 end
+
+# Y el puente, que **no** es un controlador: traduce el marcado neutral del
+# catalogo -- `data-rapid` -- al vocabulario que Stimulus espera. Lo importa
+# cada controlador, que es lo que garantiza que se cargue: la aplicacion hace
+# `eagerLoadControllersFrom("controllers")` y con que cargue uno, el modulo se
+# ejecuta una vez.
+pin "controllers/rapid_bridge", :to => "controllers/rapid_bridge.js"

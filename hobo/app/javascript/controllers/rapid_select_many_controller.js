@@ -1,4 +1,8 @@
 import { Controller } from "@hotwired/stimulus"
+// El puente que traduce el marcado neutral del catalogo (`data-rapid`) a lo
+// que Stimulus espera. Lo importa cada controlador para que se cargue con el
+// primero que llegue; el modulo se ejecuta una sola vez.
+import "controllers/rapid_bridge"
 
 // <select-many>: pick from a select, and each choice becomes a row with a hidden
 // input; remove a row and the option comes back to the select.

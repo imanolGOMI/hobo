@@ -1,4 +1,5 @@
 require "test_helper"
+require "cgi"
 require "rapid/param_contract"
 require "hobo_rapid/tags/filters"
 
@@ -86,11 +87,12 @@ class FiltersTest < Minitest::Test
   def test_it_submits_itself
     html = painted(:filter_menu, :field => "category")
 
-    # On the form, not on the select: a controller only reaches its own element,
-    # and the fallback button it hides is a sibling of the select.
-    assert_includes html, %(class="filter-menu" data-controller="rapid-autosubmit")
-    assert_includes html, %(data-action="change-&gt;rapid-autosubmit#submit")
-    assert_includes html, %(data-rapid-autosubmit-target="fallback")
+    # En el formulario, no en el select: quien lo ejecute solo alcanza su
+    # elemento, y el boton de reserva que esconde es hermano del select.
+    assert_includes html, %(class="filter-menu" data-rapid=)
+    assert_includes CGI.unescapeHTML(html), %({"autosubmit":{}})
+    assert_includes html, %(data-rapid-action="autosubmit:submit")
+    assert_includes html, %(data-rapid-target="autosubmit:fallback")
   end
 
   def test_the_menu_remembers_what_was_chosen
