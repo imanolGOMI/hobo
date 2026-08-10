@@ -3016,6 +3016,7 @@ Lo que encontró mirarlas, todo por Imanol y todo invisible desde la suite:
 | El menú en inglés, la marca «Hobo» | El menú humanizaba el nombre de la clase; la marca no preguntaba a Rails cómo se llama la aplicación |
 | La caja de buscar en el centro | **Dos** `ms-auto` en la misma barra: el hueco se reparte entre los dos |
 | Los formularios sin salida | Faltaba Cancelar, y la franja que Hobo 2 llamaba `form-actions` |
+| Lo que cuelga de una ficha, como una lista de la compra | Se pintaba con `<view>` — un `<ul>` de nombres. Son registros: van con su `<card>`, que ya se deriva para cada modelo. Y una tarjeta **no repite** el campo que apunta a donde ya estás («Libro: Los santos inocentes» debajo del título de ese mismo libro) ni lo que ya es su título |
 
 > Y una lección más para la lista: **la suite no mira**. Las 499 pruebas pasaban
 > con las etiquetas sin enlace, el flash a medias y un formulario en el que no

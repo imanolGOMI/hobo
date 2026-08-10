@@ -123,6 +123,31 @@ class DerivationTest < Minitest::Test
     assert_includes html, "Una tarea"
   end
 
+  # Y se pintan como **tarjetas**, que es lo que son: registros con su caja y su
+  # enlace. Antes era un `<ul>` de nombres, y la misma página de Hobo 2 -- que
+  # sí pinta tarjetas -- se veía claramente mejor.
+  def test_the_children_are_painted_as_cards
+    html = render(:show_page, story)
+
+    assert_includes html, %(class="collection-cards")
+    assert_includes html, %(class="card task)
+  end
+
+  # Una tarjeta no repite el campo que apunta a donde ya estás.
+  #
+  # Dentro de la ficha de un libro, cada etiqueta decía «Libro: Los santos
+  # inocentes» -- debajo del título de esa misma página. Es lo que dice
+  # `:except`, y quien lo sabe es la ficha, que conoce la asociación por la que
+  # ha bajado.
+  def test_a_card_can_be_told_not_to_repeat_a_field
+    con = Rapid.render(:card, {}, :this => story.tasks.first)
+    sin = Rapid.render(:card, { :except => "done" }, :this => story.tasks.first)
+
+    assert_includes con, "Done"
+    refute_includes sin, "Done"
+    assert_includes sin, "Una tarea", "el nombre se queda"
+  end
+
   # --- the index page ---------------------------------------------------------
 
   # A table, not a list of cards: that is what hobo_bootstrap painted, and cards

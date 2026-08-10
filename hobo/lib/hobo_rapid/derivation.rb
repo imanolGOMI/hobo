@@ -214,8 +214,33 @@ module HoboRapid
                 end
               end
             end
+            # Lo que la tarjeta **no** repite:
+            #
+            #   - `except`: el campo que apunta a donde ya estás. Dentro de la
+            #     ficha de un libro, cada etiqueta decía «Libro: Los santos
+            #     inocentes» debajo del título de la propia página.
+            #   - y lo que ya es el título de la tarjeta. Un modelo de unión no
+            #     tiene campo nombre, así que su título es su `to_s` -- que
+            #     suele ser justo uno de sus campos --, y salía dos veces
+            #     seguidas: «clasico» y debajo «Etiqueta: clasico».
+            #
+            # Las dos son la misma regla: no digas otra vez lo que acabas de
+            # decir. Es lo que hacía la tarjeta de Hobo 2, que en un caso así
+            # enseñaba solo el nombre.
+            except = Array(attributes[:except]).map(&:to_s)
+            title = begin
+                      name_attribute ? this.send(name_attribute).to_s : this.to_s
+                    rescue StandardError
+                      nil
+                    end
+
+            shown = fields.reject do |field|
+              next true if except.include?(field.to_s)
+              (title.present? && this.send(field).to_s == title) rescue false
+            end
+
             tag("dl", {}, :body) do
-              fields.each do |field|
+              shown.each do |field|
                 with_field(field) do
                   tag("dt", {}, :"#{field}_label") { text HoboRapid::Derivation.label_for(model, field) }
                   tag("dd", {}, :"#{field}_value") { call_tag(:view, {}, :as => :"#{field}_view") }
@@ -292,7 +317,34 @@ module HoboRapid
                       # preguntarle a Rails cómo se llama.
                       tag("h3", {}, :"#{child}_heading") { text HoboRapid::Derivation.label_for(model, child) }
                     end
-                    with_field(child) { call_tag(:view, { :force => true }, :as => :"#{child}_collection") }
+                    # **Tarjetas, no una lista con viñetas.**
+                    #
+                    # Lo que cuelga de una ficha son registros, y un registro se
+                    # pinta con su `<card>` -- que es una caja con su nombre y
+                    # su enlace, y que esta misma máquina deriva para cada
+                    # modelo. Pintarlo con `<view>` daba un `<ul>` de nombres:
+                    # la misma información, con aspecto de nota al pie. Hobo 2
+                    # pintaba tarjetas aquí, y se nota.
+                    # El campo del hijo que apunta a esta página, para que la
+                    # tarjeta no lo repita: en `Book has_many :book_tags`, la
+                    # clave es `book_id`, o sea el campo `book`.
+                    back_reference = HoboRapid::Derivation.reference_back(model, child)
+
+                    with_field(child) do
+                      tag("div", { :class => "collection-cards" }, :"#{child}_collection") do
+                        Array(this).each do |record|
+                          with_this(record) do
+                            if Rapid.polymorphic?(:card, record)
+                              call_tag(:card, { :except => back_reference }, :as => :"#{child}_card")
+                            else
+                              # Un modelo sin tarjeta derivada -- uno que no pasó
+                              # por `derive`: se pinta como se pintaba.
+                              call_tag(:view, { :force => true }, :as => :"#{child}_card")
+                            end
+                          end
+                        end
+                      end
+                    end
                   end
                 end
               end
@@ -502,6 +554,21 @@ module HoboRapid
       def label_for(model, field)
         return model.human_attribute_name(field) if model.respond_to?(:human_attribute_name)
         field.to_s.humanize
+      end
+
+      # El campo con el que un hijo señala a su padre. `Book has_many
+      # :book_tags` guarda `book_id` en el hijo, así que el campo es `book`.
+      #
+      # Sirve para no repetirlo: dentro de la ficha de un libro, la tarjeta de
+      # cada etiqueta no tiene que decir de qué libro es.
+      def reference_back(model, child)
+        return nil unless model.respond_to?(:reflections)
+        reflection = model.reflections[child.to_s]
+        return nil unless reflection
+
+        reflection.foreign_key.to_s.sub(/_id\z/, "")
+      rescue StandardError
+        nil
       end
 
     end
