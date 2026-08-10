@@ -381,6 +381,69 @@ module MigrationGeneratorBattery
     assert_reversible(up, down, "change, remove and add together")
   end
 
+  # --- todos los tipos, no una muestra --------------------------------------
+  #
+  # La bateria probaba media docena de tipos. Los diecisiete que declara
+  # HoboFields pasan por el mismo camino --el generador le pregunta al adaptador
+  # por su tipo nativo-- y el que no se prueba es el que se rompe: un `:markdown`
+  # y un `:textile` son columnas de texto, un `:password` es una cadena, y un
+  # `:serialized` es texto con un serializador detras.
+  #
+  # Lo que se comprueba es la vuelta entera: se genera, se ejecuta, y se deshace
+  # dejando la base como estaba. Comparar el texto generado no dice si el `down`
+  # se puede ejecutar siquiera -- por eso paso desapercibido durante anos.
+
+  ALL_TYPES = %w[
+    boolean date datetime time integer decimal float string email_address text
+    raw_html html password raw_markdown markdown serialized textile
+  ].freeze
+
+  # `declare_field` y no el DSL de `fields`: dentro de ese bloque no se puede
+  # llamar a nada dinamicamente, porque es blank-slate y **cualquier** metodo
+  # que no conozca es el nombre de un campo. `send(:campo, :float)` no declara
+  # `campo` de tipo float: declara un campo llamado `send` de tipo `campo`, y el
+  # error sale tres capas mas abajo diciendo "nil is not a class/module".
+  def declare_types(model, types)
+    lineas = types.map { |type| "campo_#{type} :#{type}" }.join("\n")
+    model.class_eval("fields do\n#{lineas}\nend", __FILE__, __LINE__)
+    model
+  end
+
+  def test_every_declared_type_survives_a_round_trip
+    declared = ALL_TYPES
+    declare_types(define_model(:Advert), declared)
+
+    up, down = generate
+
+    declared.each do |type|
+      assert_match(/campo_#{type}/, up, "el tipo #{type} no ha llegado a la migracion")
+    end
+
+    assert_reversible(up, down, "los #{declared.size} tipos")
+  end
+
+  # Y cada tipo por separado, para que el que falle diga su nombre. Con todos
+  # juntos, un fallo dice "la migracion de diecisiete columnas" y hay que
+  # bisecar a mano.
+  ALL_TYPES.each do |type|
+    define_method("test_the_#{type}_type_round_trips") do
+      declare_types(define_model(:Advert), [type])
+
+      up, down = generate
+
+      assert_match(/create_table :adverts/, up)
+      assert_match(/:campo_#{type}/, up)
+      assert_reversible(up, down, "el tipo #{type}")
+    end
+  end
+
+  # Un tipo nuevo en HoboFields sin su fila aqui es un tipo que nadie migra.
+  def test_no_type_is_left_untested
+    faltan = HoboFields.field_types.keys.map(&:to_s) - ALL_TYPES
+
+    assert_empty faltan, "tipos sin probar en la migracion: #{faltan.join(", ")}"
+  end
+
 end
 
 
