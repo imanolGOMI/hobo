@@ -2992,6 +2992,36 @@ Lo que queda anotado de esa comparación, sin hacer todavía:
   arregla en `hobo:user_model` con `add_fields` —la tabla es de Rails y Hobo
   solo le suma (decisión 26)— y el formulario de alta lo hereda.
 
+## Las dos aplicaciones, mirándolas de verdad (2026-08-10)
+
+`hobo2_mi_app` (3000) y `hobo3_mi_app` (3001), **la misma biblioteca**: seis
+modelos, las mismas asociaciones y los mismos datos. Las dos en GitHub, con seis
+capturas en el README —las mismas rutas y los mismos nombres de fichero— para
+poder pasar de una a otra:
+
+- `git@github.com:imanolGOMI/hobo2_mi_app.git`
+- `git@github.com:imanolGOMI/hobo3_mi_app.git`
+
+Las capturas se rehacen con `hobo/test/support/capturas.rb` (Firefox sin
+ventana, entra y fotografía). **Cada vez que cambie algo que se ve, se vuelven a
+pasar.**
+
+Lo que encontró mirarlas, todo por Imanol y todo invisible desde la suite:
+
+| Qué se veía | Qué era |
+|---|---|
+| «No me deja crear etiquetas» | Con la colección vacía, el `input-many` pintaba **solo la plantilla**, que está oculta a propósito: ni un campo que rellenar ni un botón que pulsar, porque el `+` vive dentro de cada fila. Hobo 2 pintaba siempre una fila vacía |
+| Las etiquetas de la ficha, texto muerto | El enlace de un registro dependía de que tuviera **campo nombre**, y un modelo de unión no lo tiene. Un registro es un sitio, se llame como se llame |
+| «The Libro was created successfully» | La frase se armaba interpolando el nombre del modelo —traducido— dentro de una cadena en inglés |
+| El menú en inglés, la marca «Hobo» | El menú humanizaba el nombre de la clase; la marca no preguntaba a Rails cómo se llama la aplicación |
+| La caja de buscar en el centro | **Dos** `ms-auto` en la misma barra: el hueco se reparte entre los dos |
+| Los formularios sin salida | Faltaba Cancelar, y la franja que Hobo 2 llamaba `form-actions` |
+
+> Y una lección más para la lista: **la suite no mira**. Las 499 pruebas pasaban
+> con las etiquetas sin enlace, el flash a medias y un formulario en el que no
+> se podía añadir una fila. Lo que las encontró fue abrir las dos aplicaciones y
+> comparar la misma pantalla.
+
 ## ¿Y recuperar el lenguaje DRYML? Anotado, sin decidir (2026-08-10)
 
 Preguntado por Imanol: *«¿costaría mucho recuperar el lenguaje? ¿no merece la
