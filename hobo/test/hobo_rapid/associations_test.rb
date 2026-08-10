@@ -223,6 +223,25 @@ class AssociationsTest < Minitest::Test
     assert_includes html, %(name="film[movie_genres][-1][genre_id]")
   end
 
+  # Y **una fila que se ve**, que es la que faltaba.
+  #
+  # Con la colección vacía -- el caso de cualquier formulario de alta -- lo
+  # único que se pintaba era la plantilla, que está oculta a propósito. Así que
+  # no había ni un campo que rellenar ni un botón que pulsar: el `+` vive dentro
+  # de cada fila, y la única fila estaba escondida. Desde fuera se veía como
+  # «no me deja añadir etiquetas», y era exactamente eso: no se podía.
+  #
+  # Hobo 2 pintaba siempre una fila vacía, por esto mismo.
+  def test_an_empty_collection_still_gets_a_row_to_fill_in
+    film.movie_genres = []
+    html = input_many_html
+
+    assert_includes html, %(name="film[movie_genres][0][genre_id]"),
+                    "una coleccion vacia tiene que ofrecer una fila"
+    assert_equal 2, html.scan("add-item").length,
+                 "la de la plantilla y la de la fila visible, y ninguna mas"
+  end
+
   # The names are Hobo's, not Rails': no `_attributes`, and a belongs_to travels
   # as its foreign key. That is what `:accessible => true` reads.
   def test_the_names_are_the_ones_accessible_associations_read

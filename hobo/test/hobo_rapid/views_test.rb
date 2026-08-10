@@ -186,6 +186,15 @@ class RichTypeViewsTest < Minitest::Test
     def viewable_by?(_user, _field = nil) = true
   end
 
+  # Un modelo de unión: no tiene campo nombre, y lo que es se lo pregunta a lo
+  # que enlaza. `BookTag` de una biblioteca, `MovieGenre` de una videoteca: los
+  # hay en cualquier aplicación con un `has_many :through`.
+  class JoinRecord
+    def self.name_attribute = nil
+    def viewable_by?(_user, _field = nil) = true
+    def to_s = "clasico"
+  end
+
   def with_routes(path)
     Rapid::Tag.class_eval do
       alias_method :path_for_without_stub, :path_for if method_defined?(:path_for)
@@ -204,6 +213,19 @@ class RichTypeViewsTest < Minitest::Test
 
     assert_includes html, %(<a href="/categories/1")
     assert_includes html, "Drama"
+  end
+
+  # Y un registro **sin campo nombre** también es un sitio al que se va.
+  #
+  # El enlace dependía de tener `name_attribute`, así que los modelos de unión
+  # -- que no lo tienen -- salían como texto plano justo donde más se nota: la
+  # ficha de un libro enseñaba sus etiquetas en una lista sin enlaces, mientras
+  # la misma página en Hobo 2 las pinta enlazadas.
+  def test_a_record_with_no_name_field_links_too
+    html = with_routes("/book_tags/1") { Rapid.render(:view_content, {}, :this => JoinRecord.new) }
+
+    assert_includes html, %(<a href="/book_tags/1")
+    assert_includes html, "clasico"
   end
 
   # And where there is no route -- the catalogue outside Rails, a model with no

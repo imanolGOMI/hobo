@@ -656,7 +656,7 @@ module Hobo
         self.this = new_for_create(attributes)
         this.user_save(current_user)
       end
-      flash_notice (ht( :"#{@this.class.to_s.underscore}.messages.create.success", :default=>["The #{@this.class.model_name.human} was created successfully"])) if valid?
+      flash_notice(created_message) if valid?
       response_block(&b) || create_response(:new, options)
     end
 
@@ -671,7 +671,7 @@ module Hobo
         self.this = association.new(attributes)
         this.save
       end
-      flash_notice (ht( :"#{@this.class.to_s.underscore}.messages.create.success", :default=>["The #{@this.class.model_name.human} was created successfully"])) if valid?
+      flash_notice(created_message) if valid?
       response_block(&b) || create_response(:"new_for_#{name_of_auto_action_for(owner_association)}", options)
     end
 
@@ -712,6 +712,33 @@ module Hobo
 
     def flash_notice(message)
       flash[:notice] = message unless request.xhr?
+    end
+
+    # Lo que el flash dice después de guardar o borrar.
+    #
+    # El texto se armaba interpolando el nombre del modelo -- que **sí** está
+    # traducido -- dentro de una frase en inglés, así que una aplicación en
+    # castellano enseñaba «The Libro was created successfully». Ahora la frase
+    # entera pasa por I18n, y la aplicación puede seguir pisándola por modelo
+    # con `libro.messages.create.success`, que es lo que hacía Hobo 2.
+    #
+    # Y la forma es impersonal a propósito: «Se ha creado: Libro» vale para
+    # cualquier género, que desde aquí no se puede saber.
+    def created_message
+      ht(:"#{@this.class.to_s.underscore}.messages.create.success",
+         :default => [HoboRapid.translate(:"messages.created", "%{name} created",
+                                          :name => @this.class.model_name.human)])
+    end
+
+    def updated_message
+      ht(:"#{@this.class.to_s.underscore}.messages.update.success",
+         :default => [HoboRapid.translate(:"messages.updated", "Changes saved")])
+    end
+
+    def destroyed_message
+      ht(:"#{model.to_s.underscore}.messages.destroy.success",
+         :default => [HoboRapid.translate(:"messages.destroyed", "%{name} deleted",
+                                          :name => model.model_name.human)])
     end
 
 
@@ -786,7 +813,7 @@ module Hobo
         respond_with(self.this, :location => location) do |format|
           format.html do
             if valid
-              flash_notice (ht(:"#{@this.class.to_s.underscore}.messages.update.success", :default=>["Changes to the #{@this.class.model_name.human} were saved"]))
+              flash_notice(updated_message)
               redirect_to location
             else
               re_render_form(:edit)
@@ -800,7 +827,7 @@ module Hobo
       options = args.extract_options!
       self.this ||= args.first || find_instance
       this.user_destroy(current_user)
-      flash_notice ht( :"#{model.to_s.underscore}.messages.destroy.success", :default=>["The #{model.name.titleize.downcase} was deleted"])
+      flash_notice(destroyed_message)
       response_block(&b) || destroy_response(options, &b)
     end
 

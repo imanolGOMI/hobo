@@ -51,7 +51,11 @@ a:hover { text-decoration: underline; }
 .brand { font-weight: 600; color: var(--hobo-ink); }
 
 .nav { display: flex; align-items: center; gap: 0.75rem; list-style: none; margin: 0; padding: 0; }
-.account-nav { margin-left: auto; }
+/* Un solo margen automatico en toda la barra, y en el menu: asi la busqueda y
+   la cuenta quedan juntas a la derecha. Estaba aqui, y al llegar la caja de
+   buscar -que tambien lo llevaba- el hueco se repartia entre las dos y la caja
+   se quedaba en el centro. */
+.main-nav { margin-right: auto; }
 .nav-link { color: var(--hobo-muted); padding: 0.25rem 0; }
 .nav-link.current { color: var(--hobo-ink); font-weight: 600; }
 
@@ -243,8 +247,10 @@ button[type=submit]:not(.action-delete):not(.action-edit):not(.nav-link) {
 /* --- the box that searches the whole site -------------------------------------- */
 
 /* A la derecha de la barra, como en Hobo 2, y el campo y el boton pegados: son
-   una pieza, no dos cosas sueltas separadas por un hueco. */
-.site-search { margin-left: auto; }
+   una pieza, no dos cosas sueltas separadas por un hueco.
+   El empuje lo da el menu (.main-nav, mas abajo): un solo margen automatico.
+   Con uno aqui y otro en la cuenta, el hueco se reparte y la caja se queda en
+   mitad de la barra. */
 .site-search-form { display: flex; align-items: stretch; }
 .site-search .search-input {
   max-width: 12rem;

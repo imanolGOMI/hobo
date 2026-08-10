@@ -80,6 +80,12 @@ es:
       confirm_delete: "¿Seguro?"
       dismiss: "Cerrar"
       cancel: "Cancelar"
+    # Impersonal a propósito: «Se ha creado: Libro» vale para cualquier género,
+    # y el género de lo que venga en %{name} no se sabe desde aquí.
+    messages:
+      created: "Se ha creado: %{name}"
+      updated: "Se han guardado los cambios"
+      destroyed: "Se ha borrado: %{name}"
     index:
       count_one: "1 %{name}"
       count: "%{count} %{name}"

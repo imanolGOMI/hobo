@@ -238,7 +238,21 @@ Rapid.define(:input_many, :attrs => [:minimum, :prefix, :fields, :add_label, :re
                :"data-rapid-input-many-minimum-value" => minimum }, :input_many) do
     row.call(blank, -1, "template") if blank
 
-    members.each_with_index { |member, index| row.call(member, index, "item") }
+    if members.any?
+      members.each_with_index { |member, index| row.call(member, index, "item") }
+    elsif blank
+      # **Una fila para empezar.**
+      #
+      # Sin esto, una colección vacía -- que es el caso de cualquier formulario
+      # de alta -- pintaba la plantilla (oculta) y nada más: no había ni un
+      # campo que rellenar ni un botón que pulsar, porque el `+` vive dentro de
+      # cada fila y la única fila estaba escondida. Desde fuera se veía como
+      # «no me deja añadir etiquetas», y era exactamente eso.
+      #
+      # Hobo 2 pintaba siempre una fila vacía por la misma razón. Si no se
+      # rellena no pasa nada: una fila sin elegir nada no crea registro.
+      row.call(blank, 0, "item")
+    end
 
     # Removing the last row has to *say* so. Without this the parameters simply
     # lack the key, which reads as "leave the collection alone", and the rows

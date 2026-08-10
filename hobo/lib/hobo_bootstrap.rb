@@ -22,7 +22,12 @@ module HoboBootstrap
     "navbar-inner"  => "container-fluid px-4",
     "brand"         => "navbar-brand",
     "nav"           => "navbar-nav",
-    "account-nav"   => "ms-auto align-items-center gap-2",
+    # **Un solo** margen automático, y en el menú. Con `ms-auto` en la búsqueda
+    # y otro en la cuenta, el hueco se reparte entre los dos y la caja de buscar
+    # se queda en mitad de la barra. Empujando desde aquí, todo lo que viene
+    # después queda pegado a la derecha, haya buscador o no.
+    "main-nav"      => "me-auto",
+    "account-nav"   => "align-items-center gap-2",
     "subnav-list"   => "nav-pills",
     "nav-link"      => "nav-link",
     "current"       => "active",
@@ -64,10 +69,10 @@ module HoboBootstrap
 
     # The search box. `search-label` is written and then hidden: a screen reader
     # needs to be told what the box is, and everybody else has the placeholder.
-    # `ms-auto`: a la derecha de la barra, como en Hobo 2, y no pegada al menú.
+    # A la derecha de la barra, como en Hobo 2: la empuja el `me-auto` del menú.
     # `input-group`: el campo y el botón son **una** pieza; sueltos y con
     # separación parecen dos cosas que no tienen que ver.
-    "site-search"      => "ms-auto me-2",
+    "site-search"      => "me-2",
     "site-search-form" => "input-group input-group-sm",
     "search-label"     => "visually-hidden",
     "search-input"     => "form-control",
