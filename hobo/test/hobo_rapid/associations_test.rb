@@ -246,8 +246,11 @@ class AssociationsTest < Minitest::Test
 
     assert_includes html, %(name="film[movie_genres][0][genre_id]"),
                     "una coleccion vacia tiene que ofrecer una fila"
-    assert_equal 2, html.scan("add-item").length,
-                 "la de la plantilla y la de la fila visible, y ninguna mas"
+    # Tres: la de la plantilla, la de la fila visible, y la de la fila de "no
+    # hay nada" -- que es la que queda cuando se quita la última, y sin la cual
+    # el control desaparecía de la página.
+    assert_equal 3, html.scan("add-item").length,
+                 "la de la plantilla, la de la fila visible y la de la fila vacia"
   end
 
   # The names are Hobo's, not Rails': no `_attributes`, and a belongs_to travels

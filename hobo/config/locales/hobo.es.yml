@@ -97,6 +97,7 @@ es:
       edit_title: "Editar %{name}"
     filters:
       search: "Buscar"
+      search_in: "Buscar en %{name}"
       clear: "Limpiar"
       all: "Todos"
       filter: "Filtrar"

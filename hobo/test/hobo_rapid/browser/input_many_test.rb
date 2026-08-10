@@ -26,6 +26,7 @@ module InputManyBehaviour
 
       <li data-rapid-target="input-many:empty" hidden>
         <input class="empty-input" name="story[tasks][]" value="">
+        <button data-rapid-action="input-many:add">add</button>
       </li>
     </ul>
   HTML
@@ -92,6 +93,23 @@ module InputManyBehaviour
 
     shown = rows.map { |row| row.all("button", :visible => true).map(&:text) }
     assert_equal [["remove"], ["add", "remove"]], shown
+  end
+
+  # Quitar la última fila no puede dejar la página sin manera de volver a
+  # empezar. El `+` vive en la última fila, así que al quitarla no quedaba
+  # ninguno: quitabas la única etiqueta de un libro y ya no podías ponerle otra
+  # sin recargar. El de la fila de "no hay nada" es el que queda.
+  def test_removing_the_last_row_still_leaves_a_way_back
+    remove_on(rows.first)
+
+    assert_empty rows
+    botones = @page.all("[data-rapid-action='input-many:add']", :visible => true)
+    refute_empty botones, "sin filas no queda ningun boton para anadir: el control desaparece"
+
+    botones.first.click
+
+    assert_equal 1, rows.length
+    refute rows.first.find("input", :visible => :all).disabled?, "la fila que vuelve tiene que poder enviarse"
   end
 
   def test_the_empty_row_shows_only_while_the_list_is_empty

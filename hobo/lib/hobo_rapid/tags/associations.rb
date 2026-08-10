@@ -259,6 +259,15 @@ Rapid.define(:input_many, :attrs => [:minimum, :prefix, :fields, :add_label, :re
     # only while there are none.
     tag("div", { **HoboRapid::Behaviour.target("input-many", "empty"), :hidden => true }, :empty) do
       tag("input", { :type => "hidden", :class => "empty-input", :name => prefix, :value => "" })
+
+      # Y un boton para volver a empezar, que **faltaba**: el `+` vive en la
+      # ultima fila, asi que al quitar la ultima no quedaba ninguno y el control
+      # desaparecia de la pagina. Quitabas la unica etiqueta de un libro y ya no
+      # podias ponerle otra sin recargar.
+      tag("button", { :type => "button", :class => "action small add-item",
+                      **HoboRapid::Behaviour.action("input-many", "add") }, :add) do
+        text(attributes[:add_label] || "+")
+      end
     end
   end
 end

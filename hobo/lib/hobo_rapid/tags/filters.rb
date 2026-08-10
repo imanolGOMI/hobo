@@ -93,9 +93,17 @@ Rapid.define(:search_filter, :attrs => [:fields, :label, :placeholder, :button_l
       tag("label", { :class => "form-label" }, :label) { text attributes[:label] }
     end
 
+    # «Buscar en libros», no «Buscar»: en la misma pagina esta la caja de buscar
+    # en todo el sitio, y las dos decian la misma palabra. Dos cajas iguales una
+    # al lado de la otra no son dos herramientas, son una duda.
+    plural = model && HoboRapid::Derivation.plural_of(model)
+    placeholder = attributes[:placeholder] ||
+                  (plural ? t(:"filters.search_in", "Search %{name}", :name => plural.downcase)
+                          : t(:"filters.search", "Search"))
+
     tag("input", { :type => "search", :name => "q[#{key}]", :value => value,
                    :class => "form-control",
-                   :placeholder => attributes[:placeholder] || t(:"filters.search", "Search") }, :input)
+                   :placeholder => placeholder }, :input)
 
     tag("button", { :type => "submit", :class => "action filter" }, :submit) do
       text(attributes[:button_label] || t(:"filters.search", "Search"))
