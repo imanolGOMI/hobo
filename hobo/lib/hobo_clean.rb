@@ -20,3 +20,7 @@ module HoboClean
   end
 
 end
+
+# Y se apunta, como cualquier otro tema. Que venga dentro de la gema no le da
+# ningun privilegio: el nucleo mira el registro y no conoce nombres.
+Hobo.theme(:clean) { |subsite| HoboClean.dress(subsite) }

@@ -91,6 +91,28 @@ module Hobo
 
       # --- what the answers mean -------------------------------------------------
 
+      # Un tema que no viene dentro **se instala**, que es lo que significa ser
+      # un plugin: la gema en el Gemfile es la instalacion (decision 22). Hobo 2
+      # hacia esto mismo -- elegias bootstrap y te anadia `gem "hobo_bootstrap"`.
+      #
+      # `clean` no pasa por aqui porque es el de Hobo y viene dentro.
+      def the_theme_gem
+        return if %w[clean none].include?(@theme)
+        return say("  el Gemfile ya lleva hobo_#{@theme}") if
+          File.read(File.join(destination_root, "Gemfile")).include?("hobo_#{@theme}")
+
+        say_step "El tema"
+
+        # Con HOBODEV puesto, del arbol de trabajo; si no, de rubygems. Es lo
+        # mismo que hace `hobo new` con la gema principal.
+        dev = ENV["HOBODEV"]
+        if dev && File.directory?(File.join(dev, "..", "hobo_#{@theme}"))
+          gem "hobo_#{@theme}", :path => File.expand_path(File.join(dev, "..", "hobo_#{@theme}"))
+        else
+          gem "hobo_#{@theme}"
+        end
+      end
+
       def write_the_configuration
         say_step "La configuracion"
         add_to_configuration "config.hobo.theme = #{@theme == "none" ? "false" : ":#{@theme}"}"

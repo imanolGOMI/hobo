@@ -19,17 +19,33 @@ module Hobo
   class Engine < Rails::Engine
 
     # Which theme, for which part of the application.
+    #
+    # Hobo ya **no conoce los temas por su nombre**. Antes esto era un `case`
+    # con `:bootstrap` dentro, y eso obligaba a que Bootstrap viviera en la
+    # gema: 232 KB de un framework de terceros que se llevaba tambien quien no
+    # lo usaba. Ahora cada tema se apunta al cargarse -- `Hobo.theme(:nombre)`
+    # -- y el nucleo solo mira el registro.
+    #
+    # `clean` es la excepcion a proposito: es el tema de Hobo, 222 lineas de css
+    # propio sin dependencias, y una aplicacion recien hecha tiene que pintar
+    # algo sin instalar nada.
     def self.dress(theme, subsite = nil)
-      case theme.to_sym
-      when :bootstrap
-        require "hobo_bootstrap"
-        HoboBootstrap.dress(subsite)
-      when :clean
-        require "hobo_clean"
-        HoboClean.dress(subsite)
-      else
-        raise ArgumentError, "config.hobo.theme: :clean, :bootstrap o false (era #{theme.inspect})"
-      end
+      nombre = theme.to_sym
+      require "hobo_clean" if nombre == :clean && !Hobo.themes.key?(:clean)
+
+      registrado = Hobo.themes[nombre]
+      raise ArgumentError, <<~ERROR unless registrado
+        config.hobo.theme = #{theme.inspect}, y ese tema no esta.
+
+        Un tema es una gema: anadela al Gemfile y se apunta sola.
+
+            gem "hobo_#{nombre}"
+
+        Los que hay ahora mismo: #{Hobo.themes.keys.map(&:inspect).join(", ")}.
+        Y `false` para no llevar ninguno.
+      ERROR
+
+      registrado.call(subsite)
     end
 
     # `bin/rails hobo:tags` is in lib/tasks/hobo_tags.rake and needs no line

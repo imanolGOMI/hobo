@@ -45,6 +45,22 @@ module Hobo
 
     attr_accessor :engines, :stable_cache
 
+    # Los temas que hay puestos.
+    #
+    # Un tema es **una gema**: al cargarse se apunta aqui, y `config.hobo.theme`
+    # solo dice cual de los apuntados se usa. Hobo no conoce ninguno por su
+    # nombre -- salvo `clean`, que es el suyo y viene dentro, para que una
+    # aplicacion recien hecha pinte algo sin instalar nada.
+    #
+    #   Hobo.theme(:bootstrap) { |subsite| HoboBootstrap.dress(subsite) }
+    def themes
+      @themes ||= {}
+    end
+
+    def theme(name, &block)
+      themes[name.to_sym] = block
+    end
+
     # Lo que se le dice a quien trae un modelo de Hobo 2 con `attr_accessible`.
     #
     # Una vez por modelo, con el fichero delante, y diciendo **qué cambia**: no

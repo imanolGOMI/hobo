@@ -81,4 +81,35 @@ class ThemeTest < Minitest::Test
     assert_equal %w[clean bootstrap hobo], HoboRapid::Theme.all_stylesheets
   end
 
+  # --- los temas son gemas ---------------------------------------------------
+  #
+  # Hobo no conoce ningun tema por su nombre: cada uno se apunta al cargarse, y
+  # `config.hobo.theme` elige entre los apuntados. Antes esto era un `case` con
+  # `:bootstrap` dentro, y por eso Bootstrap vivia en la gema -- 232 KB de un
+  # framework de terceros que se llevaba tambien quien no lo usaba.
+
+  def test_a_theme_registers_itself
+    Hobo.theme(:prueba) { |subsite| HoboRapid::Theme.wears("prueba", :subsite => subsite) }
+
+    assert_includes Hobo.themes.keys, :prueba
+  ensure
+    Hobo.themes.delete(:prueba)
+  end
+
+  # Y el que viene dentro esta apuntado igual que los demas.
+  def test_clean_is_registered_like_any_other
+    require "hobo_clean"
+
+    assert_includes Hobo.themes.keys, :clean
+  end
+
+  # Pedir un tema que no esta puesto se dice con todas las letras: lo que falta
+  # es una gema en el Gemfile, y el mensaje lo tiene que decir.
+  def test_asking_for_a_theme_that_is_not_installed
+    error = assert_raises(ArgumentError) { Hobo::Engine.dress(:no_existe) }
+
+    assert_includes error.message, "no esta"
+    assert_includes error.message, %(gem "hobo_no_existe")
+  end
+
 end
