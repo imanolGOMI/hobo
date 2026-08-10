@@ -1,23 +1,21 @@
 require_relative "../browser_helper"
 
-# Warn before leaving a page with unsaved changes.
+# Avisar antes de salir de una página con cambios sin guardar.
 #
-# The dialog itself belongs to the browser and cannot be driven, so the test
-# fires the event and looks at whether the controller asked for it -- which is
-# the only decision the controller makes.
-class BeforeUnloadTest < Minitest::Test
+# El diálogo es del navegador y no se puede conducir, así que la prueba dispara
+# el evento y mira si el comportamiento pidió que se preguntara -- que es la
+# única decisión que toma.
+#
+# El marcado no lleva acciones, y eso es a propósito: el contrato no sabe decir
+# «con este evento», y en un formulario el evento que se supone es `submit`,
+# justo el contrario del que hace falta. El comportamiento se ata los suyos.
+module BeforeUnloadBehaviour
 
   MARKUP = <<~HTML
-    <form data-controller="rapid-before-unload"
-          data-action="change->rapid-before-unload#touch submit->rapid-before-unload#release">
+    <form data-rapid='{"before-unload":{}}'>
       <input id="titulo" name="title">
     </form>
   HTML
-
-  def setup
-    skip BrowserBench.why_not unless BrowserBench.ready?
-    @page = BrowserBench.visit("rapid-before-unload", MARKUP)
-  end
 
   def would_warn?
     @page.evaluate_script(<<~JS)
@@ -29,23 +27,28 @@ class BeforeUnloadTest < Minitest::Test
     JS
   end
 
+  def change_something
+    @page.execute_script("document.querySelector('#titulo').dispatchEvent(new Event('change', { bubbles: true }))")
+  end
+
   def test_a_page_nobody_touched_lets_you_leave
     refute would_warn?
   end
 
   def test_changing_something_makes_it_ask
-    @page.find("#titulo").send_keys("hola")
-    @page.execute_script("document.querySelector('#titulo').dispatchEvent(new Event('change', { bubbles: true }))")
+    change_something
 
     assert would_warn?
   end
 
-  # Sending the form is not leaving with unsaved changes.
+  # Enviar el formulario no es irse con cambios sin guardar.
   def test_submitting_the_form_clears_it
-    @page.execute_script("document.querySelector('#titulo').dispatchEvent(new Event('change', { bubbles: true }))")
+    change_something
     @page.execute_script("document.querySelector('form').dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))")
 
     refute would_warn?
   end
 
 end
+
+BrowserBench.contract(BeforeUnloadBehaviour)

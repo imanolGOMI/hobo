@@ -23,8 +23,15 @@ export default class extends Controller {
       : this.templateTarget.cloneNode(true)
 
     row.removeAttribute("hidden")
+    // Una fila **deja de ser la plantilla**, y hay que borrar los dos
+    // atributos: el neutro, que es el que manda, y el que escribió el puente.
+    // Si solo se borra uno, el marcado dice dos cosas distintas a la vez.
+    row.removeAttribute("data-rapid-target")
+    row.removeAttribute("data-rapid-select-many-target")
     row.dataset.value = option.value
-    row.querySelectorAll("[data-rapid-select-many-label]").forEach((node) => (node.textContent = option.text))
+    // Por el atributo del contrato, que está en el marcado escriba quien lo
+    // escriba, y no por uno que solo existe después de traducir.
+    row.querySelectorAll("[data-rapid-target='select-many:label']").forEach((node) => (node.textContent = option.text))
     row.querySelectorAll("input[type=hidden]").forEach((input) => {
       input.value = option.value
       input.disabled = false

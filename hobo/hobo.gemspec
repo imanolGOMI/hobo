@@ -34,6 +34,10 @@ Gem::Specification.new do |s|
   s.add_development_dependency('bcrypt', ['~> 3.1'])
   s.add_development_dependency('capybara', ['>= 3.0'])
   s.add_development_dependency('selenium-webdriver', ['>= 4.0'])
+  # Capybara sirve la pagina del banco de navegador el mismo, y necesita un
+  # servidor para hacerlo. Sin esto el banco entero se saltaba diciendo que
+  # faltaba una gema.
+  s.add_development_dependency('puma', ['>= 6.0'])
 
   s.executables = ["hobo"]
   s.files = `git ls-files -x #{name}/* -z`.split("\0")

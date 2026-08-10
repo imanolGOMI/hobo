@@ -4,28 +4,47 @@ import { Controller } from "@hotwired/stimulus"
 // primero que llegue; el modulo se ejecuta una sola vez.
 import "controllers/rapid_bridge"
 
-// Warn before leaving a page with unsaved changes.
+// Avisar antes de salir de una pagina con cambios sin guardar.
 //
-// The browser decides what to say -- it has ignored custom messages since 2016,
-// because they were used to trap people -- so the old `message` option is gone.
-// What matters is only whether to ask at all.
+// El dialogo lo decide el navegador -- los mensajes propios se ignoran desde
+// 2016, porque se usaban para atrapar a la gente -- asi que lo unico que se
+// decide aqui es **si preguntar**.
+//
+// Se escucha solo, sin `data-rapid-action` en el marcado. Antes hacia falta
+// escribir `change->…#touch submit->…#release`, y eso el contrato neutro no lo
+// sabe decir: `data-rapid-action="before-unload:touch"` no lleva evento, y en
+// un formulario el evento que Stimulus supone es `submit` -- justo el
+// contrario del que hace falta. En vez de complicar el contrato para un caso,
+// el comportamiento se ata sus propios eventos: el marcado solo dice
+//
+//   <form data-rapid='{"before-unload":{}}'>
+//
+// que es lo unico que hay que decir de verdad.
 export default class extends Controller {
   connect() {
     this.dirty = false
+
+    this.onChange = () => { this.dirty = true }
+    this.onSubmit = () => { this.dirty = false }
     this.onBeforeUnload = (event) => {
       if (!this.dirty) return
       event.preventDefault()
       event.returnValue = ""
     }
+
+    this.element.addEventListener("change", this.onChange)
+    this.element.addEventListener("submit", this.onSubmit)
     window.addEventListener("beforeunload", this.onBeforeUnload)
   }
 
   disconnect() {
+    this.element.removeEventListener("change", this.onChange)
+    this.element.removeEventListener("submit", this.onSubmit)
     window.removeEventListener("beforeunload", this.onBeforeUnload)
   }
 
-  // Bound to `change` on the form, and to `submit`: sending the form is not
-  // leaving with unsaved changes.
+  // Siguen publicos porque una pagina puede querer decirlo a mano: un boton que
+  // guarda por su cuenta y deja el formulario limpio.
   touch() { this.dirty = true }
   release() { this.dirty = false }
 }

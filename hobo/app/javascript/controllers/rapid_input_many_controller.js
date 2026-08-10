@@ -34,6 +34,16 @@ export default class extends Controller {
 
     const row = this.templateTarget.cloneNode(true)
     row.removeAttribute("hidden")
+    // Los dos atributos, y el neutro **primero**, porque es el que manda: el
+    // clon viene de la plantilla y por tanto sigue diciendo que es una
+    // plantilla. Aqui solo se ponia el de Stimulus, asi que la pagina acababa
+    // con cinco filas que decian ser plantillas -- y el marcado deja de ser el
+    // contrato en cuanto una de las dos implementaciones escribe solo el suyo.
+    //
+    // Se ponen los dos y no solo el neutro porque el puente traduce en cuanto
+    // el navegador le avisa, y `#refresh()` de aqui abajo pregunta a Stimulus
+    // por sus targets ahora mismo.
+    row.dataset.rapidTarget = "input-many:item"
     row.dataset.rapidInputManyTarget = "item"
     this.#enable(row)
 

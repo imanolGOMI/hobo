@@ -1,34 +1,29 @@
 require_relative "../browser_helper"
 
-# <select-many>: pick from a select and the choice becomes a row with a hidden
-# input; take the row away and the option comes back.
-class SelectManyTest < Minitest::Test
+# <select-many>: se elige del desplegable y cada elección se convierte en una
+# fila con su campo oculto; se quita la fila y la opción vuelve.
+module SelectManyBehaviour
 
   MARKUP = <<~HTML
-    <div data-controller="rapid-select-many">
-      <select data-rapid-select-many-target="select" data-action="change->rapid-select-many#add">
+    <div data-rapid='{"select-many":{}}'>
+      <select data-rapid-target="select-many:select" data-rapid-action="select-many:add">
         <option value="">--</option>
         <option value="1">Uno</option>
         <option value="2">Dos</option>
       </select>
 
-      <ul data-rapid-select-many-target="items"></ul>
+      <ul data-rapid-target="select-many:items"></ul>
 
-      <li data-rapid-select-many-target="template" hidden>
-        <span data-rapid-select-many-label></span>
+      <li data-rapid-target="select-many:template" hidden>
+        <span data-rapid-target="select-many:label"></span>
         <input type="hidden" name="story[task_ids][]" disabled>
-        <button data-action="rapid-select-many#remove">quitar</button>
+        <button data-rapid-action="select-many:remove">quitar</button>
       </li>
     </div>
   HTML
 
-  def setup
-    skip BrowserBench.why_not unless BrowserBench.ready?
-    @page = BrowserBench.visit("rapid-select-many", MARKUP)
-  end
-
   def choose(text) = @page.find("select").select(text)
-  def rows = @page.all("ul[data-rapid-select-many-target='items'] > *", :visible => :all)
+  def rows = @page.all("ul[data-rapid-target='select-many:items'] > *", :visible => :all)
 
   def test_choosing_an_option_adds_a_row_with_its_value
     choose("Uno")
@@ -38,12 +33,19 @@ class SelectManyTest < Minitest::Test
     assert_equal "1", rows.first.find("input[type=hidden]", :visible => :all).value
   end
 
-  # The hidden input of the template is disabled so the template itself is never
-  # submitted; the copy has to be enabled or the choice never reaches Rails.
+  # El campo oculto de la plantilla va deshabilitado para que la plantilla no se
+  # envíe nunca; la copia tiene que ir habilitada o la elección no llega a Rails.
   def test_the_hidden_input_of_a_row_is_submitted
     choose("Uno")
 
     refute rows.first.find("input[type=hidden]", :visible => :all).disabled?
+  end
+
+  # Y deja de decir que es la plantilla, como la fila del input-many.
+  def test_a_row_is_not_the_template_any_more
+    choose("Uno")
+
+    assert_equal 1, @page.all("[data-rapid-target='select-many:template']", :visible => :all).length
   end
 
   def test_an_option_already_chosen_cannot_be_chosen_twice
@@ -60,11 +62,14 @@ class SelectManyTest < Minitest::Test
     refute @page.find("option[value='1']", :visible => :all).disabled?
   end
 
-  def test_several_choices_pile_up
+  def test_two_choices_are_two_rows
     choose("Uno")
     choose("Dos")
 
-    assert_equal %w[1 2], rows.map { |r| r.find("input[type=hidden]", :visible => :all).value }
+    assert_equal 2, rows.length
+    assert_equal %w[1 2], rows.map { |row| row.find("input[type=hidden]", :visible => :all).value }
   end
 
 end
+
+BrowserBench.contract(SelectManyBehaviour)
