@@ -79,29 +79,34 @@ class SetupWizardTest < Minitest::Test
 
   # --- the initial migration -------------------------------------------------
   #
-  # This one is decided at the end and not with the rest: until the wizard has
-  # written its part, there is nothing to say about what the database is
-  # missing. A fresh application with no flags is missing nothing -- Rails wrote
-  # `users` and `sessions` and migrated them already -- and asking there earned
-  # a "nothing to change" straight after the answer.
-
-  def test_the_migration_is_not_decided_with_the_other_questions
-    assert_nil answer(wizard, :migration)
-  end
+  # Asked with the rest and in Hobo 2's own order -- after the front page,
+  # before the languages -- and **done** at the end, which is the shape that
+  # took three tries: the answer belongs with the questions and the work with
+  # the work.
 
   # With nobody to ask, the migration runs: an application whose columns are not
   # there fails on its first page, and that was the state `hobo new` used to
   # leave behind.
   def test_the_migration_runs_when_nobody_answers
-    assert_equal :migrate, wizard.send(:choose_migration)
+    assert_equal :migrate, answer(wizard, :migration)
+    assert_equal "-n -m", wizard.send(:migration_flags)
   end
 
   def test_skip_migration
-    assert_equal :skip, wizard(:skip_migration => true).send(:choose_migration)
+    assert_equal :skip, answer(wizard(:skip_migration => true), :migration)
   end
 
   def test_generate_migration_writes_it_without_running_it
-    assert_equal :generate, wizard(:generate_migration => true).send(:choose_migration)
+    generator = wizard(:generate_migration => true)
+    assert_equal :generate, answer(generator, :migration)
+    assert_equal "-n -g", generator.send(:migration_flags)
+  end
+
+  # The wizard answers it, so the generator it calls does not ask it again: it
+  # prints the migration -- which is what there was to see -- and does what it
+  # was told.
+  def test_the_generator_is_never_asked_to_ask
+    assert_includes wizard.send(:migration_flags), "-n"
   end
 
   # --- git -------------------------------------------------------------------

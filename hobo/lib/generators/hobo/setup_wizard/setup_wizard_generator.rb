@@ -74,12 +74,13 @@ module Hobo
         @admin = yes_or_no?(:admin, "Quieres un subsitio de administracion?", false)
         @admin_name = @admin ? named(:admin_name, "Como se llama el subsitio de administracion?", "admin") : "admin"
         @private = yes_or_no?(:private, "Todo el sitio detras del login? (si no, cada modelo decide quien ve sus paginas)", false)
-        @locales, @locale = choose_locales
         @front = named(:front, "Como se llama el controlador de la portada?", "front")
-        # La migración **no** se pregunta aquí: hasta que este generador no ha
-        # escrito lo suyo no se sabe si hay algo que migrar, y preguntar por una
-        # migración que va a salir vacía es hacer perder el tiempo. Se pregunta
-        # en `the_migration`, que es donde Hobo 2 la preguntaba: al final.
+        # En este orden porque es el de Hobo 2: la base de datos antes que los
+        # idiomas, y los idiomas antes que git. Se contesta aquí y se hace al
+        # final, que es lo que hacía aquel: la pregunta va con las preguntas y el
+        # trabajo con el trabajo.
+        @migration = choose_migration
+        @locales, @locale = choose_locales
         @git = yes_or_no?(:git, "Dejo el trabajo en un commit de git?", false)
 
         # Not a question: Hobo 2 gave every application `/search` and the box in
@@ -185,26 +186,33 @@ module Hobo
         invoke "hobo:admin_subsite", [@admin_name], :theme => options[:admin_theme]
       end
 
-      # Hobo 2 asked this and it was the right question: what the wizard has just
-      # written -- a lifecycle, an administrator column -- is columns the
-      # database does not have yet, and an application that starts without them
-      # fails on its first page. Printing a reminder instead was leaving the job
-      # half done.
-      # Y se pregunta **solo si hay algo que migrar**. En una aplicación recién
-      # creada sin banderas no lo hay: las tablas de `users` y `sessions` las
-      # escribió Rails y ya están aplicadas, y Hobo no ha declarado ningún campo
-      # todavía. Preguntar allí llevaba a una respuesta y un «nada que cambiar»
-      # inmediato, que es la manera de enseñar que una pregunta no servía para
-      # nada. Con `--invite-only`, `--activation-email` o modelos propios sí hay,
-      # y entonces se pregunta.
+      # La base de datos, **entera y en una sola pregunta**.
+      #
+      # Hobo 2 preguntaba por la migración inicial y era la pregunta correcta:
+      # lo que el asistente acaba de escribir -- un lifecycle, la columna de
+      # administrador -- son columnas que la base no tiene, y una aplicación que
+      # arranca sin ellas falla en su primera página.
+      #
+      # Lo que costó tres intentos es *cuándo* y *sobre qué*:
+      #
+      #   - preguntarlo con el resto de las preguntas era preguntar antes de
+      #     saber si haría falta: en una aplicación sin banderas no hace falta,
+      #     y la respuesta se ganaba un «nada que cambiar» inmediato
+      #   - y no era la única cosa que tocaba la base: `hobo new` aplicaba por su
+      #     cuenta las dos migraciones del generador de autenticación de Rails,
+      #     así que lo que se veía era una migración ejecutándose sola y, detrás,
+      #     una pregunta sobre otra que ya no tenía nada que hacer
+      #
+      # Así que es una sola: lo que falta -- lo de Rails y lo de Hobo -- y qué
+      # hacer con ello. Y cuando lo de Hobo se escribe, se escribe con el `up` y
+      # el `down` delante, porque nadie decide sobre algo que no ha visto.
       def the_migration
-        @migration = :skip if options[:skip_migration]
-        return say("\n  Sin tocar la base de datos. Cuando quieras:  bin/rails generate hobo:migration\n", :yellow) if
-          @migration == :skip
+        return say_how_to_do_it_later if @migration == :skip
+
+        the_migrations_rails_wrote
 
         return say("\n  La base de datos ya esta al dia.\n") unless anything_to_migrate?
 
-        @migration ||= choose_migration
         say_step "La migracion"
 
         # In another process, and this is the whole reason `hobo new` used to
@@ -212,12 +220,9 @@ module Hobo
         # are on disk, not in memory**. `User` was loaded before the wizard
         # taught it a lifecycle, so an `invoke` from here reads the class as it
         # was and reports "nothing to change" about columns that are missing.
-        # A new process reads the files.
-        inside(destination_root) do
-          run "bin/rails generate hobo:migration -n #{@migration == :generate ? '-g' : '-m'}"
-        end
-
-        say "\n  Escrita, sin aplicar. Para aplicarla:  bin/rails db:migrate\n", :green if @migration == :generate
+        # A new process reads the files -- and it is also what lets the
+        # generator have the terminal to ask its own question.
+        inside(destination_root) { run "bin/rails generate hobo:migration #{migration_flags}".strip }
       end
 
       # The other question Hobo 2 asked at the end. `rails new` leaves a
@@ -309,8 +314,9 @@ module Hobo
         locales.include?(said) ? said : locales.first
       end
 
-      # Hobo 2's `[s]kip, [g]enerate, [m]igrate`, and the same three answers as
-      # flags so a script never stops.
+      # Hobo 2's `[s]kip, [g]enerate, [m]igrate`, in its own place: after the
+      # front page and before the languages, which is where that wizard asked
+      # it. The three answers are also flags, so a script never stops.
       def choose_migration
         return :skip if options[:skip_migration]
         return :generate if options[:generate_migration]
@@ -320,6 +326,11 @@ module Hobo
         { "s" => :skip, "e" => :generate }.fetch(said[0].to_s, :migrate)
       end
 
+      # Ya está contestado arriba, así que el generador no vuelve a preguntar:
+      # enseña la migración -- que es lo que había que ver -- y hace lo que se le
+      # dijo. Es exactamente lo que hacía el asistente de Hobo 2.
+      def migration_flags = @migration == :generate ? "-n -g" : "-n -m"
+
       # Whether the database and the models differ at all. It is the same
       # question `hobo:migration` answers with "Database and models match --
       # nothing to change", asked before bothering anybody with it.
@@ -327,6 +338,63 @@ module Hobo
       # If it cannot be answered -- no models loaded, no connection -- the
       # answer is yes: better one question too many than a column that never
       # gets created.
+      # Las migraciones que escribió Rails y nadie ha aplicado -- las de `users`
+      # y `sessions`, casi siempre.
+      #
+      # No se pregunta por ellas: la pregunta ya está hecha, y `hobo new` no
+      # tocaba la base de datos hasta aquí. Se enseñan por su nombre antes de
+      # aplicarlas, que es lo que faltaba: lo que se veía era una migración
+      # ejecutándose sola, sin haber preguntado nada.
+      #
+      # Y van primero porque **`hobo:migration` se niega a trabajar mientras
+      # haya migraciones sin aplicar**: sin esto lo que salía era una aplicación
+      # cuya primera página contestaba 500 con «no such table».
+      def the_migrations_rails_wrote
+        pending = pending_migrations
+        return if pending.empty?
+
+        say_step "La base de datos"
+        say "\n  Aplicando lo que escribio Rails:"
+        pending.each { |name| say "    #{name}" }
+        say ""
+
+        inside(destination_root) { run "bin/rails db:migrate" }
+      end
+
+      def say_how_to_do_it_later
+        say [
+          "",
+          "  Sin tocar la base de datos. Cuando quieras:",
+          "",
+          "    bin/rails db:migrate",
+          "    bin/rails generate hobo:migration",
+          "",
+        ].join("\n"), :yellow
+      end
+
+      # Los nombres de las migraciones sin aplicar. En otro proceso, como todo lo
+      # que pregunta por el estado de la base: la de dentro es la que había al
+      # arrancar el generador.
+      #
+      # Si no se puede preguntar -- no hay base de datos todavía, que es lo
+      # normal en una aplicación recién creada -- son los ficheros de
+      # `db/migrate`, que es la misma respuesta por otro camino.
+      def pending_migrations
+        probe = File.join(destination_root, "tmp", "hobo_pending_probe.rb")
+        FileUtils.mkdir_p(File.dirname(probe))
+        File.write(probe, <<~RUBY)
+          print ActiveRecord::Base.connection_pool.migration_context.open.pending_migrations.map(&:name).join(" ")
+        RUBY
+
+        said = `cd #{destination_root} && bin/rails runner #{probe} 2>/dev/null`.strip
+        return said.split if $?.success?
+
+        Dir[File.join(destination_root, "db", "migrate", "*.rb")]
+          .map { |file| File.basename(file, ".rb").sub(/\A\d+_/, "").camelize }
+      ensure
+        FileUtils.rm_f(probe)
+      end
+
       # Asked in another process, for the same reason the migration is written
       # in one: the models on disk are not the ones in memory.
       #

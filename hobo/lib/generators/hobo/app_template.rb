@@ -48,14 +48,13 @@ after_bundle do
   # Rails owns the user, the session and the passwords (piece 15).
   generate "authentication"
 
-  # Rails' authentication generator leaves two migrations behind, and
-  # `hobo:migration` refuses to do anything while there are pending ones: it
-  # printed "You have 2 pending migrations" and stopped, and what came out was an
-  # application whose very first page answered 500 with "no such table: stories".
-  # So this happens **before** the wizard, which is what ends up asking for the
-  # initial migration.
-  rails_command "db:migrate"
-
+  # **La base de datos no se toca aquí.** Antes había un `db:migrate` en este
+  # punto -- las dos migraciones que escribe el generador de autenticación de
+  # Rails, y sin ellas `hobo:migration` se niega a trabajar-- y el resultado era
+  # que `hobo new` migraba la base sin preguntar y luego el asistente preguntaba
+  # por una migración que ya no tenía nada que hacer. Ahora las dos cosas son la
+  # misma pregunta, y la hace el asistente al final.
+  #
   # And the wizard does the rest: the questions, and what the answers mean --
   # the initial migration among them, which is why there is nothing after this.
   generate "hobo:setup_wizard", *answers.map { |a| a.sub(/\A--no-theme\z/, "--theme=none") }

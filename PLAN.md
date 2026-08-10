@@ -2923,12 +2923,43 @@ sobraba una:
 
 | Pregunta de Hobo 2 | Qué se hizo |
 |---|---|
-| La migración inicial: `[s]kip, [g]enerate, [m]igrate` | **Recuperada.** El asistente la hace él; antes solo imprimía un recordatorio, y lo que el asistente acababa de escribir —un lifecycle, la columna de administrador— son columnas que la base no tenía. Se pregunta **al final y solo si hay algo que migrar**: en una aplicación sin banderas no lo hay —las tablas son de Rails y ya están aplicadas—, y preguntar allí se ganaba un «nada que cambiar» justo después de la respuesta. Y **en otro proceso**: los modelos que el asistente acaba de escribir están en disco, no en memoria, así que preguntárselo a las clases cargadas responde por la versión anterior |
+| La migración inicial: `[s]kip, [g]enerate, [m]igrate` | **Recuperada**, y ver abajo: costó tres intentos dar con *cuándo* preguntarla |
 | Los idiomas (lista) y el idioma por defecto | **Recuperadas las dos.** `--locales en es --locale=es`; con más de uno escribe también `config.i18n.available_locales`, sin lo cual `I18n.locale = :es` revienta |
 | ¿Repositorio git? | **Recuperada.** `rails new` deja el repo, pero todo lo del asistente viene después: sin esto el primer commit no contiene la aplicación |
 | ¿Caja de búsqueda? | **Retirada como pregunta**, porque en Hobo 2 **no lo era**: toda aplicación tenía `/search` y la caja en la barra sin que nadie preguntara. Se pone siempre; `--no-search` la quita |
 | Nombre del recurso de usuario | Sigue sin preguntarse: el modelo lo escribe Rails y se llama `User` |
 | Tema de jQuery-UI · ¿solo DRYML? · ¿ignorar autogenerados? | Siguen fuera: no hay jQuery-UI, no hay DRYML, no hay autogenerados |
+
+### La pregunta de la migración, en tres intentos
+
+Es el ejemplo más limpio de esta sesión de una cosa: **una pregunta se prueba
+lanzándola, no leyéndola**. Los tres intentos salieron de que Imanol la lanzara.
+
+1. **Preguntada con las demás.** Se contestaba y, tres pasos después, el
+   generador decía «nada que cambiar»: en una aplicación sin banderas no hay
+   nada que migrar, porque las tablas son de Rails y ya estaban aplicadas.
+   → Se pasa al final, y solo se pregunta si hay algo. *«Sino no tiene sentido
+   que haya pregunta de migración.»*
+2. **Ejecutada desde dentro del asistente.** Con `--invite-only` seguía diciendo
+   que no faltaba nada, y faltaban tres columnas: los modelos que el asistente
+   acaba de escribir están **en disco**, y la clase `User` que hay en memoria se
+   cargó antes de que le enseñara el lifecycle. → La migración se escribe en
+   **otro proceso**, que es lo que el `hobo new` viejo hacía sin saber por qué.
+3. **Fuera de sitio.** Al final, sola, después de todo. Hobo 2 la preguntaba
+   **entre la portada y los idiomas**, con las demás, y al contestar hacía el
+   trabajo. → Vuelve a su sitio: la respuesta va con las preguntas y el trabajo
+   con el trabajo. El orden entero es hoy el de Hobo 2: tema, invitación,
+   activación, subsitio, sitio privado, portada, **migración**, idiomas, git.
+
+Y con ello se vio la última: `hobo new` **aplicaba por su cuenta** las dos
+migraciones del generador de autenticación de Rails, así que lo que se veía era
+una migración ejecutándose sola y detrás una pregunta sobre otra que ya no tenía
+nada que hacer. La plantilla ya no toca la base de datos: lo hace el asistente,
+después de haber preguntado, diciendo lo que aplica.
+
+Y `hobo:migration` sigue enseñando el `up` y el `down` antes de escribir nada
+—eso no había que inventarlo, ya lo hacía—, así que la migración se ve aunque la
+respuesta esté dada.
 
 Y una cosa más que sobraba, vista por Imanol al lanzar el generador nuevo: **el
 modelo `Story` de ejemplo**. Lo escribía `hobo new` antes de preguntar nada, así
