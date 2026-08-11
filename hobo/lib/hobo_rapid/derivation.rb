@@ -23,6 +23,7 @@ require "hobo_rapid/tags/associations"
 require "hobo_rapid/tags/html"
 require "hobo_rapid/tags/forms"
 require "hobo_rapid/tags/collections"
+require "hobo_rapid/tags/rest"
 
 module HoboRapid
 

@@ -124,6 +124,26 @@ class CatalogueCensusTest < Minitest::Test
   # y, si hace falta, con qué atributos. Una ficha de una línea por tag es
   # justamente la documentación que no había.
   CENSUS = {
+    # --- el resto del catalogo, portado el 2026-08-11 -----------------------------
+    :labelled_item => [:nothing, {}],
+    :item_label => [:nothing, {}],
+    :item_value => [:nothing, {}],
+    :labelled_item_list => [:nothing, {}],
+    :feckless_fieldset => [:nothing, { :legend => "Datos" }],
+    :name => [:record, {}],
+    :collection_name => [:collection, {}],
+    :collection_preview => [:collection, {}],
+    :preview_with_more => [:collection, {}],
+    :links_for_collection => [:collection, {}],
+    :select_menu => [:field, { :options => %w[uno dos] }],
+    :select_input => [:field, { :options => %w[uno dos] }],
+    :select_many => [:field_collection, { :options => [] }],
+    :input_all => [:record, {}],
+    :hidden_id_field => [:record, {}],
+    :gravatar => [:nothing, { :email => "a@b.c" }],
+    :new_page => [:record, {}],
+    :edit_page => [:record, {}],
+    :after_submit => [:nothing, { :go_to => "/" }],
     # --- los de collections/, portados de Hobo 2 el 2026-08-11 --------------------
     :collection => [:collection, {}],
     :empty_collection_message => [:nothing, {}],
