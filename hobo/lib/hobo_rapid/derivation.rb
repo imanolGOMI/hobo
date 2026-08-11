@@ -22,6 +22,7 @@ require "hobo_rapid/tags/inputs"
 require "hobo_rapid/tags/associations"
 require "hobo_rapid/tags/html"
 require "hobo_rapid/tags/forms"
+require "hobo_rapid/tags/collections"
 
 module HoboRapid
 

@@ -124,6 +124,18 @@ class CatalogueCensusTest < Minitest::Test
   # y, si hace falta, con qué atributos. Una ficha de una línea por tag es
   # justamente la documentación que no había.
   CENSUS = {
+    # --- los de collections/, portados de Hobo 2 el 2026-08-11 --------------------
+    :collection => [:collection, {}],
+    :empty_collection_message => [:nothing, {}],
+    :count => [:collection, { :label => "historias" }],
+    :page_nav => [:collection, {}],
+    :delete_button => [:record, {}],
+    :create_button => [:record, {}],
+    :update_button => [:record, {}],
+    :transition_link => [:record, { :transition => "publish" }],
+    :nil_view => [:nothing, {}],
+    :hidden_field => [:nothing, { :name => "x", :value => "1" }],
+    :hidden_fields => [:record, { :fields => "title" }],
     # --- los de forms/, portados de Hobo 2 el 2026-08-11 --------------------------
     :field_list => [:record, { :fields => "title, body" }],
     :form => [:record, {}],
