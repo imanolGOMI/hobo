@@ -124,6 +124,33 @@ class CatalogueCensusTest < Minitest::Test
   # y, si hace falta, con qué atributos. Una ficha de una línea por tag es
   # justamente la documentación que no había.
   CENSUS = {
+    # --- los de html/, portados de Hobo 2 el 2026-08-11 ---------------------------
+    #
+    # No son elementos: DRYML decide con una lista (`static_tags`) y estos estan
+    # fuera de ella, asi que una plantilla que escribe `<a>` o `<img>` esta
+    # llamando a un tag.
+    :empty_tag => [:nothing, { :tag_name => "br" }],
+    :base => [:nothing, {}],
+    :meta => [:nothing, { "name" => "author" }],
+    :link => [:nothing, { "rel" => "icon" }],
+    :img => [:nothing, { "src" => "/x.png" }],
+    :br => [:nothing, {}],
+    :hr => [:nothing, {}],
+    :frame => [:nothing, {}],
+    :area => [:nothing, {}],
+    :col => [:nothing, {}],
+    :param => [:nothing, {}],
+    :a => [:record, {}],
+    :header => [:nothing, {}],
+    :footer => [:nothing, {}],
+    :section => [:nothing, {}],
+    :aside => [:nothing, {}],
+    :nav => [:nothing, {}],
+    :section_group => [:nothing, {}],
+    :doctype => [:nothing, {}],
+    :html => [:nothing, {}],
+    :if_ie => [:nothing, { :version => "lt 9" }],
+    :image => [:nothing, { :name => "logo.png" }],
     :account_nav => [:nothing, {}],
     :app_name => [:nothing, {}],
     :card => [:record, {}],

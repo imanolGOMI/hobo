@@ -20,6 +20,7 @@ require "hobo_rapid/translation"
 require "hobo_rapid/tags/views"
 require "hobo_rapid/tags/inputs"
 require "hobo_rapid/tags/associations"
+require "hobo_rapid/tags/html"
 
 module HoboRapid
 
