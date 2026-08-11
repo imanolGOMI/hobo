@@ -35,7 +35,8 @@ module HoboRapid
       user = nil if user.respond_to?(:guest?) && user.guest?
       messages = flash.to_h.symbolize_keys if respond_to?(:flash, true) && flash
 
-      query = request.query_parameters if respond_to?(:request, true) && request
+      http_request = request if respond_to?(:request, true)
+      query = http_request&.query_parameters
 
       # A subsite is a namespace of controllers (`Admin::StoriesController`), and
       # that is the only place the name lives -- there is nothing to register.
@@ -51,7 +52,7 @@ module HoboRapid
       params, attributes = attributes.partition { |_, value| value.is_a?(Rapid::Parameter) }
                                      .map(&:to_h)
 
-      HoboRapid.with_request(token, user, messages || {}, query || {}, subsite) do
+      HoboRapid.with_request(token, user, messages || {}, query || {}, subsite, http_request) do
         if this.equal?(INHERIT)
           Rapid.render(name, attributes, **params).html_safe
         else

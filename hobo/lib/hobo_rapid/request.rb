@@ -15,11 +15,12 @@ module HoboRapid
 
   class << self
 
-    KEYS = %i[hobo_rapid_token hobo_rapid_user hobo_rapid_flash hobo_rapid_query hobo_rapid_subsite].freeze
+    KEYS = %i[hobo_rapid_token hobo_rapid_user hobo_rapid_flash hobo_rapid_query
+              hobo_rapid_subsite hobo_rapid_request].freeze
 
-    def with_request(token, user, flash = {}, query = {}, subsite = nil)
+    def with_request(token, user, flash = {}, query = {}, subsite = nil, request = nil)
       previous = KEYS.map { |key| Thread.current[key] }
-      values = [token, user, flash, query, subsite]
+      values = [token, user, flash, query, subsite, request]
       KEYS.each_with_index { |key, i| Thread.current[key] = values[i] }
       yield
     ensure
@@ -27,6 +28,16 @@ module HoboRapid
     end
 
     def authenticity_token = Thread.current[:hobo_rapid_token]
+
+    # La peticion entera. **El catalogo no la usa y no debe usarla**: un tag es
+    # un objeto que devuelve una cadena, y lo que necesita de la peticion son las
+    # cuatro cosas de arriba.
+    #
+    # Esta aqui por `hobo_dryml`: una plantilla de 2013 escribe `request.format`
+    # dentro de un param -- amenti decide asi si sirve un pdf -- y la unica
+    # alternativa era que la pagina reventara. `HoboDryml::Vocabulary` es quien
+    # la ofrece como palabra, asi que quien escribe hoy sigue sin tenerla.
+    def request = Thread.current[:hobo_rapid_request]
 
     # Which part of the application is painting. `nil` is the site itself;
     # "admin" is `app/controllers/admin/`. A subsite can wear another theme, and

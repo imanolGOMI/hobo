@@ -78,7 +78,15 @@ Rapid::Tag.include(HoboRapid::PageSupport)
 
 Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_location,
                                :content_size, :aside_size, :bottom_load_javascript]) do
-  full_title = attributes[:full_title] || [attributes[:title], app_name].compact.join(" : ")
+  # El nombre sale del **tag** `<app-name>` y no del helper del mismo nombre.
+  #
+  # Redefinir ese tag es como una aplicacion dice como se llama -- amenti pone
+  # ahi «Aplicacion para Gestion de Funerarias y Tanatorios | Amenti Software»
+  # -- y el titulo seguia diciendo el nombre del directorio de Rails. Se le
+  # quita el marcado porque un `<title>` es texto y el tag puede traer un enlace.
+  written_name = Rapid::Context.capture { call_tag(:app_name) }.to_s.gsub(/<[^>]*>/, "").strip
+  written_name = app_name if written_name.empty?
+  full_title = attributes[:full_title] || [attributes[:title], written_name].compact.join(" : ")
   has_aside = !all_parameters[:aside].nil?
 
   content_size = (attributes[:content_size] || (has_aside ? 9 : 12)).to_i
@@ -114,7 +122,7 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
         call_tag(:stylesheet, { :name => subsite || "application" }, :as => :app_stylesheet)
       end
       unless attributes[:bottom_load_javascript]
-        param(:scripts) { call_tag(:javascript, { :name => subsite || "application" }, :as => :application_javascript) }
+        param(:scripts) { call_tag(:import_map, { :name => subsite || "application" }, :as => :application_javascript) }
       end
       raw csrf_meta_tag.to_s
     end
@@ -166,10 +174,13 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
         end
       end
 
-      tag("footer", { :class => "page-footer" }, :page_footer)
+      # `footer`, que es como se llama en Hobo 2 y como lo escribe todo el mundo.
+      # Se llamaba `page_footer`, asi que un `<footer:>` de una plantilla vieja
+      # no llegaba a ningun sitio y el pie salia vacio.
+      tag("footer", { :class => "page-footer" }, :footer)
       param(:page_scripts)
       if attributes[:bottom_load_javascript]
-        param(:bottom_scripts) { call_tag(:javascript, { :name => subsite || "application" }, :as => :bottom_javascript) }
+        param(:bottom_scripts) { call_tag(:import_map, { :name => subsite || "application" }, :as => :bottom_javascript) }
       end
     end
   end
@@ -183,6 +194,9 @@ Rapid.define(:stylesheet, :attrs => [:name]) do
   tag("link", { :rel => "stylesheet", :href => href }) if href
 end
 
+# The page's own JavaScript: the import map, the preloads and the one line that
+# imports the entry point.
+#
 # An application built with import maps does not load its JavaScript with a
 # `<script src>`: the entry point is an ES module and it needs the map to
 # resolve its bare imports. A plain tag pulled `application.js` in as a classic
@@ -191,33 +205,57 @@ end
 # pages Rails renders were fine, which is why it went unseen: they go through
 # the layout, and the layout says `javascript_importmap_tags`.
 #
-# Without importmap-rails there is nothing to resolve and the plain tag is
-# right, so both are kept.
-Rapid.define(:javascript, :attrs => [:name]) do
+# It is **its own tag, and the page calls it once**. It used to be `<javascript>`
+# doing double duty, and then any template that said `<javascript name="algo"/>`
+# in its `<head:>` -- which is how Hobo 2 pulled in a plain file -- printed the
+# whole import map a second time. Two maps in one head is two module registries:
+# amenti's page came with every Stimulus controller declared twice.
+Rapid.define(:import_map, :attrs => [:name]) do
   helpers = defined?(ActionController::Base) ? ActionController::Base.helpers : nil
 
-  if helpers.respond_to?(:javascript_importmap_tags)
-    entry = attributes[:name].to_s
-    entry = "application" unless HoboRapid.pinned?(entry)
-    raw helpers.javascript_importmap_tags(entry)
-
-    # Y quien lleve el comportamiento, si no es Stimulus.
-    #
-    # Con Stimulus no hace falta decir nada: la aplicacion hace
-    # `eagerLoadControllersFrom("controllers")` y sus controladores se cargan
-    # solos. Cualquier otro -- `hobo_jquery` -- es un modulo que nadie importa,
-    # asi que se importa aqui. Una linea, y solo cuando hay otro.
-    modulos = []
-    if defined?(Hobo)
-      modulos << Hobo.behaviours[Hobo.behaviour_in_use]&.dig(:javascript)
-      # Y el de cualquier otro plugin que traiga javascript propio.
-      modulos.concat(Hobo.brought[:javascript])
-    end
-    modulos.compact.uniq.each do |modulo|
-      raw %(<script type="module">import "#{modulo}"</script>)
-    end
-  else
+  unless helpers.respond_to?(:javascript_importmap_tags)
+    # Sin importmap-rails no hay nada que resolver y el script de siempre es lo
+    # que toca.
     src = asset_path_for(attributes[:name], "js")
+    next tag("script", { :src => src, :defer => true }) if src
+    next
+  end
+
+  entry = attributes[:name].to_s
+  entry = "application" unless HoboRapid.pinned?(entry)
+  raw helpers.javascript_importmap_tags(entry)
+
+  # Y quien lleve el comportamiento, si no es Stimulus.
+  #
+  # Con Stimulus no hace falta decir nada: la aplicacion hace
+  # `eagerLoadControllersFrom("controllers")` y sus controladores se cargan
+  # solos. Cualquier otro -- `hobo_jquery` -- es un modulo que nadie importa,
+  # asi que se importa aqui. Una linea, y solo cuando hay otro.
+  modules = []
+  if defined?(Hobo)
+    modules << Hobo.behaviours[Hobo.behaviour_in_use]&.dig(:javascript)
+    # Y el de cualquier otro plugin que traiga javascript propio.
+    modules.concat(Hobo.brought[:javascript])
+  end
+  modules.compact.uniq.each do |mod|
+    raw %(<script type="module">import "#{mod}"</script>)
+  end
+end
+
+# `<javascript name="cookieconsent"/>`: **one named file**, which is all this
+# ever meant. The mirror of `<stylesheet>`, and the two are written side by side
+# in every old `<head:>` in existence.
+#
+# A name the import map knows is imported as a module -- a bare `<script src>`
+# on a file full of `import` does nothing but throw. Anything else is the plain
+# script it has always been.
+Rapid.define(:javascript, :attrs => [:name]) do
+  name = attributes[:name].to_s
+
+  if HoboRapid.pinned?(name)
+    raw %(<script type="module">import "#{name}"</script>)
+  else
+    src = asset_path_for(name, "js")
     tag("script", { :src => src, :defer => true }) if src
   end
 end
@@ -254,7 +292,13 @@ Rapid.define(:account_nav) do
       tag("li", { :class => "nav-item" }, :dev_user_changer) do
         call_tag(:dev_user_changer, {}, :as => :changer)
       end
-      call_tag(:session_links, {}, :as => :links)
+      # `merge_params`: lo que le den a `<account-nav>` y no sea suyo baja aqui.
+      #
+      # Los nombres que trae una plantilla vieja -- `sign-up:`, `log-in:`,
+      # `logged-in-as:` -- son los de estos enlaces, y en Hobo 2 se escribian
+      # sobre `<account-nav>` porque no habia nada en medio. Sin bajarlos,
+      # `<sign-up: replace/>` no quitaba nada y el enlace seguia donde estaba.
+      call_tag(:session_links, {}, :as => :links, :merge_params => true)
     end
   end
 end
@@ -305,9 +349,13 @@ end
 # changing theme changed which tags existed, and a template written for one
 # would not compile under another. The nav is not a matter of taste.
 
-Rapid.define(:navigation, :attrs => [:class]) do
-  tag("ul", all_attributes.merge("class" => ["nav", attributes[:class]].compact.join(" ")), :items) do
-    param(:default)
+# `current="Inicio"` says which entry you are looking at. It is **declared**, so
+# that it goes into the scope and not into the markup: undeclared, it went
+# straight through `all_attributes` and the bar came out as
+# `<ul current="Inicio">`, an attribute no browser has ever heard of.
+Rapid.define(:navigation, :attrs => [:class, :current]) do
+  tag("ul", extra_attributes.merge(:class => ["nav", attributes[:class]].compact.join(" ")), :items) do
+    with_scope(:current_navigation => attributes[:current]) { param(:default) }
   end
 end
 

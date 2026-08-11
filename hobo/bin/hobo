@@ -61,12 +61,12 @@ when "update"
 
   source = ARGV.find { |argument| !argument.start_with?("-") } || Dir.pwd
   write = ARGV.include?("--write")
-  con_valor = lambda do |bandera, por_defecto|
-    encontrada = ARGV.grep(/\A--#{bandera}=/).first
-    encontrada ? encontrada.split("=", 2).last : por_defecto
+  with_value = lambda do |flag, fallback|
+    found = ARGV.grep(/\A--#{flag}=/).first
+    found ? found.split("=", 2).last : fallback
   end
-  name = con_valor.call("as", nil)
-  theme = con_valor.call("theme", "clean")
+  name = with_value.call("as", nil)
+  theme = with_value.call("theme", "clean")
   begin
     Hobo::Update.new(source, :write => write, :name => name, :theme => theme).run
   rescue Hobo::Update::Error

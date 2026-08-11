@@ -103,7 +103,7 @@ class PageContractTest < Minitest::Test
 
   def test_an_application_can_replace_one_corner_without_owning_the_page
     html = Rapid.render(:page, { :title => "x" },
-                        :page_footer => Rapid.parameter(:replace => true) { text "MI PIE" })
+                        :footer => Rapid.parameter(:replace => true) { text "MI PIE" })
 
     assert_includes html, "MI PIE"
     refute_includes html, %(<footer class="page-footer">)

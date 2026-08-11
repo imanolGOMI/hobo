@@ -213,6 +213,7 @@ class CatalogueCensusTest < Minitest::Test
     :input_content => [:field, {}],
     :input_many => [:field_collection, {}],
     :javascript => [:nothing, { :name => "application" }],
+    :import_map => [:nothing, { :name => "application" }],
     :main_nav => [:nothing, {}],
     :model_form => [:record, {}],
     :name_view => [:record, {}],

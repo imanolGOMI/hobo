@@ -68,6 +68,19 @@ module Rapid
   @polymorphic = Hash.new { |h, k| h[k] = {} }
   @definitions = []
 
+  # Last resort for a name nobody defined.
+  #
+  # Empty here **on purpose**: for code written today a tag that does not exist
+  # is a typo, and the loud KeyError is the right answer. It is `hobo_dryml` that
+  # puts one in, because Hobo 2 *generated* tags into each application --
+  # `<signup-page>`, and a `<facturar-page>` for every lifecycle transition --
+  # and those generated files are the ones an update throws away.
+  @derivers = []
+
+  # Los params que alguien paso y nadie recogio, por tag. Ver
+  # `Rapid.unclaimed_params`.
+  @unclaimed = {}
+
   class << self
     attr_reader :tags, :definitions
 
@@ -124,6 +137,10 @@ module Rapid
       if type
         @polymorphic[name].fetch(type).prepend(extension)
       else
+        # `<extend tag="signup-page">` before anybody has rendered one: the
+        # deriver has to run here too, or the extension has nothing to attach to
+        # and one line takes the whole taglib down with it.
+        @derivers.each { |deriver| deriver.call(name) } if @tags[name].nil? && @polymorphic[name].empty?
         @tags[name]&.prepend(extension)
         @polymorphic[name].each_value { |klass| klass.prepend(extension) }
         raise KeyError, "tag #{name.inspect} is not defined" if @tags[name].nil? && @polymorphic[name].empty?
@@ -137,8 +154,31 @@ module Rapid
 
     # :this, :path and :from are taken; a param cannot be called any of those.
     def render(name, attributes = {}, this: Context.this, path: [], from: nil, **params)
-      klass = polymorphic_lookup(name, dispatch_type(this), from) || @tags.fetch(name)
-      Context.with(:this => this) { klass.new(attributes, params, :path => path).render }
+      klass = polymorphic_lookup(name, dispatch_type(this), from) || @tags[name] || derive(name)
+      Context.with(:this => this) { klass.new(attributes, params, :path => path, :name => name).render }
+    end
+
+    # `Rapid.derives { |name| ... }` -- a chance to define a tag the first time
+    # somebody asks for it. The block returns truthy if it defined one.
+    def derives(&block) = @derivers << block
+
+    # Params the caller handed to a tag that never asked for them: a name that
+    # was renamed between versions, or a typo. What Rapid does with it is decide
+    # nothing -- it keeps the list, and whoever is hosting says it out loud.
+    # `Hobo` prints them in development; a test reads them.
+    def unclaimed_params(tag_name, names)
+      names.each { |name| (@unclaimed[tag_name] ||= []) << name unless @unclaimed[tag_name]&.include?(name) }
+    end
+
+    def unclaimed = @unclaimed
+
+    def forget_unclaimed = @unclaimed = {}
+
+    def derive(name)
+      @derivers.each do |deriver|
+        return @tags.fetch(name) if deriver.call(name) && @tags.key?(name)
+      end
+      raise KeyError, "no hay ningun tag llamado #{name.inspect}"
     end
 
     # What a polymorphic tag dispatches on.

@@ -177,6 +177,31 @@ module Hobo
       warn(message)
     end
 
+    # Y lo que se le dice a quien pasa un param que el tag no tiene.
+    #
+    # `<page><footer:>…</footer:></page>` cuando el param se llama otra cosa: la
+    # pagina sale entera, con **ese trozo de menos** y sin un error en ningun
+    # sitio. Es como se perdio el pie de amenti, y como se pierde cualquier
+    # nombre que Hobo 2 llamaba de otra manera.
+    #
+    # Solo en desarrollo, y una vez por tag y nombre: en produccion no hay nadie
+    # leyendo y la pagina se pinta igual.
+    def warn_about_unclaimed_params
+      return unless defined?(Rails) && Rails.env.development?
+
+      pending = Rapid.unclaimed
+      return if pending.empty?
+
+      Rapid.forget_unclaimed
+      lines = pending.map { |tag, names| "       <#{tag.to_s.tr("_", "-")}>: #{names.map { |n| "#{n.to_s.tr("_", "-")}:" }.join(", ")}" }
+      message = ["", "AVISO  params que nadie recoge -- eso que traian no se ha pintado:",
+                 *lines,
+                 "       `bin/rails hobo:tags` dice que params tiene cada tag.", ""].join("\n")
+
+      Rails.logger&.warn(message)
+      warn(message)
+    end
+
     def raw_js(s)
       RawJs.new(s)
     end

@@ -8,7 +8,7 @@ module Rapid
     # because the call site was not itself a param.
     attr_reader :param_path
 
-    def initialize(attributes = {}, params = {}, path: nil)
+    def initialize(attributes = {}, params = {}, path: nil, name: nil)
       # `without-x` is an attribute that takes an extension point away, so it is
       # consumed here and never reaches the markup -- as DRYML does.
       without, attributes = attributes.partition { |name, _| name.to_s.start_with?("without_") }
@@ -18,6 +18,26 @@ module Rapid
       @all_attributes = attributes.dup.freeze
       @params = params
       @param_path = path
+      @tag_name = name
+    end
+
+    # What `merge-attrs` spreads onto an element: everything the caller passed
+    # **except the names this tag declares**.
+    #
+    # A declared attribute is the tag's own business -- `<navigation
+    # current="Inicio">` tells the bar which entry is the current one -- and it
+    # has no meaning in HTML. Spreading `all_attributes` sent it straight
+    # through, and the page came out as `<ul current="Inicio">`.
+    #
+    # This is DRYML's split: there, declared attributes became local variables
+    # and `merge-attrs` passed on what was left. Tags used to write it out by
+    # hand, one `.except(:legend, "legend")` at a time, and every tag that forgot
+    # leaked quietly.
+    def extra_attributes
+      declared = Rapid.attrs_for(@tag_name).map { |name| name.to_s }
+      return all_attributes if declared.empty?
+
+      all_attributes.reject { |name, _| declared.include?(name.to_s.tr("-", "_")) }
     end
 
     def this        = Context.this
@@ -38,7 +58,27 @@ module Rapid
     end
 
     def render
-      Context.capture { content }
+      @asked = {}
+      html = Context.capture { content }
+      report_unclaimed
+      html
+    end
+
+    # Un param que nadie recoge.
+    #
+    # `<page><footer:>…</footer:></page>`: en Hobo 2 ese param se llamaba
+    # `footer` y aqui se llamaba `page_footer`, asi que lo que traia el que
+    # llamaba **desaparecia**. Sin error, sin hueco, sin nada: la portada de
+    # amenti salia con el pie vacio y las cinco paginas devolvian 200.
+    #
+    # Se avisa y no se levanta la mano: la aplicacion se pinta igual, y un
+    # template de 2013 puede traer varios. Una vez por tag y nombre, que si no
+    # es una linea por peticion.
+    def report_unclaimed
+      unclaimed = @params.keys.reject { |name| @asked.key?(name) }
+      return if unclaimed.empty?
+
+      Rapid.unclaimed_params(@tag_name, unclaimed)
     end
 
     # --- extension points ----------------------------------------------------
@@ -48,8 +88,30 @@ module Rapid
     # which is what `param="#{scope.field_name}-heading"` needs.
     def param(name, &default)
       return nil if without?(name)
-      around(name) { render_content(name, parameter_for(name, :bare), &default) }
+
+      around(name) do
+        parameter = parameter_for(name, :bare)
+        # `<x: replace/>` sin contenido quita lo que habia. Estaba en `tag` y en
+        # `call_tag` y faltaba aqui, asi que un param suelto se quedaba con su
+        # contenido por defecto: `<sign-up: replace/>` no quitaba el enlace de
+        # alta, y quien lo escribio no tenia forma de enterarse.
+        default = nil if parameter&.replace? && !parameter.content?
+        render_content(name, parameter, &default)
+      end
       nil
+    end
+
+    # Params que una extension le anade a la definicion de debajo --
+    # `<old-page merge><footer:>…</footer:></old-page>`.
+    #
+    # Los del que llama mandan: la plantilla que pinta la pagina habla despues
+    # que el taglib que extendio el tag, y no al reves.
+    def with_params(extra)
+      previous = @params
+      @params = extra.merge(previous)
+      yield
+    ensure
+      @params = previous
     end
 
     # <old-x/> -- emit what the param would have rendered. The default is popped
@@ -116,7 +178,12 @@ module Rapid
     # params down, which is `merge-params`.
     def call_tag(name, attributes = {}, as: nil, merge_params: false, this: Context.this, **params, &block)
       params = params.merge(:default => block) if block
-      params = @params.merge(params) if merge_params
+      if merge_params
+        params = @params.merge(params)
+        # Lo que se pasa hacia abajo queda recogido: quien responda por ello es
+        # el tag de abajo, y avisar aqui seria contarlo dos veces.
+        @params.each_key { |key| @asked&.[]=(key, true) }
+      end
 
       exposed_as = as && as != :none ? as : nil
       return nil if exposed_as && without?(exposed_as)
@@ -217,6 +284,7 @@ module Rapid
               :void_element => "is a void element" }.freeze
 
     def parameter_for(name, kind)
+      @asked&.[]=(name, true)
       value = @params[name]
       return nil unless value
 
@@ -241,7 +309,9 @@ module Rapid
     PSEUDO = %i[before prepend append after].freeze
 
     def pseudo(name, prefix)
-      value = @params[:"#{prefix}_#{name}"]
+      key = :"#{prefix}_#{name}"
+      @asked&.[]=(key, true)
+      value = @params[key]
       value && Parameter.wrap(value).content
     end
 
@@ -288,10 +358,32 @@ module Rapid
     # DRYML merges the class attribute rather than overwriting it, which is how
     # `<card: class="odd">` on `<div class="card">` ends up as "card odd".
     def merge_attributes(base, extra)
-      return base if extra.nil? || extra.empty?
+      return normalize_attributes(base) if extra.nil? || extra.empty?
+
+      base = normalize_attributes(base)
+      extra = normalize_attributes(extra)
       merged = base.merge(extra)
       merged[:class] = "#{base[:class]} #{extra[:class]}" if base[:class] && extra[:class]
       merged
+    end
+
+    # One entry per attribute name, whatever the hash was built out of.
+    #
+    # A tag writes `tag("ul", all_attributes.merge("class" => "nav"))`: the
+    # caller's key is `:class` and this one is `"class"`, and a Hash is happy to
+    # keep both. What came out was `<ul class="main-nav" current="Inicio"
+    # class="nav">` -- **two class attributes**, of which a browser reads the
+    # first and throws the second away. No error, and half the styling gone.
+    #
+    # So the name is settled once, here: dashes not underscores, symbol keys, and
+    # `class` given twice means both classes rather than the last one.
+    def normalize_attributes(attrs)
+      return attrs if attrs.nil? || attrs.empty?
+
+      attrs.each_with_object({}) do |(name, value), merged|
+        key = name.to_s.tr("_", "-").to_sym
+        merged[key] = key == :class && merged[key] ? "#{merged[key]} #{value}" : value
+      end
     end
 
     VOID_ELEMENTS = %w[area base br col embed hr img input link meta source track wbr].freeze
@@ -315,7 +407,8 @@ module Rapid
     # HTML boolean attributes mean "present or absent", and a browser reads
     # `checked="false"` as checked.
     def format_attrs(attrs)
-      attrs.reject { |_, v| v.nil? || v == false }
+      normalize_attributes(attrs)
+        .reject { |_, v| v.nil? || v == false }
            .map do |name, value|
              name = name.to_s.tr("_", "-")
              # The one attribute a theme has a say in: see Rapid.class_map.

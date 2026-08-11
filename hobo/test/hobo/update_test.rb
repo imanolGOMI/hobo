@@ -188,6 +188,71 @@ class UpdateTest < Minitest::Test
     assert_equal ["geocoder"], updater.kept_gems, "hobo es de Hobo 2 y no cruza"
   end
 
+  # --- the Gemfile it writes ---------------------------------------------------
+
+  # The one gem this command can decide on its own: it has just counted the
+  # templates. Without it every one of those pages comes out derived, and the
+  # first run after an update looked worse than it was.
+  def test_dryml_templates_bring_their_gem_in
+    write("app/views/clientes/index.dryml", "<index-page:/>")
+
+    assert_match(/^gem "hobo_dryml"$/, gemfile_after_update(%(gem "rails"\n)))
+  end
+
+  def test_an_application_with_no_dryml_does_not_get_the_gem
+    refute_match(/hobo_dryml/, gemfile_after_update(%(gem "rails"\n)))
+  end
+
+  # Rails 8 writes its own capybara. Naming it twice is only a warning from
+  # bundler -- on every command the application runs from then on.
+  def test_a_gem_the_skeleton_already_asks_for_is_not_repeated
+    write("Gemfile", %(gem "capybara"\ngem "geocoder"\n))
+
+    written = gemfile_after_update(%(gem "rails"\ngem "capybara"\n))
+
+    assert_equal 1, written.scan(/gem "capybara"/).length
+    assert_match(/gem "geocoder"/, written)
+  end
+
+  # The report said bootstrap-sass was gone and the Gemfile installed it two
+  # lines later: `kept_gems` subtracted the table, and the table does not have
+  # it because it is only retired when it was Hobo's.
+  def test_what_the_report_calls_retired_does_not_come_across
+    write("Gemfile", %(gem "hobo_bootstrap"\ngem "bootstrap-sass"\n))
+
+    refute_includes updater.kept_gems, "bootstrap-sass"
+  end
+
+  # --- what fails without a word ------------------------------------------------
+
+  # A gem that is alive but that moved a piece out of itself. `bundle install`
+  # says nothing; the constant fails on the first request that reaches it.
+  def test_a_constant_that_moved_to_another_gem_is_found_where_it_is_written
+    write("app/controllers/pagos_controller.rb", "  include ActiveMerchant::Billing::Integrations\n")
+
+    assert_equal ["ActiveMerchant::Billing::Integrations"], updater.moved_constants.keys
+  end
+
+  # The longer name matches the shorter one too, and the line to write instead
+  # is not the same.
+  def test_the_longer_name_wins
+    write("app/views/pagos/show.dryml", "ActiveMerchant::Billing::Integrations::ActionViewHelper")
+
+    assert_equal ["ActiveMerchant::Billing::Integrations::ActionViewHelper"], updater.moved_constants.keys
+  end
+
+  # `config/initializers/constants.rb` is in .gitignore -- it carries keys -- so
+  # a checkout has the example and nothing else, and the application boots until
+  # the first line that reads one of them.
+  def test_an_example_with_no_real_file_beside_it_is_named
+    write("config/initializers/constants.rb.example", "SECRET = 'xxx'")
+    write("config/database.yml.example", "")
+    write("config/database.yml", "")
+
+    assert_equal ["config/initializers/constants.rb.example"],
+                 updater.orphan_examples.map { |file| updater.send(:relative, file) }
+  end
+
   # The report is what somebody reads before deciding to do this at all, so a
   # run that looks and changes nothing has to say something.
   def test_looking_changes_nothing_and_says_what_it_found
@@ -233,6 +298,18 @@ class UpdateTest < Minitest::Test
     full = File.join(@directory, path)
     FileUtils.mkdir_p(File.dirname(full))
     File.write(full, content)
+  end
+
+  # Stands in for what `hobo new` leaves behind, so that `write_gemfile` has a
+  # skeleton Gemfile to read and to append to.
+  def gemfile_after_update(skeleton)
+    target = File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3")
+    FileUtils.mkdir_p(target)
+    File.write(File.join(target, "Gemfile"), skeleton)
+    updater.send(:write_gemfile)
+    File.read(File.join(target, "Gemfile"))
+  ensure
+    FileUtils.rm_rf(target)
   end
 
 end

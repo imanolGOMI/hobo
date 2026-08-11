@@ -96,6 +96,29 @@ module Hobo
       "listen" => "ya viene",
     }.freeze
 
+    # Gems that are still alive but that **moved a piece out of themselves**.
+    #
+    # These are worse than a retired gem, because nothing complains: the gem
+    # installs, `bundle install` is quiet, and what fails is a constant, on the
+    # first request that reaches the code naming it. So they are looked for in
+    # the source rather than in the Gemfile, and what is said is the exact line
+    # to write instead.
+    #
+    # They are **named and not rewritten**, for the same reason as the Bootstrap
+    # classes (decision 23): this is the application's own code calling somebody
+    # else's gem, and there is no version of that this command should be editing
+    # behind your back.
+    MOVED = {
+      "ActiveMerchant::Billing::Integrations" =>
+        { :gem => "offsite_payments", :becomes => "OffsitePayments::Integrations",
+          :and => "money",
+          :since => "activemerchant 2.0 las saco a una gema aparte" },
+      "ActiveMerchant::Billing::Integrations::ActionViewHelper" =>
+        { :gem => "offsite_payments", :becomes => "OffsitePayments::ActionViewHelper",
+          :and => "money",
+          :since => "activemerchant 2.0 las saco a una gema aparte" },
+    }.freeze
+
     def initialize(source, write: false, name: nil, theme: "clean", out: $stdout)
       @source = File.expand_path(source)
       @write = write
@@ -187,7 +210,33 @@ module Hobo
       end
 
       note :gems, retired_gems.length, "gemas que ya no existen" do
-        retired_gems.map { |gem| "#{gem}: #{RETIRED[gem]}" }
+        retired_gems.map { |gem| "#{gem}: #{why_retired(gem)}" }
+      end
+
+      note :moved, moved_constants.length, "constantes que se mudaron de gema" do
+        ["Su gema sigue viva, pero esto ya no esta dentro. `bundle install` no dira",
+         "nada: falla la constante, en la primera peticion que llegue ahi.",
+         "Anade la gema al Gemfile y cambia el nombre:"] +
+          moved_constants.flat_map do |written, files|
+            moved = MOVED[written]
+            # `offsite_payments` is the case: it installs, and then refuses to
+            # load until you have chosen an implementation of Money. A gem that
+            # a second gem needs at boot is part of the answer, not a detail.
+            gems = [moved[:gem], *moved[:and]].map { |name| %(gem "#{name}") }.join(", ")
+
+            ["  #{written}",
+             "    -> #{moved[:becomes]}   (#{gems} -- #{moved[:since]})",
+             "    en #{files.map { |file| relative(file) }.join(", ")}"]
+          end
+      end
+
+      note :examples, orphan_examples.length, "ficheros de ejemplo sin su pareja" do
+        ["La aplicacion trae un `.example` y no el fichero de verdad, casi siempre",
+         "porque el de verdad esta en .gitignore: lleva claves. El ejemplo se copia",
+         "**tal cual** y no se renombra -- un fichero de claves con las de mentira",
+         "dentro arranca y luego hace lo que no es. Trae el bueno de donde corra la",
+         "aplicacion, o copialo y rellenalo:"] +
+          orphan_examples.map { |file| "  #{relative(file)} -> #{relative(file).sub(/\.(example|sample)\z/, "")}" }
       end
     end
 
@@ -239,6 +288,41 @@ module Hobo
                                                                           .map { |p| File.basename(p) }
     end
 
+    # Which of the moved constants this application writes, and where.
+    #
+    # Longest first, because one of them is inside another:
+    # `…Integrations::ActionViewHelper` also matches `…Integrations`, and the
+    # line to write is not the same one.
+    def moved_constants
+      @moved_constants ||= begin
+        found = Hash.new { |hash, key| hash[key] = [] }
+        names = MOVED.keys.sort_by { |name| -name.length }
+
+        Dir[File.join(@source, "{app,lib,config}", "**", "*.{rb,dryml,erb}")].each do |file|
+          text = File.read(file)
+          names.each do |name|
+            next unless text.include?(name)
+            found[name] << file
+            text = text.gsub(name, "")
+          end
+        end
+
+        found
+      end
+    end
+
+    # `config/database.yml.example` with no `config/database.yml` beside it.
+    #
+    # The real one is in `.gitignore` -- it carries keys -- so a checkout has the
+    # example and nothing else, and the application boots until the first line
+    # that reads a constant that was supposed to be in there.
+    def orphan_examples
+      @orphan_examples ||= Dir[File.join(@source, "config", "**", "*.{example,sample}")]
+                           .reject { |file| File.exist?(file.sub(/\.(example|sample)\z/, "")) }
+    end
+
+    def relative(file) = file.sub("#{@source}/", "")
+
     # The gems the old Gemfile asks for, by name.
     def declared_gems
       @declared_gems ||= File.read(File.join(@source, "Gemfile")).scan(/^\s*gem\s+["']([^"']+)["']/).flatten
@@ -252,11 +336,18 @@ module Hobo
     # `hobo_bootstrap`, and the theme brings its own Bootstrap now. In one on
     # `clean` the application added it itself, for its own markup, and dropping
     # it takes away a design nobody asked us to touch.
+    BOOTSTRAP_SASS = "venia con hobo_bootstrap; el tema trae su Bootstrap ya compilado"
+
     def retired_gems
       retired = declared_gems & RETIRED.keys
       retired += ["bootstrap-sass"] if declared_gems.include?("bootstrap-sass") && used_hobo_bootstrap?
       retired
     end
+
+    # Why each one is gone. `bootstrap-sass` is not in the table because it is
+    # only retired when it was Hobo's -- and printing its name with nothing
+    # behind the colon was the whole reason anybody would ask.
+    def why_retired(gem) = RETIRED[gem] || BOOTSTRAP_SASS
 
     def used_hobo_bootstrap? = declared_gems.include?("hobo_bootstrap")
 
@@ -279,8 +370,27 @@ module Hobo
       end
     end
 
-    # What comes across: neither Hobo 2's own nor the retired ones.
-    def kept_gems = declared_gems - HOBO_2_GEMS - RETIRED.keys
+    # What comes across: neither Hobo 2's own, nor the retired ones, nor the ones
+    # the new Gemfile already asks for.
+    #
+    # `retired_gems` and not `RETIRED.keys`: `bootstrap-sass` is retired only
+    # when it was Hobo's, so the table does not have it and the subtraction left
+    # it in -- the report said the gem was gone and the Gemfile installed it two
+    # lines later.
+    #
+    # And Rails 8 writes its own `capybara`, `debug` and `brakeman`. Naming one
+    # twice is only a warning from bundler, but it is a warning on every single
+    # command the application runs from then on.
+    def kept_gems = declared_gems - HOBO_2_GEMS - retired_gems - skeleton_gems
+
+    # The gems `hobo new` already put in the Gemfile, read from the file it
+    # wrote rather than from a list here, which would go stale with Rails.
+    def skeleton_gems
+      @skeleton_gems ||= File.read(File.join(target, "Gemfile"))
+                             .scan(/^\s*gem\s+["']([^"']+)["']/).flatten
+    rescue Errno::ENOENT
+      []
+    end
 
     # --- writing ---------------------------------------------------------------
 
@@ -673,16 +783,41 @@ module Hobo
     # appended to the one `hobo new` wrote. Appended and not merged, so that what
     # came from the old application is visible in one block and can be gone
     # through by hand.
+    #
+    # And `hobo_dryml` in front of them when the application has templates in
+    # DRYML, which is the one gem this command can decide on its own: it has just
+    # counted the `.dryml` files, and without the gem every one of those pages
+    # comes out derived. Leaving it to a line in a report meant the first run
+    # after an update always looked worse than it was.
     def write_gemfile
-      return if kept_gems.empty?
+      lines = []
 
-      lines = ["", "# --- de la aplicacion vieja ---------------------------------------------",
-               "# Repasalas: estan aqui porque el Gemfile viejo las pedia, no porque se",
-               "# haya comprobado que sigan vivas."]
-      lines += kept_gems.map { |gem| %(gem "#{gem}") }
+      unless dryml_templates.empty?
+        lines += ["", "# El lenguaje DRYML, porque esta aplicacion trae #{dryml_templates.length} plantillas escritas en el.",
+                  "# Quitala cuando las hayas convertido a .html.erb.", gem_line("hobo_dryml")]
+      end
+
+      unless kept_gems.empty?
+        lines += ["", "# --- de la aplicacion vieja ---------------------------------------------",
+                  "# Repasalas: estan aqui porque el Gemfile viejo las pedia, no porque se",
+                  "# haya comprobado que sigan vivas."]
+        lines += kept_gems.map { |gem| %(gem "#{gem}") }
+      end
+
+      return if lines.empty?
 
       File.open(File.join(target, "Gemfile"), "a") { |file| file.puts(lines.join("\n")) }
-      say "  Gemfile (+#{kept_gems.length} gemas)"
+      say "  Gemfile (+#{kept_gems.length} gemas#{", +hobo_dryml" unless dryml_templates.empty?})"
+    end
+
+    # A gem line, pointing at the working tree when HOBODEV says to -- the same
+    # rule `hobo new` follows, so that the two halves of a development checkout
+    # do not disagree about where a gem is.
+    def gem_line(name)
+      development = ENV["HOBODEV"]
+      path = development && [File.join(development, name, name), File.join(development, name)]
+                            .find { |candidate| File.exist?(File.join(candidate, "#{name}.gemspec")) }
+      path ? %(gem "#{name}", path: "#{path}") : %(gem "#{name}")
     end
 
     # --- saying ----------------------------------------------------------------
