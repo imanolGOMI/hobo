@@ -25,6 +25,7 @@ require "hobo_rapid/tags/forms"
 require "hobo_rapid/tags/collections"
 require "hobo_rapid/tags/rest"
 require "hobo_rapid/tags/tables"
+require "hobo_rapid/tags/dialogs"
 
 module HoboRapid
 

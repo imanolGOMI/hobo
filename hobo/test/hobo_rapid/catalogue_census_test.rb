@@ -124,6 +124,14 @@ class CatalogueCensusTest < Minitest::Test
   # y, si hace falta, con qué atributos. Una ficha de una línea por tag es
   # justamente la documentación que no había.
   CENSUS = {
+    :modal => [:nothing, { :title => "Nuevo", :id => "x" }],
+    :modal_header => [:nothing, { :title => "Nuevo" }],
+    :modal_form_footer => [:nothing, {}],
+    :modal_open_button => [:nothing, { :modal => "x" }],
+    :modal_and_button => [:nothing, { :modal => "x" }],
+    :alert_box => [:nothing, { :type => "warning" }],
+    :sub_nav => [:nothing, {}],
+    :simple_page => [:nothing, { :title => "x" }],
     :navigation => [:nothing, {}],
     :nav_item => [:record, { :href => "/x" }],
     :transition_button => [:record, { :transition => "publish" }],
