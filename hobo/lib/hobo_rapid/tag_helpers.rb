@@ -1,82 +1,83 @@
-# One view helper per tag, so a template writes the name of the tag and that is
-# all:
+# `hobo.` -- everything Hobo puts in a template, in one place.
 #
-#   <%= search_filter :fields => "title, synopsis" %>
-#   <%= filter_menu :field => "category" %>
-#   <%= card book %>
+#   <%= hobo.field_list :fields => "title, year" %>
+#   <%= hobo.card %>
+#   <% hobo.append_heading " — La Biblioteca" %>
 #
-# instead of naming the bridge every time:
+# In ERB, in Slim, in HAML: it is a Ruby call, so it works wherever Ruby does.
+# In a `.dryml` you write `<field-list/>`, and this does not come into it.
 #
-#   <%= rapid_tag(:search_filter, nil, :fields => "title, synopsis") %>
+# ## Why not a helper per tag
 #
-# This is what the syntax gave you in DRYML: `<search-filter fields="..."/>` did
-# not name a runtime, it named the tag. There is no new syntax here, so the name
-# of the tag has to be what you write.
+# There was one -- `<%= field_list %>`, `<%= card %>` -- and it was dropped
+# (2026-08-11, with Imanol). Sixty-three names, and read in a template not one
+# of them says where it comes from: `<%= form %>`, `<%= section %>`, `<%= view
+# %>`, `<%= page %>` look exactly like a helper of the application's or of
+# Rails'.
 #
-# They are rebuilt after deriving and on every reload, because a model's tags
-# appear when it is derived and an application can define its own in a taglib.
+# Only one of the sixty-three collided with Rails today. The problem is not
+# today: the day an application defines a helper called `card` or `section`, it
+# wins and the tag disappears -- with nothing raised and nothing to grep for.
+# Behind `hobo.` that cannot happen, and `hobo.param` exists, which as a bare
+# name it could not.
 #
-# ## What is left alone
+# ## Why an object and not a module
 #
-# A name ActionView already answers is left alone. `<%= form %>` would be fine,
-# but if there were ever a tag called `link_to` or `render`, taking it would
-# break a template somewhere else, and the failure would show up far from the
-# cause. The tag is still reachable through `rapid_tag`, which collides with
-# nothing.
+# `Hobo.field_list(…)` would be a module method, and a module cannot see the
+# view: the tags need the forgery token, the acting user and `capture` for
+# blocks, and all three live there. `hobo` is a helper that answers with an
+# object bound to **this** view, so it has them.
 
 module HoboRapid
 
-  module TagHelpers
+  # What `hobo` answers with: the tags, bound to one view.
+  class ViewTags
 
-    # The helpers live inside this module and not in a loose one, so they can be
-    # removed and put back on every reload without leaving behind a tag the
-    # application has since deleted.
-    def self.module
-      @module ||= Module.new
+    # The verbs that retouch the derived page (hobo_rapid/params.rb). They are
+    # on the view because that is where they keep what they declare, and they
+    # are named here so `hobo.append_heading` reaches them.
+    VERBS = %i[param replace without param_content sortable_headings].freeze
+
+    def initialize(view)
+      @view = view
     end
 
-    def self.refresh!
-      self.module.instance_methods(false).each { |name| self.module.send(:remove_method, name) }
+    # Every tag there is, asked at call time rather than defined up front: a
+    # taglib can define one at any point, and a list built at boot would not
+    # have it.
+    def method_missing(name, *args, **attributes, &block)
+      return @view.send(name, *args, **attributes, &block) if verb?(name)
+      return @view.hobo_tag_helper(name, *args, **attributes, &block) if tag?(name)
 
-      names.each do |name|
-        next if reserved?(name)
-        # The default is `INHERIT` and not nil, for the same reason `rapid_tag`
-        # has one: `<%= filter_menu :field => "category" %>` inside a list is a
-        # menu for **that** list, and passing nil left the tag with no record,
-        # so it could not find the model and painted nothing at all.
-        self.module.send(:define_method, name) do |this = HoboRapid::Helper::INHERIT, **attributes, &block|
-          hobo_tag_helper(name, this, **attributes, &block)
-        end
-      end
+      raise NoMethodError, <<~ERROR
+        Hobo no tiene ningun tag ni verbo llamado `#{name}`.
+
+        Los tags que hay: bin/rails hobo:tags
+      ERROR
     end
 
-    # Every tag there is right now: the catalogue's, the ones derived per model,
-    # and whatever the application defined.
-    def self.names
-      Rapid.definitions.map(&:name).uniq
+    def respond_to_missing?(name, include_private = false)
+      verb?(name) || tag?(name) || super
     end
 
-    RESERVED = %i[params request response controller flash session logger raw text].freeze
+    private
 
-    def self.reserved?(name)
-      return true if RESERVED.include?(name)
-      ActionView::Base.method_defined?(name) || ActionView::Base.private_method_defined?(name)
-    rescue NameError
-      false
-    end
+    def verb?(name) = VERBS.include?(name) || name.to_s.match?(HoboRapid::Params::PSEUDO)
+
+    def tag?(name) = defined?(Rapid) && Rapid.definitions.any? { |definition| definition.name == name.to_sym }
 
   end
 
 
-  # What a tag helper does. Kept apart from the generated ones so the logic is
-  # written once and can be read.
-  module TagHelperSupport
+  module TagHelpers
+
+    # The one name Hobo adds to a template.
+    def hobo = @hobo_tags ||= HoboRapid::ViewTags.new(self)
 
     def hobo_tag_helper(name, this = HoboRapid::Helper::INHERIT, **attributes, &block)
       # With a block, the block declares the params of **this** tag and not the
-      # page's: `<%= index_page @books do %><% append_heading "…" %><% end %>`.
-      # That is opening the element, which is what let you edit the whole page
-      # in DRYML.
+      # page's: `<%= hobo.index_page @books do %>…<% end %>`. That is opening
+      # the element, which is what let you edit the whole page in DRYML.
       return rapid_tag(name, this, **attributes) unless block
 
       rapid_tag(name, this, **attributes.merge(hobo_collect_params(&block)))
@@ -99,8 +100,5 @@ module HoboRapid
 end
 
 if defined?(ActiveSupport)
-  ActiveSupport.on_load(:action_view) do
-    include HoboRapid::TagHelperSupport
-    include HoboRapid::TagHelpers.module
-  end
+  ActiveSupport.on_load(:action_view) { include HoboRapid::TagHelpers }
 end

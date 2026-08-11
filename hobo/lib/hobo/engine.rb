@@ -124,40 +124,6 @@ module Hobo
       Hobo::Extensions::WillPaginate.apply!
     end
 
-    # `<append-heading:>` in a `.html.erb`, a `.slim` or whatever the
-    # application writes: the params of DRYML as markup, in any template
-    # language (hobo_rapid/param_markup.rb).
-    #
-    # It wraps the handler that was already registered instead of replacing it,
-    # so what compiles the template is still ERB, or Slim, or the one that gem
-    # brought. What this changes is the source it is handed.
-    #
-    # And only for **the application's own templates**. A gem ships views too,
-    # and rewriting somebody else's file is going into their house: whatever
-    # rule this pass follows, they never agreed to it.
-    initializer "hobo.param_markup" do
-      ActiveSupport.on_load(:action_view) do
-        require "hobo_rapid/param_markup"
-
-        ActionView::Template::Handlers.extensions.each do |extension|
-          handler = ActionView::Template.registered_template_handler(extension)
-          next if handler.nil? || extension == :raw
-
-          # A handler is anything that answers `call`, and how many arguments
-          # it takes is up to it -- ERB's is an object, not a lambda, so asking
-          # it for its arity is asking the wrong thing. `method(:call).arity`
-          # is the question that works for both.
-          takes = handler.method(:call).arity
-
-          ActionView::Template.register_template_handler(extension, lambda { |template, source = nil|
-            text = source || template.source
-            text = HoboRapid::ParamMarkup.transform(text) if HoboRapid::ParamMarkup.ours?(template)
-            takes == 1 ? handler.call(template) : handler.call(template, text)
-          })
-        end
-      end
-    end
-
     initializer "hobo.derive" do |app|
       app.config.to_prepare do
         next unless defined?(Hobo::Model)
@@ -167,12 +133,7 @@ module Hobo
         # `application.dryml` was. In here and not in another `to_prepare`:
         # deriving defines `index_page` for every model, so an `extend_tag`
         # loaded earlier would extend a tag replaced an instant later.
-        #
-        # The helpers first, because a taglib writes tags inside its own
-        # definitions.
-        HoboRapid::TagHelpers.refresh!
         HoboRapid::Taglib.load_all(Rails.root)
-        HoboRapid::TagHelpers.refresh!
       end
     end
 

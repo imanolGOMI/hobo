@@ -140,22 +140,48 @@ class TaglibTest < Minitest::Test
     refute_includes output, "MissingTemplate"
   end
 
-  # --- the tag helpers --------------------------------------------------------
+  # --- `hobo.` ------------------------------------------------------------------
 
-  def test_every_tag_has_a_helper_named_after_it
+  # Every tag reachable from a template, and **only** through `hobo.`.
+  #
+  # There used to be a helper per tag -- `<%= card %>` -- and it was dropped
+  # with Imanol on 2026-08-11: sixty-three bare names, and read in a template
+  # not one of them says where it comes from.
+  def test_every_tag_is_reachable_through_hobo
     output = run_with_taglib("", <<~RUBY)
       view = ApplicationController.new.view_context
-      puts "CARD \#{view.respond_to?(:card)}"
-      puts "INDEX \#{view.respond_to?(:index_page)}"
-      puts "SEARCH \#{view.respond_to?(:search_filter)}"
-      puts "RENDER \#{view.method(:render).owner}"
+      puts "CARD \#{view.hobo.respond_to?(:card)}"
+      puts "INDEX \#{view.hobo.respond_to?(:index_page)}"
+      puts "SEARCH \#{view.hobo.respond_to?(:search_filter)}"
+      puts "VERB \#{view.hobo.respond_to?(:append_heading)}"
+      # `param` could not be a bare helper -- Rails answers to it -- and here it
+      # can, which is half the reason for the namespace.
+      puts "PARAM \#{view.hobo.respond_to?(:param)}"
+      puts "SUELTO \#{view.respond_to?(:card)}"
     RUBY
 
     assert_includes output, "CARD true", output
     assert_includes output, "INDEX true"
     assert_includes output, "SEARCH true"
-    # And a name Rails already answers is left alone.
-    refute_includes output, "RENDER #<Module"
+    assert_includes output, "VERB true"
+    assert_includes output, "PARAM true"
+    assert_includes output, "SUELTO false", "los helpers sueltos se quitaron"
+  end
+
+  # A name that is neither a tag nor a verb says so, and says where to look.
+  # Bare helpers could not: a typo was a NoMethodError from ActionView about a
+  # method nobody had heard of.
+  def test_a_name_that_is_not_a_tag_says_so
+    output = run_with_taglib("", <<~RUBY)
+      view = ApplicationController.new.view_context
+      begin
+        view.hobo.no_existe
+      rescue NoMethodError => e
+        puts "DICE \#{e.message.include?("hobo:tags")}"
+      end
+    RUBY
+
+    assert_includes output, "DICE true", output
   end
 
   private
