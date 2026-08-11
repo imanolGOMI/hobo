@@ -3570,3 +3570,65 @@ captura, no en una prueba.
 - **Código en inglés** (identificadores y comentarios). **Commits y documentación
   en español.**
 - Parar al final de cada capa: probar, enseñar el resultado y preguntar.
+
+## La pieza de los params: los verbos de DRYML en la vista (2026-08-11, a medias)
+
+**Qué es**: recuperar la forma de escribir de DRYML sin el lenguaje. Lo que era
+`<append-heading:>hola</append-heading:>` se escribe `<% append_heading "hola" %>`
+en ERB y `- append_heading "hola"` en Slim, con bloque cuando hay marcado. Sin
+nombrar la página: una vista es una acción y una acción pinta una página, así
+que el controlador ya sabe cuál. `rapid_tag` deja de ser lo que se escribe.
+
+**La gramática, del manual** (`hobo_oficial/doc/hobodoc/doc/manual/dryml-guide.markdown`,
+«Inserting extra content» 750-795, «Replacing a parameter entirely» 795-830,
+`param-content` en 1185). Son siete:
+
+| DRYML | Hobo 3 |
+|---|---|
+| `<heading:>x</heading:>` | `heading "x"` |
+| `<heading: class="big"/>` | `heading class: "big"` |
+| `<heading: replace>x</heading:>` | `heading :replace do` |
+| `<page without-heading/>` | `without :heading` |
+| `<before-/prepend-/append-/after-heading:>` | `before_heading`, … |
+| `<param-content for="heading"/>` | `param_content` |
+| `<heading restore/>` | `restore` |
+
+**La regla, que es la de Hobo 2**: si la vista solo declara params, la página es
+la derivada y esto la retoca; si escribe marcado, la vista sustituye —como al
+escribir un `index.dryml`—; las dos cosas a la vez son un error que lo explica.
+
+**La otra mitad, el `application.dryml`**: la definición por tipo se mantiene
+(guía, 1116-1125). Va en `app/views/taglibs/application.rb`, cargado por Hobo
+**después de derivar** —si no, la derivación lo pisa en cada recarga, que es la
+trampa que mordió con el datepicker—:
+
+    define :card, :for => Book do … end
+    define :input, :for => :email_address do … end
+    extend_tag :page do … end
+
+Nombre fusionado cuando hay una variable (`append_heading`), separado cuando hay
+dos (`define :card, for: Book`): `define_card_book` no se puede desambiguar de
+`define_card` para `BookTag`, y pierde los modelos con namespace.
+
+**Comprobado y descartado como riesgo**: el runtime aguanta `param_content` y
+`restore` tal como está. `Rapid::Tag#call_default` (lib/rapid/tag.rb:278) ya
+guarda lo que el tag iba a pintar y prevé el bucle de envolver un param consigo
+mismo. **No hay que tocar lib/rapid/.**
+
+**Dónde está atascado**: `<% append_heading %>` da NoMethodError en la
+aplicación. Descartado: que el módulo no esté (`ActionView::Base.include?`
+responde true), que sea código viejo (servidor reiniciado entero), y que la
+clase gane al módulo (probado con `prepend`). La salida es declarar los verbos
+de verdad en vez de `method_missing`. Antes de nada, reproducir con el log
+recién truncado: el último leído tenía la misma dirección de objeto que antes
+del reinicio.
+
+**Sin commitear**: lib/hobo_rapid/params.rb (nuevo), el enganche en
+hobo_rapid/helper.rb, el require en hobo_rapid.rb, y la regla en
+hobo/controller/model.rb (`render_derived_or`).
+
+**La prueba de fuego, elegida por Imanol**: todas las tablas ordenables con un
+`extend_tag` en application.rb; una tabla distinta con `define :index_page, for:
+Loan`; un total antes de una tabla con `before_collection`; y algo dentro del
+título con `append_heading`. Los cuatro casos tocan las cuatro formas: extender
+para todos, redefinir por tipo, insertar antes de un param, añadir dentro de otro.
