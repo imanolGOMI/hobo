@@ -3416,3 +3416,101 @@ En `hobo3_mi_app_clean` (rama `clean`, puerto 3003), con la sintaxis nueva:
   porque `name` es el atributo-nombre, que va en el título, y las marcas de
   tiempo son mantenimiento. La página es lo que pidió el modelo.
 - Nivel 3 de las pruebas (aplicaciones generadas de verdad), aplazado por Imanol.
+
+
+## DRYML, de verdad: el día largo (2026-08-11)
+
+Cómo se llegó a las decisiones 16-21, que es lo que no cabe en `PLAN.md`.
+
+### Empezó por no poder ver nada
+
+Amenti actualizada arrancaba en el 3006 y no se veía **ni una pantalla**: todo
+lleva a `/`, y `/` es DRYML. Imanol: *«creo que dryml llegado este punto es
+innegociable»*. El análisis del 2026-08-10 ya decía que el trabajo duro es el
+mismo en los dos caminos -- el mapeo de cada construcción a Rapid --, así que el
+lenguaje vivo no costaba más que el traductor.
+
+### El lector, escrito de cero
+
+El de Hobo 2 heredaba de `REXML::Parsers::BaseParser` y usaba sus constantes
+internas, que no son API de nadie: se rompió dos veces en una semana. El nuevo
+son ~270 líneas y no depende de REXML.
+
+Lo que enseñaron las 88 plantillas de amenti, y que no habría inventado sentado:
+
+- `<this.nombre-completo/>` -- un camino de campos como etiqueta. Sin los puntos
+  en el nombre, **21 de las 88 no se leían**
+- `<mayus:company.responsable/>` -- el tag, y sobre qué campo va
+- un `<table:contactos>` cerrado con `</table>`
+- el plugin de cookies entero dentro de un `<script>`, con `<` de javascript
+
+### El compilador, y las cinco cosas que faltaban
+
+Compila las 82 escritas a mano de amenti y 94 de los 96 ficheros del catálogo de
+Hobo 2. Lo que faltaba era semántica que no había implementado:
+
+- **`if` y `unless` son atributos de cualquier etiqueta**, con su `<else>` al
+  lado. Así está escrito el catálogo entero
+- `<if>` y `<repeat>` sin nada que mirar miran `this`
+- el nombre de un param se puede calcular al pintar: `param="#{campo}_field"`
+- los `attrs` de un `<def>` son variables locales dentro del tag
+- `<%# … %>` es un comentario de ERB, y es como el catálogo lleva su
+  documentación: leído como Ruby, páginas de markdown acababan en el fichero
+  compilado
+
+### Elemento o tag: es una lista, no una corazonada
+
+Lo hice preguntando «¿existe un tag con ese nombre?» y **sólo acertaba por
+casualidad**: la misma plantilla compilaba a cosas distintas según cuánto
+catálogo hubiera cargado. Hobo 2 tenía `dryml/static_tags`, 98 nombres.
+
+Y la lista no es «los elementos de HTML»: `div`, `span` y `tr` están dentro, y
+`a`, `img`, `br`, `form`, `input` y `table` **fuera**. Por eso Hobo 2 define
+tags para ellos en `html/`. Eso corrigió una afirmación que yo había dejado
+escrita en `PLAN.md` -- que 23 tags eran «envoltorios triviales que no hay que
+portar» --: el `<a>` de Hobo coge un registro y saca la url, y sin él no se
+puede pintar el resto del catálogo.
+
+### El banco de pruebas de verdad
+
+`E:\APSOFT\UnoyCero\aplicaciones` (en WSL, `/mnt/e/...`): **807 plantillas
+DRYML de ~20 aplicaciones** de tres versiones de Hobo, con 625 tags distintos
+definidos. Amenti sola se queda corta al lado.
+
+De ahí salió la comprobación que decidió el punto 21: **nadie redefine los tags
+transparentes** salvo tres copias literales de `<def tag="br">`.
+
+Y midió la pregunta de Imanol -- «¿y si renombramos los `.dryml` a
+`.html.erb`?»: **139 de 807**. Las otras 668 usan tags sin guion (581), `<def>`
+o `<extend>` (448), control de flujo (203) o `<this.campo/>` (159).
+
+### La reescritura de marcado en ERB: escrita y quitada el mismo día
+
+Imanol pidió poder escribir `<append-heading:>` en un `.html.erb`, y se hizo:
+una pasada sobre el fuente antes de que el handler compile, acotada a `app/`.
+Funcionó en la aplicación real.
+
+Y entonces preguntó si era robusta. No lo era:
+
+    <!-- <heading:>viejo</heading:> -->   ->  se ejecuta comentado
+    <script>var x = "<heading:>"</script> ->  se ejecuta dentro del script
+
+Dos fallos **silenciosos**. Y aportaba sintaxis, no poder: `<% hobo.append_heading %>`
+hace lo mismo. Se quitó. Quien quiera esa sintaxis tiene `.dryml`.
+
+De paso salió un fallo que sólo se veía mirando la página: los atributos se
+pasaban con clave de cadena y los tags las leen como símbolo, así que
+`<field-list fields="title"/>` no encontraba nada y pintaba **todas** las
+columnas. Parecía que funcionaba.
+
+### Lo que Hobo 2 ofrecía sin DRYML: nada
+
+`dryml` era `add_runtime_dependency` de la gema `hobo`, y el catálogo eran 112
+ficheros `.dryml`. La opción del asistente que Imanol recordaba era la
+contraria: *«Will your application use only hobo/dryml templates?»* -- decir que
+sí **borraba** el layout de Rails. Lo opcional era ERB.
+
+Desde ERB sólo había `call_dryml_tag(:card, :with => @libro)`, un método
+parcheado en `ActionController::Base`: pasaba por el controlador y **no podía
+tocar params**. La elección que se monta ahora no existía, y es posible porque
+el catálogo de Hobo 3 está en Ruby.

@@ -136,16 +136,6 @@ class CatalogueCensusTest < Minitest::Test
     # fuera de ella, asi que una plantilla que escribe `<a>` o `<img>` esta
     # llamando a un tag.
     :empty_tag => [:nothing, { :tag_name => "br" }],
-    :base => [:nothing, {}],
-    :meta => [:nothing, { "name" => "author" }],
-    :link => [:nothing, { "rel" => "icon" }],
-    :img => [:nothing, { "src" => "/x.png" }],
-    :br => [:nothing, {}],
-    :hr => [:nothing, {}],
-    :frame => [:nothing, {}],
-    :area => [:nothing, {}],
-    :col => [:nothing, {}],
-    :param => [:nothing, {}],
     :a => [:record, {}],
     :header => [:nothing, {}],
     :footer => [:nothing, {}],

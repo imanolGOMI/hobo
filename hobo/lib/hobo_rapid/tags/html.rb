@@ -34,13 +34,22 @@ Rapid.define(:empty_tag, :attrs => [:tag_name]) do
   tag(name.to_s, all_attributes.except(:tag_name, "tag_name"))
 end
 
-# Each one emits its own element rather than going through `<empty-tag>`.
-# Chaining them read better and tied every one of these to another tag being
-# defined first, which is a dependency for nothing: `tag` is already the one
-# place that decides how a void element is written.
-%w[base meta link img br hr frame area col param].each do |name|
-  Rapid.define(name.to_sym) { tag(name, all_attributes) }
-end
+# And `<img>`, `<br>`, `<meta>`, `<link>`, `<hr>`, `<base>`, `<frame>`,
+# `<area>`, `<col>` and `<param>` are **not here** (2026-08-11, with Imanol).
+#
+# Hobo 2 defined them, and they did nothing: `<def tag="img"><empty-tag
+# tag-name="img" merge/></def>`. They existed because DRYML's list of element
+# names is short and those are not on it, so `<img>` in a template was a call
+# to a tag that had to exist. Plumbing for the language, not catalogue.
+#
+# They are on `hobo_dryml`'s list now, so `<img src="x"/>` in a `.dryml` comes
+# out as it always did, and `hobo.img` -- which nobody would write, because in
+# a template you write `<img>` -- is gone. Checked against 807 templates of
+# ~20 real applications: the only redefinition is three copies of `<def
+# tag="br">` that are letter for letter what Hobo already did.
+#
+# It also settles a name: `param` was a tag **and** the verb that fills in a
+# param, and `hobo.param` could only be one of them.
 
 # --- the link ------------------------------------------------------------------
 
