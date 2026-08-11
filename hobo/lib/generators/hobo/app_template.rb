@@ -24,8 +24,18 @@ hobo_dev = ENV["HOBODEV"]
 # hands the answers over.
 answers = ENV["HOBO_NEW_ANSWERS"].to_s.split
 
+# Where a gem is inside HOBODEV. `hobo` is nested -- the repository is
+# `hobo/` and the gem inside it is `hobo/hobo/` -- and the others are not.
+# Guessing `HOBODEV/<name>` for all of them wrote a path that does not exist,
+# and the application only found out at `bundle install`.
+gem_path = lambda do |name|
+  [File.join(hobo_dev, name, name), File.join(hobo_dev, name)]
+    .find { |candidate| File.exist?(File.join(candidate, "#{name}.gemspec")) }
+end
+
 gem_line = lambda do |name|
-  hobo_dev ? %(gem "#{name}", path: "#{File.join(hobo_dev, name)}") : %(gem "#{name}")
+  path = hobo_dev && gem_path.call(name)
+  path ? %(gem "#{name}", path: "#{path}") : %(gem "#{name}")
 end
 
 # One line, because there is one gem (decision 11). It used to be six: the
