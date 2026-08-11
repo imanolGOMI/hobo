@@ -232,10 +232,12 @@ module Hobo
 
       note :examples, orphan_examples.length, "ficheros de ejemplo sin su pareja" do
         ["La aplicacion trae un `.example` y no el fichero de verdad, casi siempre",
-         "porque el de verdad esta en .gitignore: lleva claves. El ejemplo se copia",
-         "**tal cual** y no se renombra -- un fichero de claves con las de mentira",
-         "dentro arranca y luego hace lo que no es. Trae el bueno de donde corra la",
-         "aplicacion, o copialo y rellenalo:"] +
+         "porque el de verdad esta en .gitignore: lleva claves.",
+         "**Si actualizas tu aplicacion, lo normal es que ya lo tengas** y se lleva",
+         "solo: esto sale cuando se actualiza una copia recien clonada, donde no esta.",
+         "El ejemplo se copia tal cual y no se renombra -- un fichero de claves con",
+         "las de mentira dentro arranca y luego hace lo que no es. Trae el bueno de",
+         "donde corra la aplicacion, o copialo y rellenalo:"] +
           orphan_examples.map { |file| "  #{relative(file)} -> #{relative(file).sub(/\.(example|sample)\z/, "")}" }
       end
     end

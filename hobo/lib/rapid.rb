@@ -77,7 +77,7 @@ module Rapid
   # and those generated files are the ones an update throws away.
   @derivers = []
 
-  # Los params que alguien paso y nadie recogio, por tag. Ver
+  # Params somebody handed over that nobody claimed, by tag. See
   # `Rapid.unclaimed_params`.
   @unclaimed = {}
 
@@ -138,8 +138,8 @@ module Rapid
         @polymorphic[name].fetch(type).prepend(extension)
       else
         # `<extend tag="signup-page">` before anybody has rendered one: the
-        # deriver has to run here too, or the extension has nothing to attach to
-        # and one line takes the whole taglib down with it.
+        # derivers have to run here too, or the extension has nothing to attach
+        # to and one line takes the whole taglib down with it.
         @derivers.each { |deriver| deriver.call(name) } if @tags[name].nil? && @polymorphic[name].empty?
         @tags[name]&.prepend(extension)
         @polymorphic[name].each_value { |klass| klass.prepend(extension) }

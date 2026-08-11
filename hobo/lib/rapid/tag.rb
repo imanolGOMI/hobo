@@ -64,16 +64,16 @@ module Rapid
       html
     end
 
-    # Un param que nadie recoge.
+    # Params the caller handed over that nobody ever asked for.
     #
-    # `<page><footer:>…</footer:></page>`: en Hobo 2 ese param se llamaba
-    # `footer` y aqui se llamaba `page_footer`, asi que lo que traia el que
-    # llamaba **desaparecia**. Sin error, sin hueco, sin nada: la portada de
-    # amenti salia con el pie vacio y las cinco paginas devolvian 200.
+    # `<page><footer:>…</footer:></page>`: in Hobo 2 that param was called
+    # `footer` and here it was called `page_footer`, so what the caller brought
+    # **vanished**. No error, no gap, nothing: amenti's front page came out with
+    # an empty footer and all five pages answered 200.
     #
-    # Se avisa y no se levanta la mano: la aplicacion se pinta igual, y un
-    # template de 2013 puede traer varios. Una vez por tag y nombre, que si no
-    # es una linea por peticion.
+    # It is written down rather than raised: the page paints the same either
+    # way, and a template from 2013 can bring several. Once per tag and name,
+    # because otherwise it is a line on every request.
     def report_unclaimed
       unclaimed = @params.keys.reject { |name| @asked.key?(name) }
       return if unclaimed.empty?
@@ -91,21 +91,21 @@ module Rapid
 
       around(name) do
         parameter = parameter_for(name, :bare)
-        # `<x: replace/>` sin contenido quita lo que habia. Estaba en `tag` y en
-        # `call_tag` y faltaba aqui, asi que un param suelto se quedaba con su
-        # contenido por defecto: `<sign-up: replace/>` no quitaba el enlace de
-        # alta, y quien lo escribio no tenia forma de enterarse.
+        # `<x: replace/>` with no content takes away what was there. It was in
+        # `tag` and in `call_tag` and missing here, so a bare param kept its
+        # default content: `<sign-up: replace/>` did not take the sign-up link
+        # away, and whoever wrote it had no way of finding out.
         default = nil if parameter&.replace? && !parameter.content?
         render_content(name, parameter, &default)
       end
       nil
     end
 
-    # Params que una extension le anade a la definicion de debajo --
+    # Params an extension adds to the definition underneath it --
     # `<old-page merge><footer:>…</footer:></old-page>`.
     #
-    # Los del que llama mandan: la plantilla que pinta la pagina habla despues
-    # que el taglib que extendio el tag, y no al reves.
+    # The caller's win: the template painting the page speaks after the taglib
+    # that extended the tag, not the other way round.
     def with_params(extra)
       previous = @params
       @params = extra.merge(previous)
@@ -180,8 +180,8 @@ module Rapid
       params = params.merge(:default => block) if block
       if merge_params
         params = @params.merge(params)
-        # Lo que se pasa hacia abajo queda recogido: quien responda por ello es
-        # el tag de abajo, y avisar aqui seria contarlo dos veces.
+        # What is handed on downwards counts as claimed: the tag below is the
+        # one that answers for it, and reporting here would count it twice.
         @params.each_key { |key| @asked&.[]=(key, true) }
       end
 
@@ -367,6 +367,19 @@ module Rapid
       merged
     end
 
+    # Same, for what is about to be written into an element: there `data_turbo`
+    # and `data-turbo` are one attribute, and here they are not -- a tag's
+    # declared attribute is a Ruby name (`include_search`) and turning it into
+    # `include-search` on the way in means the tag never finds it.
+    def normalize_markup_attributes(attrs)
+      return attrs if attrs.nil? || attrs.empty?
+
+      attrs.each_with_object({}) do |(name, value), merged|
+        key = name.to_s.tr("_", "-").to_sym
+        merged[key] = key == :class && merged[key] ? "#{merged[key]} #{value}" : value
+      end
+    end
+
     # One entry per attribute name, whatever the hash was built out of.
     #
     # A tag writes `tag("ul", all_attributes.merge("class" => "nav"))`: the
@@ -375,13 +388,13 @@ module Rapid
     # class="nav">` -- **two class attributes**, of which a browser reads the
     # first and throws the second away. No error, and half the styling gone.
     #
-    # So the name is settled once, here: dashes not underscores, symbol keys, and
-    # `class` given twice means both classes rather than the last one.
+    # So the name is settled once, here: symbol keys, and `class` given twice
+    # means both classes rather than the last one.
     def normalize_attributes(attrs)
       return attrs if attrs.nil? || attrs.empty?
 
       attrs.each_with_object({}) do |(name, value), merged|
-        key = name.to_s.tr("_", "-").to_sym
+        key = name.to_sym
         merged[key] = key == :class && merged[key] ? "#{merged[key]} #{value}" : value
       end
     end
@@ -407,7 +420,7 @@ module Rapid
     # HTML boolean attributes mean "present or absent", and a browser reads
     # `checked="false"` as checked.
     def format_attrs(attrs)
-      normalize_attributes(attrs)
+      normalize_markup_attributes(attrs)
         .reject { |_, v| v.nil? || v == false }
            .map do |name, value|
              name = name.to_s.tr("_", "-")

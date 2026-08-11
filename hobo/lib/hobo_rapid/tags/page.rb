@@ -23,10 +23,10 @@ module HoboRapid
 
   module PageSupport
 
-    # El nombre de la aplicación, que es el de la aplicación y no el de la
-    # herramienta: la barra de `hobo3_mi_app` decía «Hobo». Lo sabe Rails, y el
-    # controlador de la portada ya lo pasaba a mano -- lo que faltaba era que
-    # las páginas derivadas, que no pasan nada, lo tuvieran también.
+    # The application's name, which is the application's and not the tool's:
+    # `hobo3_mi_app`'s bar said "Hobo". Rails knows it, and the front page's
+    # controller was already passing it by hand -- what was missing was for the
+    # derived pages, which pass nothing, to have it too.
     def app_name
       return "Hobo" unless defined?(Rails) && Rails.respond_to?(:application) && Rails.application
 
@@ -36,16 +36,16 @@ module HoboRapid
     end
     def subsite = nil
     def base_url = ""
-    # El token de Rails, en la cabecera de la pagina.
+    # Rails' token, in the page's head.
     #
-    # Estaba a `nil` -- un hueco que nunca se lleno -- y no se notaba porque los
-    # formularios llevan el suyo en un campo oculto. Lo que no funciona sin esto
-    # es **cualquier POST desde javascript**: no hay de donde sacar el token y
-    # Rails contesta 422. Lo encontro `sortable-collection` al guardar el orden
-    # nuevo, que es exactamente ese caso.
+    # It was `nil` -- a gap that was never filled -- and it went unnoticed
+    # because forms carry their own in a hidden field. What does not work
+    # without this is **any POST from javascript**: there is nowhere to take the
+    # token from and Rails answers 422. `sortable-collection` found it while
+    # saving a new order, which is exactly that case.
     #
-    # El token ya viaja: `rapid_tag` lo deja en HoboRapid para el resto del
-    # render, porque los formularios tambien lo necesitan.
+    # The token already travels: `rapid_tag` leaves it in HoboRapid for the rest
+    # of the render, because the forms need it too.
     def csrf_meta_tag
       token = HoboRapid.authenticity_token if defined?(HoboRapid)
       return nil if token.nil? || token.to_s.empty?
@@ -78,12 +78,13 @@ Rapid::Tag.include(HoboRapid::PageSupport)
 
 Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_location,
                                :content_size, :aside_size, :bottom_load_javascript]) do
-  # El nombre sale del **tag** `<app-name>` y no del helper del mismo nombre.
+  # The name comes from the **tag** `<app-name>` and not from the helper of the
+  # same name.
   #
-  # Redefinir ese tag es como una aplicacion dice como se llama -- amenti pone
-  # ahi «Aplicacion para Gestion de Funerarias y Tanatorios | Amenti Software»
-  # -- y el titulo seguia diciendo el nombre del directorio de Rails. Se le
-  # quita el marcado porque un `<title>` es texto y el tag puede traer un enlace.
+  # Redefining that tag is how an application says what it is called -- amenti
+  # puts "Aplicacion para Gestion de Funerarias y Tanatorios | Amenti Software"
+  # there -- and the title went on saying the name of the Rails directory. The
+  # markup is stripped because a `<title>` is text and the tag may bring a link.
   written_name = Rapid::Context.capture { call_tag(:app_name) }.to_s.gsub(/<[^>]*>/, "").strip
   written_name = app_name if written_name.empty?
   full_title = attributes[:full_title] || [attributes[:title], written_name].compact.join(" : ")
@@ -114,8 +115,8 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
         HoboRapid::Theme.stylesheets.each_with_index do |sheet, i|
           call_tag(:stylesheet, { :name => sheet }, :as => :"theme_stylesheet_#{i}")
         end
-        # Y las de los plugins, entre el tema y la aplicacion: un plugin puede
-        # pisar al tema y la aplicacion puede pisarlos a los dos.
+        # And the plugins', between the theme and the application: a plugin can
+        # override the theme and the application can override both.
         (defined?(Hobo) ? Hobo.brought[:stylesheets] : []).each do |sheet|
           call_tag(:stylesheet, { :name => sheet }, :as => :"plugin_stylesheet_#{sheet}")
         end
@@ -142,8 +143,12 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
           if nav_location.blank? || nav_location == "top"
             call_tag(:main_nav, { :class => "nav main-nav", :current => attributes[:title] }, :as => :main_nav)
           end
-          call_tag(:search_box, {}, :as => :search_box)
-          call_tag(:account_nav, {}, :as => :account_nav)
+          # The search box goes **inside** the account bar, not beside it: that
+          # is where Hobo 2 put it, and it is the place an application knows how
+          # to take it away from, with `<search: replace/>`. And only with the
+          # bar on top, which is what `include-search` decided.
+          call_tag(:account_nav, { :include_search => nav_location.blank? || nav_location == "top" },
+                   :as => :account_nav)
         end
       end
 
@@ -174,9 +179,9 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
         end
       end
 
-      # `footer`, que es como se llama en Hobo 2 y como lo escribe todo el mundo.
-      # Se llamaba `page_footer`, asi que un `<footer:>` de una plantilla vieja
-      # no llegaba a ningun sitio y el pie salia vacio.
+      # `footer`, which is what it is called in Hobo 2 and what everybody
+      # writes. It was called `page_footer`, so a `<footer:>` from an old
+      # template reached nowhere and the footer came out empty.
       tag("footer", { :class => "page-footer" }, :footer)
       param(:page_scripts)
       if attributes[:bottom_load_javascript]
@@ -214,8 +219,8 @@ Rapid.define(:import_map, :attrs => [:name]) do
   helpers = defined?(ActionController::Base) ? ActionController::Base.helpers : nil
 
   unless helpers.respond_to?(:javascript_importmap_tags)
-    # Sin importmap-rails no hay nada que resolver y el script de siempre es lo
-    # que toca.
+    # Without importmap-rails there is nothing to resolve and the plain script
+    # is the right answer.
     src = asset_path_for(attributes[:name], "js")
     next tag("script", { :src => src, :defer => true }) if src
     next
@@ -225,16 +230,16 @@ Rapid.define(:import_map, :attrs => [:name]) do
   entry = "application" unless HoboRapid.pinned?(entry)
   raw helpers.javascript_importmap_tags(entry)
 
-  # Y quien lleve el comportamiento, si no es Stimulus.
+  # And whatever carries the behaviour, when it is not Stimulus.
   #
-  # Con Stimulus no hace falta decir nada: la aplicacion hace
-  # `eagerLoadControllersFrom("controllers")` y sus controladores se cargan
-  # solos. Cualquier otro -- `hobo_jquery` -- es un modulo que nadie importa,
-  # asi que se importa aqui. Una linea, y solo cuando hay otro.
+  # With Stimulus there is nothing to say: the application does
+  # `eagerLoadControllersFrom("controllers")` and its controllers load
+  # themselves. Anything else -- `hobo_jquery` -- is a module nobody imports, so
+  # it is imported here. One line, and only when there is another.
   modules = []
   if defined?(Hobo)
     modules << Hobo.behaviours[Hobo.behaviour_in_use]&.dig(:javascript)
-    # Y el de cualquier otro plugin que traiga javascript propio.
+    # And any other plugin that brings javascript of its own.
     modules.concat(Hobo.brought[:javascript])
   end
   modules.compact.uniq.each do |mod|
@@ -286,18 +291,29 @@ end
 # The right-hand side of the bar. What goes in it is RAPID's (piece 13a): that
 # an application says who you are and lets you stop being them is not a matter
 # of taste. This decides where it sits and what it looks like.
-Rapid.define(:account_nav) do
+Rapid.define(:account_nav, :attrs => [:include_search]) do
   tag("ul", { :class => "nav account-nav" }, :items) do
+    # The search box, with a param of its own and in its own `<li>`: `<search:
+    # replace/>` is how it is taken away, and it is what applications that do
+    # not want it write. It used to sit outside the bar, and that `<search:>`
+    # found nothing there to take away.
+    if attributes[:include_search]
+      tag("li", { :class => "nav-item site-search-item" }, :search) do
+        call_tag(:search_box, {}, :as => :search_box)
+      end
+    end
+
     param(:session_links) do
       tag("li", { :class => "nav-item" }, :dev_user_changer) do
         call_tag(:dev_user_changer, {}, :as => :changer)
       end
-      # `merge_params`: lo que le den a `<account-nav>` y no sea suyo baja aqui.
+      # `merge_params`: whatever `<account-nav>` is given that is not its own
+      # goes down here.
       #
-      # Los nombres que trae una plantilla vieja -- `sign-up:`, `log-in:`,
-      # `logged-in-as:` -- son los de estos enlaces, y en Hobo 2 se escribian
-      # sobre `<account-nav>` porque no habia nada en medio. Sin bajarlos,
-      # `<sign-up: replace/>` no quitaba nada y el enlace seguia donde estaba.
+      # The names an old template brings -- `sign-up:`, `log-in:`,
+      # `logged-in-as:` -- belong to these links, and in Hobo 2 they were
+      # written on `<account-nav>` because there was nothing in between. Without
+      # handing them down, `<sign-up: replace/>` took nothing away.
       call_tag(:session_links, {}, :as => :links, :merge_params => true)
     end
   end

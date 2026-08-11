@@ -29,14 +29,14 @@ module HoboRapid
 
     def authenticity_token = Thread.current[:hobo_rapid_token]
 
-    # La peticion entera. **El catalogo no la usa y no debe usarla**: un tag es
-    # un objeto que devuelve una cadena, y lo que necesita de la peticion son las
-    # cuatro cosas de arriba.
+    # The whole request. **The catalogue does not use this and must not**: a tag
+    # is an object that returns a string, and what it needs of the request is
+    # the four things above.
     #
-    # Esta aqui por `hobo_dryml`: una plantilla de 2013 escribe `request.format`
-    # dentro de un param -- amenti decide asi si sirve un pdf -- y la unica
-    # alternativa era que la pagina reventara. `HoboDryml::Vocabulary` es quien
-    # la ofrece como palabra, asi que quien escribe hoy sigue sin tenerla.
+    # It is here for `hobo_dryml`: a template from 2013 writes `request.format`
+    # inside a param -- amenti decides that way whether it is serving a pdf --
+    # and the only alternative was the page blowing up. `HoboDryml::Vocabulary`
+    # is what offers it as a word, so anybody writing today still cannot say it.
     def request = Thread.current[:hobo_rapid_request]
 
     # Which part of the application is painting. `nil` is the site itself;

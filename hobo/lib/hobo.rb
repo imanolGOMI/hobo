@@ -46,12 +46,12 @@ module Hobo
 
     attr_accessor :engines, :stable_cache
 
-    # Los temas que hay puestos.
+    # The themes that are installed.
     #
-    # Un tema es **una gema**: al cargarse se apunta aqui, y `config.hobo.theme`
-    # solo dice cual de los apuntados se usa. Hobo no conoce ninguno por su
-    # nombre -- salvo `clean`, que es el suyo y viene dentro, para que una
-    # aplicacion recien hecha pinte algo sin instalar nada.
+    # A theme is **a gem**: loading it registers it here, and `config.hobo.theme`
+    # only says which of the registered ones is in use. Hobo knows none of them
+    # by name -- except `clean`, which is its own and comes inside, so that a
+    # freshly made application paints something without installing anything.
     #
     #   Hobo.theme(:bootstrap) { |subsite| HoboBootstrap.dress(subsite) }
     def themes
@@ -62,16 +62,15 @@ module Hobo
       themes[name.to_sym] = block
     end
 
-    # Y quien ejecuta el comportamiento que el catalogo describe.
+    # And whoever runs the behaviour the catalogue describes.
     #
-    # Hobo trae el suyo con Stimulus, porque es lo que trae Rails. Si hay otro
-    # -- `hobo_jquery` -- se apunta aqui al cargarse, y **Hobo deja de pinchar
-    # el suyo**: con los dos escuchando, el `+` de un input-many añadiria dos
-    # filas.
+    # Hobo brings its own with Stimulus, because that is what Rails brings. If
+    # there is another -- `hobo_jquery` -- it registers here on load and **Hobo
+    # stops plugging its own in**: with both listening, an input-many's `+`
+    # would add two rows.
     #
-    # No hay opcion de "ninguno", igual que en Hobo 2: un formulario sin
-    # comportamiento es un formulario donde faltan la mitad de las cosas, y eso
-    # no es una eleccion, es un fallo.
+    # There is no "none" option, the same as in Hobo 2: a form with no behaviour
+    # is a form with half of it missing, and that is not a choice, it is a bug.
     def behaviours
       @behaviours ||= {}
     end
@@ -80,22 +79,21 @@ module Hobo
       behaviours[name.to_sym] = { :describe => describe, :javascript => javascript }
     end
 
-    # Cual manda. El de Stimulus solo si no se ha apuntado ningun otro.
+    # Which one wins. Stimulus' only if no other has registered.
     def behaviour_in_use
       behaviours.keys.first || :stimulus
     end
 
-    # Y lo que un plugin necesita **en todas las paginas**: su hoja de estilos y
-    # su modulo de javascript.
+    # And what a plugin needs **on every page**: its stylesheet and its
+    # javascript module.
     #
     #   Hobo.brings(:stylesheet => "hobo_jquery_ui", :javascript => "hobo_jquery_ui")
     #
-    # `<page>` los enlaza detras de los del tema. Faltaba: un plugin podia poner
-    # sus ficheros donde el pipeline los viera -- eso ya lo hacia su engine --
-    # pero nadie los enlazaba, asi que la hoja de estilos de un plugin no se
-    # cargaba en ninguna pagina y su javascript no lo importaba nadie. Se veia
-    # como "el plugin no hace nada", que es el peor de los sintomas porque no
-    # senala a ningun sitio.
+    # `<page>` links them after the theme's. It was missing: a plugin could put
+    # its files where the pipeline would see them -- its engine already did that
+    # -- but nobody linked them, so a plugin's stylesheet loaded on no page at
+    # all and nobody imported its javascript. It looked like "the plugin does
+    # nothing", which is the worst of symptoms because it points nowhere.
     def brought
       @brought ||= { :stylesheets => [], :javascript => [] }
     end
@@ -106,16 +104,16 @@ module Hobo
       self
     end
 
-    # Si las paginas de Hobo son el documento entero o solo el cuerpo.
+    # Whether Hobo's pages are the whole document or only the body.
     #
-    # Con un tema, `<page>` pinta desde el `<!DOCTYPE>`: la barra, el menu y el
-    # pie son suyos. Sin tema (`config.hobo.theme = false`) lo que sale es el
-    # cuerpo, y entonces el layout de la aplicacion es exactamente lo que hace
-    # falta.
+    # With a theme, `<page>` paints from the `<!DOCTYPE>` down: the bar, the
+    # menu and the footer are its own. With no theme (`config.hobo.theme =
+    # false`) what comes out is the body, and then the application's layout is
+    # exactly what is needed.
     #
-    # Lo pregunta el controlador para decidir si envolver o no, y tiene que
-    # poder responderse **antes** de pintar, porque Rails elige el layout antes
-    # de renderizar la plantilla.
+    # The controller asks this to decide whether to wrap, and it has to be
+    # answerable **before** painting, because Rails picks the layout before it
+    # renders the template.
     def pages_are_whole_documents?
       return false unless defined?(Rails) && Rails.respond_to?(:application) && Rails.application
       !!Rails.application.config.hobo.theme
@@ -123,12 +121,12 @@ module Hobo
       false
     end
 
-    # Lo que se le dice a quien trae un modelo de Hobo 2 con `attr_accessible`.
+    # What is said to somebody bringing a Hobo 2 model with `attr_accessible`.
     #
-    # Una vez por modelo, con el fichero delante, y diciendo **qué cambia**: no
-    # que la línea sobra, sino que la superficie de lo asignable ya no es esa.
-    # Un aviso que solo dijera «esto está obsoleto» se ignora; uno que dice
-    # dónde mirar, no.
+    # Once per model, with the file in front of them, and saying **what
+    # changes**: not that the line is redundant, but that the assignable surface
+    # is no longer that one. A warning that only said "this is deprecated" gets
+    # ignored; one that says where to look does not.
     def warn_about_mass_assignment(model, method, names)
       @mass_assignment_warned ||= {}
       key = "#{model.name}##{method}"
@@ -136,12 +134,12 @@ module Hobo
 
       @mass_assignment_warned[key] = true
       file = "app/models/#{model.name.underscore}.rb"
-      campos = names.reject { |n| n.is_a?(Hash) }.map(&:to_s).join(", ")
+      columns = names.reject { |n| n.is_a?(Hash) }.map(&:to_s).join(", ")
 
       message = [
         "",
         "AVISO  #{model.name}: `#{method}` ya no hace nada.",
-        "       Decia que columnas se podian asignar en masa (#{campos}).",
+        "       Decia que columnas se podian asignar en masa (#{columns}).",
         "       En Hobo eso lo dicen los permisos del modelo:",
         "       create_permitted? y update_permitted?.",
         "       Revisa #{file} -- ahora se puede asignar todo lo que el permiso deje.",
@@ -152,11 +150,11 @@ module Hobo
       warn(message)
     end
 
-    # Y lo que se le dice a quien trae un modelo con Paperclip.
+    # And what is said to somebody bringing a model with Paperclip.
     #
-    # Distinto del de `attr_accessible`: aquello no hacía nada desde hace doce
-    # años y esto **sí funcionaba ayer**. El aviso tiene que decir que los
-    # adjuntos están parados, no que hay una línea obsoleta.
+    # Different from the `attr_accessible` one: that had done nothing for twelve
+    # years and this **was working yesterday**. The warning has to say that the
+    # attachments are stopped, not that there is a deprecated line.
     def warn_about_paperclip(model, attachment)
       @paperclip_warned ||= {}
       key = "#{model.name}##{attachment}"
@@ -177,15 +175,15 @@ module Hobo
       warn(message)
     end
 
-    # Y lo que se le dice a quien pasa un param que el tag no tiene.
+    # And what is said to somebody who hands a tag a param it does not have.
     #
-    # `<page><footer:>…</footer:></page>` cuando el param se llama otra cosa: la
-    # pagina sale entera, con **ese trozo de menos** y sin un error en ningun
-    # sitio. Es como se perdio el pie de amenti, y como se pierde cualquier
-    # nombre que Hobo 2 llamaba de otra manera.
+    # `<page><footer:>…</footer:></page>` when the param is called something
+    # else: the page comes out whole, with **that piece missing** and no error
+    # anywhere. It is how amenti's footer was lost, and how any name that Hobo 2
+    # called something else gets lost.
     #
-    # Solo en desarrollo, y una vez por tag y nombre: en produccion no hay nadie
-    # leyendo y la pagina se pinta igual.
+    # Development only, and once per tag and name: in production nobody is
+    # reading and the page paints the same either way.
     def warn_about_unclaimed_params
       return unless defined?(Rails) && Rails.env.development?
 
