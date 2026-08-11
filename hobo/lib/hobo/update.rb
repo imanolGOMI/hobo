@@ -43,6 +43,9 @@ module Hobo
       doc script/import spec test
     ].freeze
 
+    # What comes across whole rather than merged: see `carry`.
+    REPLACED = %w[db].freeze
+
     # Initializers that were Rails 3's own plumbing and whose file is gone.
     # Everything else in `config/initializers/` is the application's -- its
     # constants, its api keys, the setup of a gem it uses -- and comes across.
@@ -153,10 +156,12 @@ module Hobo
       write_routes
       write_model_fixes
       write_controller_fixes
+      write_authentication
       write_autoload_ignores
       write_callback_switch
       write_settings
       write_theme_classes
+      write_stylesheets
       write_attachments
       write_gemfile
       say ""
@@ -211,6 +216,22 @@ module Hobo
 
       note :gems, retired_gems.length, "gemas que ya no existen" do
         retired_gems.map { |gem| "#{gem}: #{why_retired(gem)}" }
+      end
+
+      note :passwords, (old_password_columns.empty? ? 0 : 1), "tabla de usuarios con las claves de Hobo 2" do
+        ["Hobo 2 guardaba `#{old_password_columns.join(", ")}`. La autenticacion de Rails 8",
+         "guarda `password_digest`, que es bcrypt: **son algoritmos distintos y no se",
+         "convierten** -- un hash no se puede volver a la clave que lo genero.",
+         "",
+         "La aplicacion arranca y las paginas se ven, pero **nadie puede entrar**.",
+         "Lo que hay que hacer, y solo lo puedes decidir tu:",
+         "  1. una migracion que anada `password_digest` a users y cree la tabla",
+         "     `sessions` (id, user_id, ip_address, user_agent), que es donde Rails 8",
+         "     guarda la sesion. Las migraciones del esqueleto no se traen: son para",
+         "     una base vacia y la tuya ya existe.",
+         "  2. `has_secure_password` en el modelo, y",
+         "  3. que cada usuario pase una vez por «he olvidado mi clave».",
+         "O quedarte con el comprobador viejo si prefieres no tocar las claves."]
       end
 
       note :moved, moved_constants.length, "constantes que se mudaron de gema" do
@@ -283,6 +304,19 @@ module Hobo
           %w[file_name content_type file_size updated_at].map { |suffix| "#{name}_#{suffix}" }
         end
       end.uniq
+    end
+
+    # The password columns Hobo 2 wrote, read from the schema. `password_digest`
+    # beside them means somebody has already done the move, so there is nothing
+    # to say.
+    OLD_PASSWORD_COLUMNS = %w[crypted_password salt password_salt].freeze
+
+    def old_password_columns
+      @old_password_columns ||= begin
+        schema = File.join(@source, "db", "schema.rb")
+        text = File.exist?(schema) ? File.read(schema) : ""
+        text.include?("password_digest") ? [] : OLD_PASSWORD_COLUMNS.select { |name| text.include?(%("#{name}")) }
+      end
     end
 
     def vendor_plugins
@@ -428,13 +462,148 @@ module Hobo
 
         to = File.join(target, path)
         FileUtils.mkdir_p(File.dirname(to))
-        FileUtils.rm_rf(to)
-        FileUtils.cp_r(from, to)
+        # `db/` es de la aplicacion **entero**: su esquema y sus migraciones son
+        # la historia de su base de datos, y las que trae el esqueleto estan
+        # escritas para una aplicacion nueva. Dejarlas al lado no anade nada:
+        # quedan pendientes contra una base que ya existe y Rails contesta
+        # `ActiveRecord::PendingMigrationError` en todas las paginas.
+        FileUtils.rm_rf(to) if REPLACED.include?(path)
+        merge_over(from, to)
         say "  #{path}"
       end
 
       carry_initializers
       carry_database
+    end
+
+    # The old application's files **on top of** the skeleton's, without taking
+    # away what the skeleton put there.
+    #
+    # It used to be `rm_rf` and then copy, and `app` is on the list -- so the
+    # whole generated `app/` went in the bin, and with it Rails' own
+    # authentication: `SessionsController`, `PasswordsController`, `Session`,
+    # `Current`. `hobo new` had written them two steps earlier.
+    #
+    # What that looked like: every page painted, and `/session/new` answered 500
+    # with `uninitialized constant SessionsController`. **You could not log in to
+    # the application you had just brought across**, and nothing in the update
+    # said a word about it.
+    #
+    # A file the old application has still wins -- it is its application -- and
+    # one it does not have simply stays.
+    def merge_over(from, to)
+      unless File.directory?(from)
+        FileUtils.cp(from, to)
+        return
+      end
+
+      FileUtils.mkdir_p(to)
+      Dir.children(from).each { |child| merge_over(File.join(from, child), File.join(to, child)) }
+    end
+
+    # The application's own stylesheets, **flattened**.
+    #
+    # In Rails 3 a stylesheet was a Sprockets manifest: a comment block full of
+    # `*= require` that pulled other files in and concatenated them. Rails 8 uses
+    # Propshaft, which **serves files and does not process them**, so every one
+    # of those directives is a dead comment.
+    #
+    # What that costs: amenti's `front.css` requires `application` and then
+    # `require_tree ./front`, and inside `front/` is `saturno.css` -- 6 KB, the
+    # whole design of the site. Nothing linked it, Propshaft would not even serve
+    # it by that name, and the page came out with Hobo's own styling and none of
+    # the application's. It looked like "the theme is wrong" rather than "your
+    # stylesheet is not there", which is why it took a screenshot to see.
+    #
+    # So the directives are resolved here, once, and what is written is a real
+    # css file with the content in it -- exactly what Sprockets used to hand the
+    # browser. What is **not** resolved is a `require` naming a gem: Hobo 3
+    # brings its own theme, and a stylesheet from a gem that no longer exists is
+    # not ours to invent.
+    def write_stylesheets
+      return if stylesheet_manifests.empty?
+
+      # `front` el ultimo: acaba en el mismo `application.css` que el manifiesto
+      # de ese nombre, y es el que lo incluye -- al reves se perderia la mitad.
+      ordered = stylesheet_manifests.sort_by { |file| File.basename(file).start_with?("front") ? 1 : 0 }
+
+      written = ordered.filter_map do |file|
+        name = File.basename(file).sub(/\.(css|scss|sass)\z/, "")
+        body = resolve_manifest(file)
+        next if body.strip.empty?
+
+        # `front` is the name Hobo 2 gave the main subsite, and in Hobo 3 the
+        # main site has **no** subsite -- so the page asks for `application`.
+        # Writing it under the old name would leave it linked by nobody.
+        target_name = name == "front" ? "application" : name
+        File.write(File.join(target, "app", "assets", "stylesheets", "#{target_name}.css"), body)
+        "#{target_name}.css"
+      end
+
+      # The manifests that are now dead weight: their content is in the flat
+      # file, and leaving the `.scss` beside it means two stylesheets with the
+      # same name and Propshaft picking one.
+      stylesheet_manifests.each do |file|
+        twin = File.join(target, "app", "assets", "stylesheets", File.basename(file))
+        FileUtils.rm_f(twin) if File.extname(twin) != ".css"
+      end
+
+      return if written.empty?
+      say "  app/assets/stylesheets (#{written.uniq.join(", ")}: directivas de Sprockets resueltas)"
+    end
+
+    def stylesheet_manifests
+      @stylesheet_manifests ||= Dir[File.join(@source, "app", "assets", "stylesheets", "*.{css,scss,sass}")]
+                                .select { |file| File.read(file).match?(SPROCKETS_DIRECTIVE) }
+    end
+
+    SPROCKETS_DIRECTIVE = /^\s*[*#\/]*=\s*(require_self|require_tree|require_directory|require)\s*(\S*)/
+
+    # A manifest, turned into the css it stood for. In order, because in css the
+    # last rule wins and Sprockets kept the order of the directives.
+    def resolve_manifest(file, seen = [])
+      return "" if seen.include?(file)
+      seen << file
+
+      text = File.read(file)
+      pieces = text.scan(SPROCKETS_DIRECTIVE).map do |directive, argument|
+        case directive
+        when "require_self" then body_of(text)
+        when "require_tree" then tree_of(file, argument, "**/*")
+        when "require_directory" then tree_of(file, argument, "*")
+        when "require" then resolve_required(file, argument, seen)
+        end
+      end
+
+      # A manifest with no `require_self` still has its own rules -- Sprockets
+      # put them at the end when nobody said where.
+      pieces << body_of(text) unless text.match?(/=\s*require_self/)
+      pieces.compact.reject(&:empty?).join("\n\n")
+    end
+
+    def tree_of(manifest, argument, glob)
+      directory = File.expand_path(argument.to_s.sub(/\A\.\//, ""), File.dirname(manifest))
+      Dir[File.join(directory, glob)].select { |f| f.match?(/\.(css|scss|sass)\z/) }.sort
+          .map { |f| "/* #{File.basename(f)} */\n#{File.read(f)}" }.join("\n\n")
+    end
+
+    def resolve_required(manifest, name, seen)
+      candidates = %w[css scss sass].map { |extension| File.expand_path("#{name}.#{extension}", File.dirname(manifest)) }
+      found = candidates.find { |candidate| File.exist?(candidate) }
+      # No file by that name in the application: it is a gem's, and Hobo 3 either
+      # brings its own or the application has to. Named in the report, not
+      # guessed at here.
+      return "" unless found
+
+      resolve_manifest(found, seen)
+    end
+
+    # A manifest file minus its directive block, which is a comment and would go
+    # into the flat file as noise.
+    def body_of(text)
+      text.sub(%r{\A\s*/\*.*?\*/}m) { |block| block.match?(SPROCKETS_DIRECTIVE) ? "" : block }
+          .gsub(SPROCKETS_DIRECTIVE, "")
+          .strip
     end
 
     # Rails 8 keeps sqlite in `storage/`, Rails 3 kept it in `db/`. The file
@@ -524,6 +693,68 @@ module Hobo
 
       return if changed.empty?
       say "  #{changed.length} controladores (before_filter -> before_action)"
+    end
+
+    # Rails' authentication, wired into the `ApplicationController` that came
+    # across.
+    #
+    # `hobo new` writes `include Authentication` into the one it generates, and
+    # every controller of Rails' own -- `SessionsController`,
+    # `PasswordsController` -- is written against it: they open with
+    # `allow_unauthenticated_access`, which is a class method that concern
+    # brings. The old application has an `ApplicationController` of its own and
+    # it wins, so those two lost the method and **the application would not
+    # boot**: `undefined local variable or method
+    # 'allow_unauthenticated_access'`.
+    #
+    # And `allow_unauthenticated_access` right behind it, at the top of the
+    # tree. The concern hangs a `require_authentication` on **every** controller,
+    # and an application coming from Hobo 2 already decides who has to log in --
+    # amenti has a `before_action` naming its fifteen public actions. Adding a
+    # second gate on top would put the whole public site behind a login nobody
+    # asked for. So the mechanism is here and available, and who is required to
+    # log in stays exactly where the application had it.
+    def write_authentication
+      concern = File.join(target, "app", "controllers", "concerns", "authentication.rb")
+      file = File.join(target, "app", "controllers", "application_controller.rb")
+      return unless File.exist?(concern) && File.exist?(file)
+
+      write_repeatable_opt_out(concern)
+
+      text = File.read(file)
+      return if text.match?(/^\s*include Authentication\b/)
+
+      opened = text.sub!(/^(class ApplicationController[^\n]*\n)/) do
+        "#{$1}" \
+          "  # La autenticacion de Rails 8, que es de la que dependen sus propios\n" \
+          "  # controladores de sesion y de claves. Quien tiene que identificarse lo\n" \
+          "  # sigue decidiendo esta aplicacion, como ya lo hacia.\n" \
+          "  include Authentication\n" \
+          "  allow_unauthenticated_access\n\n"
+      end
+      return unless opened
+
+      File.write(file, text)
+      say "  app/controllers/application_controller.rb (include Authentication)"
+    end
+
+    # `allow_unauthenticated_access`, dos veces, sin reventar.
+    #
+    # Rails lo escribe como un `skip_before_action` a secas, y eso es un error si
+    # el filtro ya no esta -- que es justo lo que pasa en cuanto alguien se libra
+    # en dos niveles: `ApplicationController` y despues cada controlador de
+    # modelo, que se libra solo porque Hobo lo hace por ti. La aplicacion no
+    # arrancaba: "Before process_action callback :require_authentication has not
+    # been defined", en el primer controlador que cargaba Zeitwerk.
+    #
+    # `raise: false` es lo que esa linea queria decir: quitalo si esta.
+    def write_repeatable_opt_out(concern)
+      text = File.read(concern)
+      return unless text.sub!(/skip_before_action :require_authentication, \*\*options/,
+                              "skip_before_action :require_authentication, **{ :raise => false }.merge(options)")
+
+      File.write(concern, text)
+      say "  app/controllers/concerns/authentication.rb (librarse dos veces no revienta)"
     end
 
     # The routes, which are the application's and have to come across, written
@@ -688,8 +919,9 @@ module Hobo
     # done: they are the application's markup and its call.
     RENAMED_IN_BOOTSTRAP = {
       "span1" => "col-md-1", "span2" => "col-md-2", "span3" => "col-md-3",
-      "span4" => "col-md-4", "span6" => "col-md-6", "span8" => "col-md-8",
-      "span12" => "col-md-12",
+      "span4" => "col-md-4", "span5" => "col-md-5", "span6" => "col-md-6",
+      "span7" => "col-md-7", "span8" => "col-md-8", "span9" => "col-md-9",
+      "span10" => "col-md-10", "span11" => "col-md-11", "span12" => "col-md-12",
       "pull-right" => "float-end", "pull-left" => "float-start",
       "control-group" => "mb-3", "controls" => "(ya no hace falta)",
       "form-horizontal" => "row (en cada campo)",
@@ -697,6 +929,15 @@ module Hobo
       "hero-unit" => "p-5 bg-body-tertiary rounded",
       "thumbnail" => "card",
       "icon-trash" => "un svg o bootstrap-icons",
+      # `hidden` es el caso que mas engana: en Bootstrap 2 esconde y en el 5 no
+      # existe, asi que lo que estaba escondido **aparece**. La portada de amenti
+      # tiene un `<h1 class="hidden">Amenti</h1>` que salio a la vista.
+      "hidden" => "d-none", "visible-phone" => "d-md-none", "hidden-phone" => "d-none d-md-block",
+      "nav-collapse" => "collapse navbar-collapse", "btn-navbar" => "navbar-toggler",
+      # El carrusel cambio de nombres y de atributos: `data-slide` es
+      # `data-bs-slide`, y sin eso las flechas no hacen nada.
+      "carousel-control" => "carousel-control-prev / carousel-control-next (y data-slide -> data-bs-slide)",
+      "item" => "carousel-item (dentro de un carrusel)",
     }.freeze
 
     def write_theme_classes

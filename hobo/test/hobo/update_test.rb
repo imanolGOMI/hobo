@@ -223,6 +223,73 @@ class UpdateTest < Minitest::Test
     refute_includes updater.kept_gems, "bootstrap-sass"
   end
 
+  # --- lo que se llevaba por delante --------------------------------------------
+
+  # `app` esta en la lista de lo que se copia, y se copiaba con un `rm_rf`
+  # delante: el `app/` generado se iba entero, y con el la autenticacion de
+  # Rails que `hobo new` acababa de escribir. `/session/new` contestaba 500 con
+  # `uninitialized constant SessionsController` en una aplicacion que pintaba
+  # todas las demas paginas.
+  def test_the_skeleton_keeps_what_the_old_application_does_not_have
+    write("app/models/user.rb", "class User; end")
+
+    skeleton = File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3")
+    FileUtils.mkdir_p(File.join(skeleton, "app", "controllers"))
+    File.write(File.join(skeleton, "app", "controllers", "sessions_controller.rb"), "generado")
+    FileUtils.mkdir_p(File.join(skeleton, "app", "models"))
+    File.write(File.join(skeleton, "app", "models", "user.rb"), "generado")
+
+    updater.send(:carry)
+
+    assert_equal "generado", File.read(File.join(skeleton, "app", "controllers", "sessions_controller.rb"))
+    assert_equal "class User; end", File.read(File.join(skeleton, "app", "models", "user.rb")),
+                 "lo que la aplicacion vieja si trae, manda"
+  ensure
+    FileUtils.rm_rf(File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3"))
+  end
+
+  # --- las hojas de estilo ------------------------------------------------------
+  #
+  # En Rails 3 una hoja era un manifiesto de Sprockets. Propshaft sirve ficheros
+  # y no los procesa, asi que cada `*= require` es un comentario muerto y lo que
+  # traia no lo enlaza nadie: el diseno entero de la aplicacion desaparecia.
+
+  def test_a_sprockets_manifest_becomes_the_css_it_stood_for
+    write("app/assets/stylesheets/application.css", "/*\n *= require_self\n */\nbody { color: red }")
+    write("app/assets/stylesheets/front.scss", "/*\n *= require application\n *= require_tree ./front\n *= require hobo_rapid\n */")
+    write("app/assets/stylesheets/front/saturno.css", ".saturno { color: blue }")
+
+    written = resolve_stylesheets
+
+    assert_includes written["application.css"], "body { color: red }", "lo que traia `require application`"
+    assert_includes written["application.css"], ".saturno { color: blue }", "lo que traia `require_tree`"
+    refute_includes written["application.css"], "require_tree", "las directivas son comentarios muertos"
+  end
+
+  # Un `require` que nombra una gema no se inventa: Hobo 3 trae su propio tema.
+  def test_a_require_naming_a_gem_is_left_alone
+    write("app/assets/stylesheets/front.css", "/*\n *= require hobo_rapid\n */\n.mia { color: red }")
+
+    assert_includes resolve_stylesheets["application.css"], ".mia { color: red }"
+  end
+
+  # --- lo que no se puede convertir ---------------------------------------------
+
+  # Hobo 2 guardaba `crypted_password` y `salt`; Rails 8 guarda `password_digest`,
+  # que es bcrypt. Son algoritmos distintos: la aplicacion arranca, las paginas
+  # se ven y **nadie puede entrar**.
+  def test_the_old_password_columns_are_named
+    write("db/schema.rb", %(create_table "users" do |t|\n  t.string "crypted_password"\n  t.string "salt"\nend))
+
+    assert_equal %w[crypted_password salt], updater.old_password_columns
+  end
+
+  def test_an_application_that_already_moved_is_left_in_peace
+    write("db/schema.rb", %(t.string "password_digest"\nt.string "salt"))
+
+    assert_empty updater.old_password_columns
+  end
+
   # --- what fails without a word ------------------------------------------------
 
   # A gem that is alive but that moved a piece out of itself. `bundle install`
@@ -298,6 +365,17 @@ class UpdateTest < Minitest::Test
     full = File.join(@directory, path)
     FileUtils.mkdir_p(File.dirname(full))
     File.write(full, content)
+  end
+
+  # Corre el paso de las hojas y devuelve lo que ha quedado escrito, por nombre.
+  def resolve_stylesheets
+    target = File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3")
+    FileUtils.mkdir_p(File.join(target, "app", "assets", "stylesheets"))
+    updater.send(:write_stylesheets)
+
+    Dir[File.join(target, "app", "assets", "stylesheets", "*")].to_h { |file| [File.basename(file), File.read(file)] }
+  ensure
+    FileUtils.rm_rf(File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3"))
   end
 
   # Stands in for what `hobo new` leaves behind, so that `write_gemfile` has a
