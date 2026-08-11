@@ -124,6 +124,37 @@ module Hobo
       Hobo::Extensions::WillPaginate.apply!
     end
 
+    # `<append-heading:>` in a `.html.erb`, a `.slim` or whatever the
+    # application writes: the params of DRYML as markup, in any template
+    # language (hobo_rapid/param_markup.rb).
+    #
+    # It wraps the handler that was already registered instead of replacing it,
+    # so what compiles the template is still ERB, or Slim, or the one that gem
+    # brought. What this changes is the source it is handed, and only the
+    # `<name:>` tags in it -- which cannot appear in a template that was not
+    # written for Hobo.
+    initializer "hobo.param_markup" do
+      ActiveSupport.on_load(:action_view) do
+        require "hobo_rapid/param_markup"
+
+        ActionView::Template::Handlers.extensions.each do |extension|
+          handler = ActionView::Template.registered_template_handler(extension)
+          next if handler.nil? || extension == :raw
+
+          # A handler is anything that answers `call`, and how many arguments
+          # it takes is up to it -- ERB's is an object, not a lambda, so asking
+          # it for its arity is asking the wrong thing. `method(:call).arity`
+          # is the question that works for both.
+          takes = handler.method(:call).arity
+
+          ActionView::Template.register_template_handler(extension, lambda { |template, source = nil|
+            transformed = HoboRapid::ParamMarkup.transform(source || template.source)
+            takes == 1 ? handler.call(template) : handler.call(template, transformed)
+          })
+        end
+      end
+    end
+
     initializer "hobo.derive" do |app|
       app.config.to_prepare do
         next unless defined?(Hobo::Model)
