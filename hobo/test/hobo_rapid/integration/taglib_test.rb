@@ -127,6 +127,19 @@ class TaglibTest < Minitest::Test
     assert_includes output, %(<a href="?sort=rank" class="sort-link">Rank</a>)
   end
 
+  # An application coming from Hobo 2 has its old `application.dryml` sitting in
+  # this very directory. Rails has no handler for `.dryml`, and asking for a
+  # template it cannot render does not answer "no such taglib" -- it raises
+  # `MissingTemplate`, and the application does not boot. Which is how upgrading
+  # amenti stopped at the first step.
+  def test_an_old_dryml_taglib_is_ignored_rather_than_fatal
+    output = run_in_app("puts \"BOOT OK\"",
+                        "app/views/taglibs/application.dryml" => "<def tag='card'><div/></def>")
+
+    assert_includes output, "BOOT OK", output
+    refute_includes output, "MissingTemplate"
+  end
+
   # --- the tag helpers --------------------------------------------------------
 
   def test_every_tag_has_a_helper_named_after_it

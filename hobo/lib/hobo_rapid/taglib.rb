@@ -161,12 +161,24 @@ module HoboRapid
 
       # Which taglibs there are. `application` first by convention, and the rest
       # alphabetically so that two which overlap always overlap the same way.
+      #
+      # Only what ActionView can render. An application coming from Hobo 2 has
+      # its old `application.dryml` sitting in this very directory, and asking
+      # Rails for a template it has no handler for does not answer "no such
+      # taglib" -- it raises `MissingTemplate` and the application does not
+      # boot. The old files are left alone: converting them is the updater's
+      # job, and until then they are only files.
       def names(root = nil)
         directory = Pathname.new(root || Rails.root).join("app", "views", "taglibs")
         return [] unless directory.directory?
 
-        found = Dir[directory.join("*.*")].map { |file| File.basename(file).split(".").first }.uniq.sort
-        found.partition { |name| name == "application" }.flatten
+        handlers = ActionView::Template::Handlers.extensions.map(&:to_s)
+        found = Dir[directory.join("*.*")].filter_map do |file|
+          name, *rest = File.basename(file).split(".")
+          name if rest.any? { |extension| handlers.include?(extension) }
+        end
+
+        found.uniq.sort.partition { |name| name == "application" }.flatten
       end
 
     end
