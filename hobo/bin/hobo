@@ -35,6 +35,19 @@ when "new"
   ENV["HOBO_NEW_ANSWERS"] = answers.join(" ")
 
   exec("rails", "new", app, "-m", TEMPLATE, *rails_args)
+when "update"
+  # `hobo update` -- traer una aplicacion de Hobo 2 a esta. Sin `--write` mira y
+  # cuenta, que es lo primero que hace falta saber.
+  require_relative "../lib/hobo/update"
+
+  source = ARGV.find { |argument| !argument.start_with?("-") } || Dir.pwd
+  write = ARGV.include?("--write")
+  name = ARGV.grep(/\A--as=/).first&.split("=", 2)&.last
+  begin
+    Hobo::Update.new(source, :write => write, :name => name).run
+  rescue Hobo::Update::Error
+    exit 1
+  end
 when "version", "--version", "-v"
   puts File.read(File.expand_path("../VERSION", __dir__)).strip
 else
@@ -42,6 +55,10 @@ else
     Hobo
 
       hobo new <app> [opciones]                Crea una aplicacion
+      hobo update [<app>] [--write]            Trae una aplicacion de Hobo 2:
+                                               sin --write mira y cuenta, con
+                                               --write escribe <app>_hobo3 al
+                                               lado, sin tocar la vieja.
 
     Opciones de Hobo (si no las pones, te pregunta):
 

@@ -169,7 +169,7 @@ module Hobo
         "       Paperclip se dejo de mantener en 2018 y su relevo es",
         "       ActiveStorage, que viene dentro de Rails.",
         "       La aplicacion arranca, pero **ese adjunto no funciona**.",
-        "       Para convertirlo:  bin/rails generate hobo:update --attachments",
+        "       Repasalo a mano: por ahora `hobo update` avisa pero no lo convierte.",
         "",
       ].join("\n")
 
