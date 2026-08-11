@@ -3514,3 +3514,48 @@ Desde ERB sólo había `call_dryml_tag(:card, :with => @libro)`, un método
 parcheado en `ActionController::Base`: pasaba por el controlador y **no podía
 tocar params**. La elección que se monta ahora no existía, y es posible porque
 el catálogo de Hobo 3 está en Ruby.
+
+
+## Amenti con Hobo 3, y los fallos que sólo se veían mirando (2026-08-11, tarde)
+
+`hobo update` desde dentro de amenti, que es como lo hará un usuario. Lo que
+salió, en orden, y ninguno daba error:
+
+1. **`rails new` se niega a correr dentro de otra aplicación de Rails**, y
+   `hobo new` lo hereda. El comando genera el esqueleto desde un sitio neutro.
+2. **El Ruby de la aplicación vieja manda.** Dentro de amenti `ruby` es 1.9.3 y
+   `bin/hobo` usaba `&.` y `<<~`: el usuario veía un error de sintaxis. El
+   fichero se escribe en Ruby conservador **a propósito**, porque el intérprete
+   analiza todo antes de ejecutar nada y un aviso dentro no llega a imprimirse.
+3. **`<old-page/>`** compilaba a una llamada a un tag inexistente en vez de a
+   `super()`. Hay uno en casi todos los `<extend>` que se han escrito.
+4. **Los atributos llegaban con clave de cadena** y los tags los leen como
+   símbolo, así que `<stylesheet name="front"/>` escribía
+   `<link href="/assets/.css">`. Afectaba a todos los atributos de todas las
+   plantillas.
+5. **Las rutas de assets escritas a mano**: Sprockets servía `/assets/x.png`,
+   Propshaft sirve `x-8915446a.png`.
+6. **`hobo update` se comía `config.i18n.default_locale = :es`** al regenerar
+   `application.rb`. Los ficheros de traducción se copiaban, la aplicación
+   corría en inglés, y cada `<t key="…">` volvía vacío.
+7. **`<t>` podía pintar la nada**, así que la barra salía con nueve enlaces sin
+   palabras.
+
+De ahí salió la decisión 22 — ninguna pieza devuelve vacío cuando le falta un
+dato — y la constatación de que la suite en verde no dice nada sobre si la
+página se ve.
+
+### Y la cuenta que reordenó el trabajo
+
+Al medir bien, de los tags de Hobo que amenti llama **sólo faltaban 6**, y cinco
+eran los transparentes que ya son elementos. Los 123 que salían al principio
+eran de la propia amenti, y aparecían como ausentes porque **un taglib que no
+carga se lleva por delante todo lo que definía**. Arreglar los dos que fallaban
+desbloqueó decenas de golpe.
+
+### Bootstrap
+
+Amenti lleva **Bootstrap 2.3.1 vendorizado** en `lib/`; Hobo 3 trae el 5.3.8.
+Entre medias cambió el sistema de rejilla entero, así que el contenido sale bien
+colocado mal. De ahí las decisiones 23 y 24: el mapa que Hobo puede tener es
+«tema de Hobo 2 → tema de Hobo 3», y un framework vendorizado no cruza.

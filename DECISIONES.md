@@ -79,6 +79,28 @@ decidieron así en su momento sigue más abajo, en el diario.
     sueltas y con qué se corresponden, y el usuario decide. Arrastrarlo sería
     tenerlo ahí dentro cinco años más sin que nadie sepa por qué.
 
+25. **La compatibilidad con Hobo 2 vive en `hobo_dryml`, no en el catálogo.**
+    La caché, las páginas de auth, los editores en vivo, `<t>`, el
+    `bootstrap-datepicker`, la constante `Paperclip::Attachment` y el `Guest`
+    que contesta a cualquier pregunta. Existen para que una plantilla de 2013
+    **pinte**; el catálogo es lo que alguien escribiría hoy.
+26. **Un tag que falta se pinta vacío, no revienta.** `<hobo-cache>` decidió
+    esto: amenti envuelve su barra entera en uno, así que sin el tag no había
+    barra y con el tag lanzando no había página. Perder la caché es una medida;
+    perder la página no.
+27. **Un `Guest` contesta que no a las preguntas y revienta con lo demás.** Un
+    nombre acabado en `?` es un predicado y contesta `false`; cualquier otro
+    sigue siendo un `NoMethodError`, así que una errata no pasa desapercibida.
+28. **Paperclip: se traduce la declaración, no los datos.**
+    `has_attached_file` pasa a `has_one_attached`, y los ficheros se quedan
+    donde están con sus columnas nombradas. Moverlos es lo único que nadie
+    puede hacer a ciegas: están en un disco o en un bucket y sólo la aplicación
+    sabe cuál.
+29. **Los diálogos son del núcleo.** `modal` y familia vivían en
+    `hobo_bootstrap_ui`, una gema cuyo trabajo entero era pintar los
+    componentes de JavaScript de Bootstrap. `<dialog>` es un elemento de HTML
+    desde 2022: lo que obligaba a que fueran una gema ya no existe.
+
 **Cambiadas, y por qué**
 
 3. ~~Primera fase: solo aplicación nueva. Actualizar aplicaciones viejas es otra

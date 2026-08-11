@@ -14,6 +14,56 @@
 
 | | |
 |---|---|
+| Rama | `hobo_2027_v2` — solo commits locales, **nunca push** |
+| Objetivo | Rails 8.1 / Ruby 3.4 |
+| Suite | `cd hobo && bundle exec rake test` — **659 pruebas, 0 fallos** |
+
+**Las cinco gemas**, cada una en su directorio de `hobo_oficial_2027/`:
+
+| | |
+|---|---|
+| `hobo/` | La gema. Fusión de `hobo_support`, `hobo_fields`, `dryml`, `hobo` y `hobo_rapid` |
+| `hobo_bootstrap/` | El tema Bootstrap 5.3. El tema `clean` va dentro de `hobo` |
+| `hobo_jquery/` | El comportamiento con jQuery, para quien no quiera Stimulus |
+| `hobo_jquery_ui/` | Los tags de jQuery UI |
+| `hobo_dryml/` | El lenguaje DRYML **y la compatibilidad** con Hobo 2 |
+
+**Las tres cosas que Hobo hace, y su estado:**
+
+1. **Aplicación nueva** — completa. `hobo new` deja una app Rails 8 que arranca,
+   con modelo, CRUD, login y páginas derivadas.
+2. **Escribir una vista** — todo cuelga de **`hobo.`**: `hobo.field_list`,
+   `hobo.append_heading`, `hobo.param`. En ERB, Slim o HAML. `bin/rails hobo:tags`
+   los lista. No hay helpers sueltos y no se reescribe el fuente de nadie.
+3. **Actualizar una app de Hobo 2** — `hobo update` desde dentro de la
+   aplicación vieja. Amenti (32 modelos, 88 plantillas, 52 gemas) arranca, sus
+   ocho taglibs cargan y sus páginas públicas responden.
+
+**El catálogo son ~90 tags**, todos en Ruby y en el núcleo. `hobo_dryml` no
+añade catálogo: añade el lenguaje y la compatibilidad (la caché, las páginas de
+auth, `<t>`, el `Guest` que contesta a cualquier pregunta).
+
+### El banco de pruebas
+
+| puerto | |
+|---|---|
+| 3000 / 3003 | hobo2_mi_app clean / bootstrap (Ruby 2.5.9, `RBENV_VERSION=2.5.9`) |
+| 3001 / 3004 | hobo3_mi_app_clean / hobo3_mi_app |
+| 3005 | amenti con Hobo 2 (Ruby 1.9.3) |
+| 3006 | amenti actualizada con Hobo 3 |
+
+Y el banco grande de DRYML: **`/mnt/e/APSOFT/UnoyCero/aplicaciones`** — 807
+plantillas de ~20 aplicaciones reales de tres versiones de Hobo, 625 tags
+distintos. Amenti sola se queda corta al lado.
+
+### La regla que más ha valido
+
+**Mirar la página.** Los fallos de las últimas sesiones —los atributos con clave
+de cadena, las rutas de assets, el idioma que se perdía, `<t>` vacío— **no daban
+error en ningún sitio** y la suite estaba en verde. Ninguno se habría encontrado
+sin abrir el navegador.
+
+---|---|
 | Rama | `hobo_2027_v2` |
 | Punto de partida | `master` = Hobo 2.2.6 (Rails 4.2), **intacto** |
 | Objetivo | Rails 8.1 / Ruby 3.4 |
@@ -116,79 +166,42 @@ porque Rails no tiene gancho de lectura.
 
 ## Lo siguiente, por orden
 
-**El criterio de aceptación está completo**: la videoteca se construye sin
-escribir vistas —salvo tres líneas para decir por dónde se filtra—, funciona, y
-se parece a la de Hobo 2. Lo que queda es empaquetar y pulir.
+1. **Regenerar amenti con el mapa de clases aplicado.** La que corre en el 3006
+   se generó antes de ese cambio, así que la comparación contra el 3005 todavía
+   no se ha hecho de verdad. Es lo primero:
 
-**El orden que se acordó el 2026-08-10, y en qué quedó (revisado 2026-08-11):**
+       cd ~/RubymineProjects/hobo_apps/hobo2_amenti
+       RBENV_VERSION=3.4.6 HOBODEV=/home/imanol/RubymineProjects/hobo_oficial_2027 \
+         hobo update --write --theme=bootstrap
 
-1. ~~El puente de plantillas~~ **hecho** (2026-08-11). Los siete verbos en
-   `hobo_rapid/params.rb` y el taglib en `app/views/taglibs/application.html.erb`.
-2. ~~El actualizador de plantillas DRYML~~ → **se convirtió en dos cosas
-   distintas**: `hobo update`, que trae una aplicación entera de Hobo 2 a esta
-   (Gemfile, config, rutas, modelos, base de datos), y la gema `hobo_dryml`, que
-   hace innecesario convertir las plantillas.
-3. ~~Decidir sobre el lenguaje~~ **decidido: sí** (2026-08-11).
+   Después hacen falta a mano cuatro cosas que el comando nombra pero no puede
+   hacer: `gem "hobo_dryml"`, `gem "money"` + `gem "offsite_payments"` (el
+   relevo de `ActiveMerchant::Billing::Integrations`), copiar
+   `config/initializers/constants.rb.example` a `constants.rb`, y cambiar una
+   línea en `pagos_controller.rb`. **Añadir `hobo_dryml` sola sí debería hacerlo
+   el comando**: ya cuenta las 88 plantillas.
 
-**Lo que queda, por orden:**
+2. **Mirar la portada del 3006 contra la del 3005**, y las páginas privadas, que
+   no se han visto. El contenido sale; la maquetación no se ha comparado.
 
-1. **Completar el catálogo.** Hoy `hobo.` contesta a 52 nombres y a Hobo 2 le
-   faltan 72. De esos 72, unos 30 no vuelven -- editores en vivo y caché (el
-   AJAX de 2008), las páginas de auth (Rails 8) y los de i18n (`t` de Rails) --
-   y **unos 40 sí**: `collection`, `page-nav`, `count`, `delete-button`,
-   `create-button`, `new-page`, `edit-page`, `hidden-field`, `select-many`. Se
-   portan a Ruby en tandas, empezando por los que amenti usa, y los dudosos
-   (`gravatar`, `hobo-cache`, `datepicker-rails`) se preguntan.
-2. **Repasar los dos apaños de los verbos en ERB/Slim**, que Imanol pidió
-   debatir aparte: adivinar «¿la vista escribió marcado?» mirando el texto que
-   sale, y la vista viva del taglib, que no tiene petición. Ninguno de los dos
-   afecta a DRYML, donde la intención se dice explícitamente.
-3. **Borrar `hobo/lib/dryml/`**, que ya no lo usa nadie (3.585 líneas).
-4. **Revisar DRYML viejo contra DRYML nuevo**, que Imanol pidió: qué se
-   conserva, qué se quita y qué se mejora, con las dos gramáticas delante.
+3. **Las clases de Bootstrap 2 que quedan** — 14 en amenti. El comando las lista
+   con su equivalente y no las toca (decisión 23). Cambiarlas es del usuario.
 
-**Los cuatro puntos de la lista anterior están hechos** (2026-08-09). Lo que
-queda anotado, sin orden y sin prisa:
+4. **Lo que queda del catálogo**, si aparece: los tags de `hobo_jquery_ui`
+   (`accordion`, `tabs`, `dialog-box`, `sortable-collection`) van a esa gema, no
+   al núcleo.
 
-- ~~El `belongs_to` que no enlazaba y la caja de búsqueda~~ **hechos**. Un
-  registro es un sitio: `<view>` lo enlaza cuando hay ruta. Y la búsqueda global
-  vuelve —`<search-box>` en la barra, `<search-results>` agrupadas por modelo,
-  `hobo:search`—: el motor (`Hobo.find_by_search`) era de Hobo 2 y seguía
-  entero; faltaban los dos extremos.
-- ~~Los generadores viejos~~ **hechos**: cinco reescritos, cinco borrados, y
-  el asistente vuelve a existir (ver la sección de arriba).
-- **Los ocho plugins de la organización se quedan fuera, y a propósito.** Siguen
-  en DRYML, en sus repositorios, y nadie los ha tocado: `hobo_summary`,
-  `hobo_mapstraction`, `select_one_or_new_dialog`, `hobo_data_tables`,
-  `hobo_simple_color`, `hobo_tokeninput`, `hobo_tree_table`, `hobo_omniauth`,
-  `hobo_paperclip`.
+**Y lo que está apuntado sin prisa:**
 
-  Lo que hay que hacer con cada uno **ya está resuelto y probado**: son gemas
-  con un engine, un fichero de tags y sus assets (decisión 22), `hobo_timeago/`
-  es el ejemplo terminado, y `rails generate hobo:plugin <nombre>` escribe el
-  esqueleto.
-
-  **Y desde el 2026-08-11 puede que no haya que convertir su DRYML**: si el
-  plugin depende de `hobo_dryml`, sus `taglibs/*.dryml` se ejecutan tal cual.
-  Está sin comprobar contra ninguno de los ocho, y comprobarlo es barato --
-  ninguno es tan grande como amenti.
-
-  Se quedan fuera porque son repositorios de la organización —solo se clonan y
-  se leen— y porque portar uno es una decisión de producto (¿hace falta
-  autocompletar? ¿pestañas?), no una pieza pendiente de esta migración.
-- ~~Los cuatro usos de `classy_module`~~ **hecho**: `HoboFields::Model` es un
-  `Concern`, los mixins Thor son el generador que los usaba, `CommonTasks` era
-  de Hobo 2 y no lo requería nadie, y `classy_module` ya no existe. Con él
-  apareció que **`hobo:model` llevaba roto desde Ruby 3**: `ERB.new(src, nil,
-  "-")` — el nivel de seguridad no existe y el trim mode es una keyword.
-- ~~El actualizador de plantillas sigue siendo solo el parser conservado~~
-  **ya no** (2026-08-11): las plantillas no se convierten, se ejecutan --
-  `hobo_dryml`--, y lo que se actualiza es la aplicación entera con
-  `hobo update`.
-
----
-
----
+- **Borrar `hobo/lib/dryml/`** — 3.585 líneas que ya no usa nadie: `hobo_dryml`
+  tiene lector y compilador propios.
+- **Los ocho plugins de la organización** siguen fuera y a propósito. Y desde
+  que existe `hobo_dryml` puede que **no haya que convertir su DRYML**: si el
+  plugin depende de esa gema, sus taglibs se ejecutan tal cual. Sin comprobar
+  contra ninguno.
+- **Nivel 3 de las pruebas** (aplicaciones generadas de verdad), aplazado.
+- **`hobo:model` llevaba roto desde Ruby 3** y se arregló; queda mirar si hay
+  más generadores en ese estado.
 
 ## Cómo mirar la aplicación con el navegador
 
