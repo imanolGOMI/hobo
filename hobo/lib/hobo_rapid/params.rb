@@ -1,4 +1,5 @@
 require "rapid"
+require "hobo_rapid/sorting"
 
 module HoboRapid
 
@@ -142,32 +143,11 @@ module HoboRapid
     # `?sort=` (find_or_paginate), so this only puts the links that lead to what
     # already works.
     def sortable_headings(*only)
-      records = Rapid::Context.this
-      model = records.respond_to?(:klass) ? records.klass : Array(records).first&.class
-      return nil unless model.respond_to?(:column_names)
+      model = HoboRapid::Sorting.model_of(Rapid::Context.this)
+      return nil if model.nil?
 
-      columns = only.presence || HoboRapid::Derivation.index_columns(model)
-      sorted_by = HoboRapid.query_parameters["sort"].to_s
-
-      columns.each do |field|
-        # Real columns only: `category` is an association, and an association
-        # cannot be handed to an ORDER BY. A heading that does not sort is worse
-        # than a heading of plain text.
-        next unless model.column_names.include?(field.to_s)
-
-        label = HoboRapid::Derivation.label_for(model, field)
-        # Already sorting by this one and upwards: the next click turns it over.
-        ascending = sorted_by == field.to_s
-        arrow = if sorted_by.delete_prefix("-") == field.to_s
-                  ascending ? " ↑" : " ↓"
-                else
-                  ""
-                end
-        target = HoboRapid.query_parameters.merge("sort" => "#{"-" if ascending}#{field}")
-
-        hobo_declared_params[:"#{field}_heading"] ||= Rapid.parameter do
-          tag("a", { :href => "?#{target.to_query}", :class => "sort-link" }) { text "#{label}#{arrow}" }
-        end
+      HoboRapid::Sorting.headings_for(model, only).each do |name, heading|
+        hobo_declared_params[name] ||= heading
       end
       nil
     end

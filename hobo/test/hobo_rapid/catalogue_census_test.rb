@@ -124,6 +124,8 @@ class CatalogueCensusTest < Minitest::Test
   # y, si hace falta, con qué atributos. Una ficha de una línea por tag es
   # justamente la documentación que no había.
   CENSUS = {
+    :table => [:collection, { :fields => "title, body" }],
+    :table_plus => [:collection, { :fields => "title, body" }],
     :collection_input => [:field_collection, { :options => [] }],
     :sti_type_input => [:record, {}],
     :with_field_names => [:record, { :fields => "title, body" }],
