@@ -3685,7 +3685,9 @@ En `hobo3_mi_app_clean` (rama `clean`, puerto 3003), con la sintaxis nueva:
 - **Puntos de extensión dentro de un `define` de la aplicación**: hoy el cuerpo
   de un `define` es marcado plano. Poder escribir `param` dentro choca con el
   `param` que declara params de la página derivada, y hay que decidir el nombre.
-- **La página de un autor no pinta sus libros**: el `show_page` derivado sale con
-  la lista de campos vacía y sin sección de hijos. No es de esta pieza, pero se
-  ve desde ella.
+- ~~La página de un autor no pinta sus libros~~ **no es un fallo**, mirado
+  después: `Author` declara `has_many :books` y no `children :books`, y la
+  sección de hijos es opt-in —como en Hobo 2—. La lista de campos sale vacía
+  porque `name` es el atributo-nombre, que va en el título, y las marcas de
+  tiempo son mantenimiento. La página es lo que pidió el modelo.
 - Nivel 3 de las pruebas (aplicaciones generadas de verdad), aplazado por Imanol.
