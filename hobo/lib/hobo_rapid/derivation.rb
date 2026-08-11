@@ -366,9 +366,7 @@ module HoboRapid
       # The page for the collection: a header panel with the name and the count,
       # a "new" link, and **a table** -- which is what hobo_bootstrap painted.
       def derive_index_page(model)
-        fields = summary_fields(model)
-        name_attribute = name_attribute_of(model)
-        columns = ([name_attribute] + fields).compact
+        columns = index_columns(model)
         Rapid.define_for(:index_page, model) do
           records = Array(this)
 
@@ -560,6 +558,14 @@ module HoboRapid
       end
 
       public
+
+      # The columns of a list's table, in order. Public because a taglib that
+      # wants to touch the headings needs the same names the page used -- if it
+      # works them out again on its own, the day this changes the taglib
+      # retouches params that no longer exist and nobody complains.
+      def index_columns(model)
+        ([name_attribute_of(model)] + summary_fields(model)).compact
+      end
 
       def label_for(model, field)
         return model.human_attribute_name(field) if model.respond_to?(:human_attribute_name)

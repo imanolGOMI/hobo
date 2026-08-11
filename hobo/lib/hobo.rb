@@ -18,6 +18,7 @@ rescue Gem::LoadError => e
   # don't print warning if setup not complete
 end
 require 'hobo/extensions/enumerable'
+require 'hobo/extensions/will_paginate'
 
 # Until Rails 7 this gem leaned on the classic autoloader for its *own*
 # internals: `ActiveSupport::Dependencies.autoload_paths` pointed at this

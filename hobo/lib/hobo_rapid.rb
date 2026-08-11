@@ -23,5 +23,8 @@ module HoboRapid
   require 'hobo_rapid/tags/filters'
   require 'hobo_rapid/derivation'
   require 'hobo_rapid/helper'
+  require 'hobo_rapid/params'
+  require 'hobo_rapid/taglib'
+  require 'hobo_rapid/tag_helpers'
 
 end

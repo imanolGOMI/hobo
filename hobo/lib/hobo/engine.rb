@@ -119,10 +119,26 @@ module Hobo
     # Was HoboRapid::Engine: the pages of every model, derived on boot and on
     # every reload. Declaring the model is the ask; an application should not
     # have to say it twice.
+    # After every gem is loaded, which is the point: see the file.
+    initializer "hobo.will_paginate" do
+      Hobo::Extensions::WillPaginate.apply!
+    end
+
     initializer "hobo.derive" do |app|
       app.config.to_prepare do
         next unless defined?(Hobo::Model)
         Hobo::Model.all_models.each { |model| HoboRapid::Derivation.derive(model) }
+
+        # And right after them the application's taglibs, which is what
+        # `application.dryml` was. In here and not in another `to_prepare`:
+        # deriving defines `index_page` for every model, so an `extend_tag`
+        # loaded earlier would extend a tag replaced an instant later.
+        #
+        # The helpers first, because a taglib writes tags inside its own
+        # definitions.
+        HoboRapid::TagHelpers.refresh!
+        HoboRapid::Taglib.load_all(Rails.root)
+        HoboRapid::TagHelpers.refresh!
       end
     end
 

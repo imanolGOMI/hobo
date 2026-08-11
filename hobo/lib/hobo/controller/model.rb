@@ -546,6 +546,13 @@ module Hobo
       finder = apply_search(finder)
 
       order = options.delete(:order_by) || options.delete(:order)
+      # `?sort=title` and `?sort=-title`, which is what a heading with a link
+      # asks for. Honoured here and not in each action, because otherwise a sort
+      # link only works on the lists whose controller remembered to call
+      # `parse_sort_param`, and a link that does not sort is worse than no link
+      # at all. The whitelist is the table's real columns, so the parameter
+      # cannot name anything that is not one.
+      order ||= parse_sort_param(*sortable_fields_of(finder)) if params[:sort].present?
       order = finder.default_order if order.blank? && finder.try(:order_values).blank?
       finder = finder.order(order) if order.present?
 
@@ -556,6 +563,17 @@ module Hobo
         # Equivalent to the old finder.scoped (http://stackoverflow.com/a/18199294)
         finder.where(nil)
       end
+    end
+
+
+    # Which columns may be sorted by: the ones the table has. No associations
+    # and no methods, neither of which can be handed to an ORDER BY.
+    def sortable_fields_of(finder)
+      klass = finder.respond_to?(:klass) ? finder.klass : model
+      return [] unless klass.respond_to?(:column_names)
+      klass.column_names
+    rescue ActiveRecord::ActiveRecordError
+      []
     end
 
 
@@ -1027,14 +1045,43 @@ module Hobo
     # Falling back rather than taking over on purpose: the moment a page needs
     # to be different, you write it, and nothing argues with you.
     def render_derived_or(tag_name)
-      return yield if template_exists_for_this_action? || !derived_tag?(tag_name)
+      return yield unless derived_tag?(tag_name)
+
+      # Hobo 2's rule: **if the view only declares params, the page is still the
+      # derived one**; if it writes markup, the view wins and replaces it, which
+      # is what happened when you wrote an `index.dryml`.
+      #
+      # The template is painted first because there is no other way to tell
+      # which of the two it is: what it declares stays on the controller, and
+      # what it writes comes out in the text.
+      if template_exists_for_this_action?
+        wrote = view_wrote_markup?(render_to_string(action_name, :layout => false))
+        declared = @hobo_declared_params || {}
+
+        if !wrote && declared.any?
+          # Params only: the derived page, with them.
+        elsif !wrote
+          return yield
+        elsif declared.any?
+          raise Hobo::Error, <<~ERROR
+            #{controller_path}/#{action_name} declares params (#{declared.keys.join(", ")}) and also
+            writes markup. It has to be one or the other: params retouch the
+            derived page, and markup replaces it.
+
+            If you meant both, open the page yourself and put the markup inside:
+                <%= #{tag_name} this, :#{declared.keys.first} => "..." %>
+          ERROR
+        else
+          return yield
+        end
+      end
 
       # Through the bridge, not straight to the runtime: `rapid_tag` is what
       # hands the acting user, the forgery token and the flash to the tags.
       # Calling Rapid.render directly skipped all three, so every derived page
       # was painted as if nobody were logged in -- a form with no inputs, and
       # no actions anywhere.
-      painted = rapid_tag(tag_name, this)
+      painted = rapid_tag(tag_name, this, **(@hobo_declared_params || {}))
 
       # A theme paints the whole document -- `<html>`, `<head>`, the lot -- so
       # wrapping it in the application layout as well gives a page with two of
@@ -1043,6 +1090,18 @@ module Hobo
       whole_document = painted.lstrip.start_with?("<!DOCTYPE", "<html")
 
       render :html => painted.html_safe, :layout => !whole_document
+    end
+
+    # Whether what the template painted is real markup or nothing at all.
+    #
+    # Comments do not count, and that is not a nicety: in development Rails
+    # wraps every template in `<!-- BEGIN app/views/... -->` with
+    # `annotate_rendered_view_with_filenames`, so a view that only declared
+    # params painted two comments and was classified as a view that writes
+    # markup. It failed in development and not in production, which is the worst
+    # way to fail.
+    def view_wrote_markup?(pintado)
+      !pintado.to_s.gsub(/<!--.*?-->/m, "").strip.empty?
     end
 
     def template_exists_for_this_action?

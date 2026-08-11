@@ -3571,7 +3571,7 @@ captura, no en una prueba.
   en español.**
 - Parar al final de cada capa: probar, enseñar el resultado y preguntar.
 
-## La pieza de los params: los verbos de DRYML en la vista (2026-08-11, a medias)
+## La pieza de los params y el taglib: DRYML sin DRYML (2026-08-11, hecha)
 
 **Qué es**: recuperar la forma de escribir de DRYML sin el lenguaje. Lo que era
 `<append-heading:>hola</append-heading:>` se escribe `<% append_heading "hola" %>`
@@ -3581,54 +3581,111 @@ que el controlador ya sabe cuál. `rapid_tag` deja de ser lo que se escribe.
 
 **La gramática, del manual** (`hobo_oficial/doc/hobodoc/doc/manual/dryml-guide.markdown`,
 «Inserting extra content» 750-795, «Replacing a parameter entirely» 795-830,
-`param-content` en 1185). Son siete:
+`param-content` en 1185):
 
 | DRYML | Hobo 3 |
 |---|---|
-| `<heading:>x</heading:>` | `heading "x"` |
-| `<heading: class="big"/>` | `heading class: "big"` |
-| `<heading: replace>x</heading:>` | `heading :replace do` |
+| `<heading:>x</heading:>` | `param :heading, "x"` |
+| `<heading: class="big"/>` | `param :heading, class: "big"` |
+| `<heading: replace>x</heading:>` | `replace :heading do … end` |
 | `<page without-heading/>` | `without :heading` |
 | `<before-/prepend-/append-/after-heading:>` | `before_heading`, … |
 | `<param-content for="heading"/>` | `param_content` |
-| `<heading restore/>` | `restore` |
+
+**Por qué `param :heading` y no `heading` a secas**, que era el plan de ayer: los
+cuatro puntos de inserción se reconocen por el prefijo —no hay ningún método de
+vista que empiece por `before_`, `prepend_`, `append_` o `after_`—, pero un
+nombre suelto no. `heading` podría ser un param, un helper de la aplicación o
+una errata, y aceptarlo a ciegas convierte cada errata en un param que no existe
+y que no se queja. Los nombres de los params **no se conocen hasta que la página
+se pinta**, que es después de que la vista los declare, así que no hay forma de
+comprobarlos. Un verbo explícito cuesta cinco letras y no miente.
 
 **La regla, que es la de Hobo 2**: si la vista solo declara params, la página es
 la derivada y esto la retoca; si escribe marcado, la vista sustituye —como al
 escribir un `index.dryml`—; las dos cosas a la vez son un error que lo explica.
+Los comentarios no cuentan como marcado: en desarrollo Rails envuelve cada
+plantilla en `<!-- BEGIN app/views/... -->`, y sin descontarlos la regla fallaba
+en desarrollo y no en producción.
 
-**La otra mitad, el `application.dryml`**: la definición por tipo se mantiene
-(guía, 1116-1125). Va en `app/views/taglibs/application.rb`, cargado por Hobo
-**después de derivar** —si no, la derivación lo pisa en cada recarga, que es la
-trampa que mordió con el datepicker—:
+### El taglib, que es el `application.dryml`
 
-    define :card, :for => Book do … end
-    define :input, :for => :email_address do … end
-    extend_tag :page do … end
+Va en **`app/views/taglibs/application.html.erb`** —una plantilla, no un fichero
+de código— y se carga después de derivar, en el mismo `to_prepare`:
 
-Nombre fusionado cuando hay una variable (`append_heading`), separado cuando hay
-dos (`define :card, for: Book`): `define_card_book` no se puede desambiguar de
-`define_card` para `BookTag`, y pierde los modelos con namespace.
+    <% define :card, :for => Book do %>
+      <div class="card"><h4><%= link_to this.title, book_path(this) %></h4></div>
+    <% end %>
+
+    <% extend_tag :index_page do %>
+      <% sortable_headings %>
+      <%= old %>
+    <% end %>
+
+`define` dice cómo se pinta algo, `extend_tag` retoca lo que ya se pinta, `old`
+es el `<old-index-page/>` de DRYML, y `this` es el registro que se pinta ahora.
+Dentro de un `extend_tag` los verbos de params van a **ese tag**, así que
+`<% append_heading %>` se escribe igual en el taglib que en una página, que es
+como funcionaba DRYML.
+
+**Fue `.rb` durante media tarde y estaba mal.** Lo que una aplicación escribe es
+marcado, y escribirlo como `tag("div", { :class => "card" }) do … end` es la API
+del runtime, no un lenguaje para nadie. Que pueda ser ERB no era obvio: un
+bloque de ERB escribe en el buffer de **su** vista, así que guardarlo y llamarlo
+en otra petición manda el marcado al buffer equivocado y sale texto suelto en
+mitad de otra página —comprobado, no supuesto—. La salida es que el taglib se
+queda con su propia vista y captura sobre ella; el registro no viaja con el
+bloque, viaja por `Rapid::Context`.
+
+**Un helper por tag**, rehecho después de derivar y en cada recarga:
+`<%= search_filter :fields => "title, synopsis" %>` en vez de
+`<%= rapid_tag(:search_filter, nil, :fields => "…") %>`. Un nombre que
+ActionView ya conteste se deja en paz; el tag sigue estando por `rapid_tag`.
+
+**Nombre fusionado cuando hay una variable** (`append_heading`), **separado
+cuando hay dos** (`define :card, for: Book`): `define_card_book` no se puede
+desambiguar de `define_card` para `BookTag`, y pierde los modelos con namespace.
 
 **Comprobado y descartado como riesgo**: el runtime aguanta `param_content` y
-`restore` tal como está. `Rapid::Tag#call_default` (lib/rapid/tag.rb:278) ya
-guarda lo que el tag iba a pintar y prevé el bucle de envolver un param consigo
-mismo. **No hay que tocar lib/rapid/.**
+`restore` tal como está. **No hay que tocar `lib/rapid/`** salvo el `with:` de
+`extend_tag`, que hacía falta para que la extensión de un taglib pueda llamar a
+`super()` desde dentro de un bloque.
 
-**Dónde está atascado**: `<% append_heading %>` da NoMethodError en la
-aplicación. Descartado: que el módulo no esté (`ActionView::Base.include?`
-responde true), que sea código viejo (servidor reiniciado entero), y que la
-clase gane al módulo (probado con `prepend`). La salida es declarar los verbos
-de verdad en vez de `method_missing`. Antes de nada, reproducir con el log
-recién truncado: el último leído tenía la misma dirección de objeto que antes
-del reinicio.
+### Lo que se encontró por el camino
 
-**Sin commitear**: lib/hobo_rapid/params.rb (nuevo), el enganche en
-hobo_rapid/helper.rb, el require en hobo_rapid.rb, y la regla en
-hobo/controller/model.rb (`render_derived_or`).
+- **El atasco de ayer no existía**: `<% append_heading %>` funcionaba. El
+  servidor tenía código viejo. La lección, otra vez: truncar el log **y**
+  reiniciar antes de creerse un error.
+- **`rapid_tag` borraba el contexto**: pasar `this` por omisión ponía `nil`, así
+  que un `<filter-menu>` dentro de un listado se quedaba sin modelo y no pintaba
+  nada. Ahora omitir `this` es heredarlo.
+- **`hobo_will_paginate` habla el `try` de Hobo 1**: `array.try.member_class`,
+  sin argumentos. El `try` de Rails acaba preguntando `respond_to?(nil)` y
+  revienta, así que **cualquier `to_a` de una lista paginada** tiraba la página.
+  Parcheado en `hobo/extensions/will_paginate.rb`, redefiniendo `replace` y no
+  `replace_with_hobo_metadata`: `alias_method_chain` **copia** el cuerpo, así que
+  reescribir el método del que se copió no cambia nada.
+- **`?sort=` se honra en `find_or_paginate`**, con las columnas de verdad de la
+  tabla como lista blanca. Antes `parse_sort_param` existía y no lo llamaba
+  nadie, así que un enlace de ordenar solo funcionaba donde el controlador se
+  acordara. `sortable_headings` pone los enlaces.
 
-**La prueba de fuego, elegida por Imanol**: todas las tablas ordenables con un
-`extend_tag` en application.rb; una tabla distinta con `define :index_page, for:
-Loan`; un total antes de una tabla con `before_collection`; y algo dentro del
-título con `append_heading`. Los cuatro casos tocan las cuatro formas: extender
-para todos, redefinir por tipo, insertar antes de un param, añadir dentro de otro.
+### La prueba de fuego, elegida por Imanol: hecha
+
+En `hobo3_mi_app_clean` (rama `clean`, puerto 3003), con la sintaxis nueva:
+
+- **todas las tablas ordenables**: `extend_tag :index_page` + `sortable_headings`
+- **una tabla distinta**: `extend_tag :index_page, :for => Loan`, con el número
+  de préstamos sin devolver en el título y una nota debajo
+- **un total antes de la tabla**: `before_collection do` en `books/index.html.erb`
+- **algo dentro del título**: `append_heading " — La Biblioteca"`
+
+### Lo que queda
+
+- **Puntos de extensión dentro de un `define` de la aplicación**: hoy el cuerpo
+  de un `define` es marcado plano. Poder escribir `param` dentro choca con el
+  `param` que declara params de la página derivada, y hay que decidir el nombre.
+- **La página de un autor no pinta sus libros**: el `show_page` derivado sale con
+  la lista de campos vacía y sin sección de hijos. No es de esta pieza, pero se
+  ve desde ella.
+- Nivel 3 de las pruebas (aplicaciones generadas de verdad), aplazado por Imanol.

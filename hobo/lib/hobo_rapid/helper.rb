@@ -13,7 +13,13 @@ module HoboRapid
 
   module Helper
 
-    def rapid_tag(name, this = nil, **attributes)
+    # `this` left out is not `this` set to nothing. A tag written inside a param
+    # of another tag is painting whatever that tag is painting -- a
+    # `<filter-menu>` inside a list is a menu **for that list** -- and passing
+    # nil wiped it, so the tag could not even find the model and came out empty.
+    INHERIT = Object.new.freeze
+
+    def rapid_tag(name, this = INHERIT, **attributes)
       # `respond_to?` with one argument does not see protected methods, and in a
       # controller `form_authenticity_token` is protected -- so the token came
       # back nil and every form Hobo painted got 422.
@@ -46,7 +52,11 @@ module HoboRapid
                                      .map(&:to_h)
 
       HoboRapid.with_request(token, user, messages || {}, query || {}, subsite) do
-        Rapid.render(name, attributes, :this => this, **params).html_safe
+        if this.equal?(INHERIT)
+          Rapid.render(name, attributes, **params).html_safe
+        else
+          Rapid.render(name, attributes, :this => this, **params).html_safe
+        end
       end
     end
 
@@ -81,4 +91,15 @@ if defined?(ActiveSupport)
   # tag directly is a normal thing to do -- Hobo's own derived pages do it.
   ActiveSupport.on_load(:action_view) { include HoboRapid::Helper }
   ActiveSupport.on_load(:action_controller) { include HoboRapid::Helper }
+
+  # And the verbs a view retouches the derived page with, which are DRYML's
+  # params translated (hobo_rapid/params.rb).
+  #
+  # `prepend` and not `include` because a view context has another
+  # `method_missing` above ours -- the one Rails puts there to load the routes
+  # the first time a route helper is named (railties, lazy_route_set.rb). That
+  # one gives way with `super`, so included would reach us too; prepended does
+  # not depend on it going on giving way.
+  ActiveSupport.on_load(:action_view) { prepend HoboRapid::Params }
+  ActiveSupport.on_load(:action_controller) { prepend HoboRapid::Params }
 end

@@ -110,9 +110,24 @@ module Rapid
     def markup(&block) = Parameter.new(&block)
 
     # <extend tag="x"> -- prepend, so `super` is <old-x>.
-    def extend_tag(name, &body)
-      record(name, :extend)
-      @tags.fetch(name).prepend(Module.new { define_method(:content, &body) })
+    #
+    # With no `for:` it reaches **every** definition of that name: the plain one
+    # and each per-type one. That is what "all the index pages" has to mean --
+    # a derived page is defined per model, so extending only the plain tag would
+    # extend the one nobody renders. With `for:` it is that model's alone.
+    # `with:` is for a caller that brings the module already made -- an ERB
+    # taglib, whose `content` has to call `super()` from inside a block.
+    def extend_tag(name, type = nil, with: nil, &body)
+      record(name, :extend, type)
+      extension = with || Module.new { define_method(:content, &body) }
+
+      if type
+        @polymorphic[name].fetch(type).prepend(extension)
+      else
+        @tags[name]&.prepend(extension)
+        @polymorphic[name].each_value { |klass| klass.prepend(extension) }
+        raise KeyError, "tag #{name.inspect} is not defined" if @tags[name].nil? && @polymorphic[name].empty?
+      end
     end
 
     def define_for(name, type, &body)
