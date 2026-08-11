@@ -168,7 +168,7 @@ De los **94 sin portar**:
 
 | | |
 |---:|---|
-| 23 | envoltorios de HTML -- `<a>`, `<br>`, `<img>`, `<table>`, `<section>`. En DRYML hacían falta porque para colgarle un `param` o un `merge-attrs` a un elemento tenía que ser *un tag*; en Ruby se escribe `tag("a", …)`. **No hay que portarlos**, y son justo los ~15 que la decisión 9 daba por fuera |
+| 14 | ~~envoltorios de HTML que no hay que portar~~ **falso, corregido el 2026-08-11**: DRYML decide elemento o tag con una **lista** (`dryml/static_tags`, 98 nombres), y `a`, `img`, `br`, `form`, `input`, `table` y `section` **están fuera** -- son llamadas a tag. Su `<a>` coge un registro y saca la url; su `<img>` resuelve la ruta del asset. No son envoltorios: **hay que portarlos** |
 | 11 | caché y editores en vivo -- fuera, decidido el 2026-08-07 |
 | 9 | i18n (`model-name-human`, `human-collection-name`…) -- lo hace `t` de Rails |
 | 8 | páginas de auth -- las trae Rails 8 |
