@@ -304,8 +304,12 @@ queda anotado, sin orden y sin prisa:
   Lo que hay que hacer con cada uno **ya está resuelto y probado**: son gemas
   con un engine, un fichero de tags y sus assets (decisión 22), `hobo_timeago/`
   es el ejemplo terminado, y `rails generate hobo:plugin <nombre>` escribe el
-  esqueleto. El trabajo que queda en cada uno es **su DRYML**: convertir sus
-  `taglibs/*.dryml` en tags de Ruby.
+  esqueleto.
+
+  **Y desde el 2026-08-11 puede que no haya que convertir su DRYML**: si el
+  plugin depende de `hobo_dryml`, sus `taglibs/*.dryml` se ejecutan tal cual.
+  Está sin comprobar contra ninguno de los ocho, y comprobarlo es barato --
+  ninguno es tan grande como amenti.
 
   Se quedan fuera porque son repositorios de la organización —solo se clonan y
   se leen— y porque portar uno es una decisión de producto (¿hace falta
@@ -315,8 +319,10 @@ queda anotado, sin orden y sin prisa:
   de Hobo 2 y no lo requería nadie, y `classy_module` ya no existe. Con él
   apareció que **`hobo:model` llevaba roto desde Ruby 3**: `ERB.new(src, nil,
   "-")` — el nivel de seguridad no existe y el trim mode es una keyword.
-- El actualizador de plantillas de aplicaciones existentes (decisión 6) sigue
-  siendo solo el parser de DRYML conservado a propósito.
+- ~~El actualizador de plantillas sigue siendo solo el parser conservado~~
+  **ya no** (2026-08-11): las plantillas no se convierten, se ejecutan --
+  `hobo_dryml`--, y lo que se actualiza es la aplicación entera con
+  `hobo update`.
 
 ---
 
