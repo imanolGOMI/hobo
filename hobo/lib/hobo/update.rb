@@ -134,6 +134,7 @@ module Hobo
       write_callback_switch
       write_settings
       write_theme_classes
+      write_attachments
       write_gemfile
       say ""
       say "Hecho. Ahora:"
@@ -158,7 +159,12 @@ module Hobo
       end
 
       note :paperclip, paperclip_models.length, "modelos con paperclip" do
-        ["Sin mantener desde 2018. El relevo es ActiveStorage y viene dentro de Rails.",
+        ["Sin mantener desde 2018. La declaracion se traduce a has_one_attached;",
+         "**los ficheros no**. Paperclip los dejaba donde dijera su :path y cuatro",
+         "columnas al lado del registro; ActiveStorage guarda un blob en sus tablas.",
+         "Moverlos es lo unico que nadie puede hacer a ciegas: estan en un disco o en",
+         "un bucket, y solo la aplicacion sabe cual.",
+         "Las columnas que quedan sin uso: #{paperclip_columns.first(8).join(", ")}",
          paperclip_models.first(6).join(", ")]
       end
 
@@ -217,6 +223,15 @@ module Hobo
     def paperclip_models
       @paperclip_models ||= models.select { |file| File.read(file).match?(/has_attached_file/) }
                                   .map { |file| File.basename(file, ".rb") }
+    end
+
+    # The columns paperclip left beside each record, which nothing reads now.
+    def paperclip_columns
+      models.flat_map do |file|
+        File.read(file).scan(/has_attached_file\s+:(\w+)/).flatten.flat_map do |name|
+          %w[file_name content_type file_size updated_at].map { |suffix| "#{name}_#{suffix}" }
+        end
+      end.uniq
     end
 
     def vendor_plugins
@@ -495,6 +510,45 @@ module Hobo
 
       File.write(application, text)
       say "  config/application.rb (autoload_lib: #{ignored.sort.join(", ")})"
+    end
+
+    # Paperclip becomes ActiveStorage, as far as anybody can do it for you.
+    #
+    #   has_attached_file :logo, :styles => {…}   ->  has_one_attached :logo
+    #
+    # What is written is the declaration; what is **not** written is the data.
+    # Paperclip kept the file wherever `:path` said and four columns beside the
+    # record; ActiveStorage keeps a blob in its own tables. Moving the files is
+    # the one part nobody can do blind: they are on a disk, or in a bucket, and
+    # only the application knows which. So it is said, with the columns named,
+    # and left alone.
+    #
+    # The `:styles` go too, and that is worth saying out loud: they were image
+    # variants, and ActiveStorage has `variant` -- but a variant is asked for
+    # where the image is painted, not where it is declared, so translating them
+    # here would put them in the wrong place.
+    def write_attachments
+      changed = []
+
+      Dir[File.join(target, "app", "models", "*.rb")].each do |file|
+        text = File.read(file)
+        before = text.dup
+
+        # The declaration and everything hanging off it: paperclip's options run
+        # over as many lines as they like, and they end where the indentation
+        # goes back to a statement.
+        text.gsub!(/^(\s*)has_attached_file\s+:(\w+).*?(?=\n\s*(?:[a-z_]+\s|end\b|\z))/m) do
+          "#{$1}has_one_attached :#{$2}"
+        end
+        text.gsub!(/^\s*validates_attachment\w*.*?(?=\n\s*(?:[a-z_]+\s|end\b|\z))/m, "")
+
+        next if text == before
+        File.write(file, text)
+        changed << File.basename(file, ".rb")
+      end
+
+      return if changed.empty?
+      say "  #{changed.length} modelos (has_attached_file -> has_one_attached): #{changed.join(", ")}"
     end
 
     # The classes Hobo 2's theme wrote, and the **role** Hobo 3 writes instead.

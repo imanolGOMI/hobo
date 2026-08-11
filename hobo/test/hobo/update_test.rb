@@ -76,6 +76,37 @@ class UpdateTest < Minitest::Test
     assert_includes names, "otra_cosa"
   end
 
+  # --- paperclip ----------------------------------------------------------------
+
+  # The declaration is translated; the files are not, and that is said rather
+  # than attempted -- they are on a disk or in a bucket and only the application
+  # knows which.
+  def test_has_attached_file_becomes_has_one_attached
+    modelo = <<~RUBY
+      class Company < ActiveRecord::Base
+        has_attached_file :logo,
+            :styles => { :medium => ["400x400", :jpg] },
+            :path => 'lib/logos/:style/:filename'
+        validates_attachment_content_type :logo, :content_type => /image/
+        def name = "x"
+      end
+    RUBY
+
+    escrito = rewrite_model("company.rb", modelo)
+
+    assert_includes escrito, "has_one_attached :logo"
+    refute_includes escrito, "has_attached_file"
+    refute_includes escrito, "validates_attachment"
+    assert_includes escrito, 'def name = "x"', "lo demas del modelo se queda"
+  end
+
+  def test_the_columns_paperclip_left_are_named
+    write("app/models/company.rb", "class Company\n  has_attached_file :logo\nend")
+
+    assert_includes updater.paperclip_columns, "logo_file_name"
+    assert_includes updater.paperclip_columns, "logo_updated_at"
+  end
+
   # --- the classes -------------------------------------------------------------
 
   # Hobo 3 emits a **role** and the theme dresses it, so a template that says
@@ -182,6 +213,17 @@ class UpdateTest < Minitest::Test
     file = File.join(target, "app", "views", "x", "y.dryml")
     File.write(file, markup)
     updater.send(:write_theme_classes)
+    File.read(file)
+  ensure
+    FileUtils.rm_rf(target)
+  end
+
+  def rewrite_model(name, content)
+    target = File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3")
+    FileUtils.mkdir_p(File.join(target, "app", "models"))
+    file = File.join(target, "app", "models", name)
+    File.write(file, content)
+    updater.send(:write_attachments)
     File.read(file)
   ensure
     FileUtils.rm_rf(target)
