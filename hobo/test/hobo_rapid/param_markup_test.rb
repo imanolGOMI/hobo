@@ -41,12 +41,12 @@ class ParamMarkupTest < Minitest::Test
   end
 
   def test_attributes
-    assert_equal %(<% param :heading, "class" => "big" %>),
+    assert_equal %(<% param :heading, :class => "big" %>),
                  rewrite(%(<heading: class="big"/>))
   end
 
   def test_a_ruby_attribute
-    assert_equal %(<% param :heading, "class" => (thing.name) %>),
+    assert_equal %(<% param :heading, :class => (thing.name) %>),
                  rewrite(%(<heading: class="&thing.name"/>))
   end
 
@@ -96,10 +96,50 @@ class ParamMarkupTest < Minitest::Test
     assert_equal source, rewrite(source)
   end
 
-  def test_a_file_with_no_colon_is_returned_as_it_is
-    source = "<p>nada</p>"
+  def test_a_file_with_no_markup_is_returned_as_it_is
+    source = "solo texto, sin una etiqueta"
 
     assert_same source, rewrite(source)
+  end
+
+  # --- las llamadas a tags ------------------------------------------------------
+
+  def test_a_hyphenated_name_hobo_knows_becomes_a_call
+    Rapid.define(:probe_widget) { text "x" }
+
+    assert_equal "<%= probe_widget %>", rewrite("<probe-widget/>")
+  end
+
+  def test_with_attributes
+    Rapid.define(:probe_widget) { text "x" }
+
+    assert_equal %(<%= probe_widget(:fields => "a, b") %>),
+                 rewrite(%(<probe-widget fields="a, b"/>))
+  end
+
+  def test_an_open_tag_takes_a_block
+    Rapid.define(:probe_widget) { text "x" }
+
+    assert_equal "<%= probe_widget do %>dentro<% end %>",
+                 rewrite("<probe-widget>dentro</probe-widget>")
+  end
+
+  # Un componente web lleva guion igual que un tag, y es un elemento de verdad
+  # que el navegador respeta. Sin este limite, cualquier aplicacion que use uno
+  # se rompe.
+  def test_a_hyphenated_name_hobo_does_not_know_is_left_alone
+    source = %(<ion-button color="primary">Pulsa</ion-button>)
+
+    assert_equal source, rewrite(source)
+  end
+
+  # Sin guion no se toca: `<card>` no se puede distinguir de un elemento que
+  # nadie conoce, y una plantilla que lo escriba pensando en html no debe
+  # empezar a llamar a un tag.
+  def test_a_name_with_no_hyphen_is_left_alone
+    Rapid.define(:card) { text "x" }
+
+    assert_equal "<card>x</card>", rewrite("<card>x</card>")
   end
 
 end

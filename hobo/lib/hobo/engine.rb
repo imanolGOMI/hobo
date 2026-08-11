@@ -130,9 +130,11 @@ module Hobo
     #
     # It wraps the handler that was already registered instead of replacing it,
     # so what compiles the template is still ERB, or Slim, or the one that gem
-    # brought. What this changes is the source it is handed, and only the
-    # `<name:>` tags in it -- which cannot appear in a template that was not
-    # written for Hobo.
+    # brought. What this changes is the source it is handed.
+    #
+    # And only for **the application's own templates**. A gem ships views too,
+    # and rewriting somebody else's file is going into their house: whatever
+    # rule this pass follows, they never agreed to it.
     initializer "hobo.param_markup" do
       ActiveSupport.on_load(:action_view) do
         require "hobo_rapid/param_markup"
@@ -148,8 +150,9 @@ module Hobo
           takes = handler.method(:call).arity
 
           ActionView::Template.register_template_handler(extension, lambda { |template, source = nil|
-            transformed = HoboRapid::ParamMarkup.transform(source || template.source)
-            takes == 1 ? handler.call(template) : handler.call(template, transformed)
+            text = source || template.source
+            text = HoboRapid::ParamMarkup.transform(text) if HoboRapid::ParamMarkup.ours?(template)
+            takes == 1 ? handler.call(template) : handler.call(template, text)
           })
         end
       end

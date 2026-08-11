@@ -47,13 +47,74 @@ module HoboRapid
     # The four insertion points, which take a block and no name.
     PSEUDO = /\A(before|prepend|append|after)_/
 
+    # A call to a tag: `<field-list fields="a, b"/>`, `<card>…</card>`.
+    #
+    # Only names **with a hyphen**, and only names Hobo has a tag for. Both
+    # halves of that matter:
+    #
+    # A hyphen, because `<card>` with no hyphen cannot be told from an element
+    # nobody has heard of, and a template that writes `<card>` meaning html
+    # would silently start calling a tag.
+    #
+    # And a tag Hobo knows, because a hyphen is exactly what a **web component**
+    # has -- `<ion-button>`, `<my-widget>` -- and those are real elements the
+    # browser respects. Rewriting every hyphenated name would break any
+    # application using one.
+    #
+    # Which leaves the case where an application has a web component named the
+    # same as a Hobo tag. Then Hobo's wins, and that is the right way round: it
+    # is the application's own template, in an application that chose Hobo.
+    TAG = /<([A-Za-z_][\w]*(?:-[\w]+)+)((?:\s[^>]*?)?)(\/?)>/
+    TAG_CLOSE = %r{</([A-Za-z_][\w]*(?:-[\w]+)+)\s*>}
+
     class << self
 
-      def transform(source)
-        return source unless source.include?(":")
+      # Whose template it is. Only the application's own are rewritten.
+      #
+      # A gem ships views as well, and rewriting somebody else's file is going
+      # into their house: whatever rule this pass follows, they never agreed to
+      # it. Inside `app/views` the rule is the application's to accept, and it
+      # accepted it by using Hobo.
+      def ours?(template)
+        return true unless defined?(Rails) && Rails.respond_to?(:root) && Rails.root
 
-        source.gsub(CLOSE) { "<% end %>" }
-              .gsub(OPEN) { opening(Regexp.last_match) }
+        path = template.respond_to?(:identifier) ? template.identifier.to_s : ""
+        path.start_with?(Rails.root.join("app").to_s)
+      end
+
+      def transform(source)
+        return source unless source.include?("<")
+
+        written = source.gsub(CLOSE) { "<% end %>" }
+                        .gsub(OPEN) { opening(Regexp.last_match) }
+
+        written.gsub(TAG_CLOSE) { |whole| known?(Regexp.last_match[1]) ? "<% end %>" : whole }
+               .gsub(TAG) { |whole| tag_call(Regexp.last_match) || whole }
+      end
+
+      # Whether Hobo has a tag with that name **right now**.
+      #
+      # Asked while the template compiles, which in an application is on the
+      # first request -- by then the catalogue and the taglibs are loaded, so
+      # the answer is settled. It is not settled in a bare process that has
+      # loaded half of Rapid, and that is a thing to know before writing a test
+      # that compiles templates without an application around them.
+      def known?(name)
+        return false unless defined?(Rapid)
+        Rapid.tags.key?(name.tr("-", "_").to_sym)
+      end
+
+      def tag_call(match)
+        name = match[1]
+        return nil unless known?(name)
+
+        ruby = "#{name.tr("-", "_")}#{arguments(match[2])}"
+        match[3].empty? ? "<%= #{ruby} do %>" : "<%= #{ruby} %>"
+      end
+
+      def arguments(attributes)
+        pairs = pairs_of(attributes)
+        pairs.empty? ? "" : "(#{pairs})"
       end
 
       private
@@ -82,12 +143,19 @@ module HoboRapid
         end
       end
 
-      # `class="big" id="x"` -> `"class" => "big", "id" => "x"`, and `&expr` is
-      # Ruby, the same as everywhere else in a param.
+      # `class="big" fields="a, b"` -> `:class => "big", :fields => "a, b"`, and
+      # `&expr` is Ruby, the same as everywhere else in a param.
+      #
+      # **Symbols**, which is what the same call written in Ruby would pass.
+      # With strings the markup form and the Ruby form were two different
+      # things: `<field-list fields="title"/>` handed `"fields"`, the tag read
+      # `attributes[:fields]`, found nothing and painted every column of the
+      # table. It looked like it worked, which is the worst way for it not to.
       def pairs_of(attributes)
         attributes.to_s.scan(/([\w-]+)\s*=\s*(["'])(.*?)\2/).map do |name, _, value|
           written = value.start_with?("&") ? "(#{value[1..]})" : value.dump
-          %("#{name}" => #{written})
+          key = name.match?(/\A[a-z_][a-z0-9_]*\z/i) ? ":#{name}" : name.dump
+          "#{key} => #{written}"
         end.join(", ")
       end
 
