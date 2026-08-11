@@ -76,6 +76,58 @@ class UpdateTest < Minitest::Test
     assert_includes names, "otra_cosa"
   end
 
+  # --- the classes -------------------------------------------------------------
+
+  # Hobo 3 emits a **role** and the theme dresses it, so a template that says
+  # the role is dressed by whichever theme is installed.
+  def test_a_theme_class_becomes_the_role
+    assert_equal %(<a class="action new">x</a>),
+                 rewrite_classes(%(<a class="btn btn-primary">x</a>))
+  end
+
+  def test_the_classes_around_it_are_left_alone
+    assert_equal %(<div class="icono-box action">x</div>),
+                 rewrite_classes(%(<div class="icono-box btn">x</div>))
+  end
+
+  # `span4` maps to `col-md-4`, which is Bootstrap 2 to Bootstrap 5: somebody
+  # else's map, thousands of classes, and not ours to keep up to date
+  # (decision 23). It is listed, not changed.
+  def test_a_bootstrap_class_is_not_touched
+    assert_equal %(<div class="span4">x</div>), rewrite_classes(%(<div class="span4">x</div>))
+  end
+
+  def test_the_bootstrap_classes_the_application_uses_are_listed
+    write("app/views/x/y.dryml", %(<div class="span4 pull-right">x</div>))
+
+    assert_equal %w[span4 pull-right].sort, updater.bootstrap_classes.sort
+  end
+
+  # `bootstrap-sass` came in with `hobo_bootstrap` in an application on that
+  # theme, and the theme brings its own Bootstrap now. In one on `clean` the
+  # application added it itself, and dropping it takes away a design nobody
+  # asked us to touch.
+  def test_bootstrap_sass_is_dropped_only_when_it_was_hobos
+    write("Gemfile", %(gem "hobo_bootstrap"\ngem "bootstrap-sass"\n))
+
+    assert_includes updater.retired_gems, "bootstrap-sass"
+  end
+
+  def test_bootstrap_sass_stays_when_the_application_added_it
+    write("Gemfile", %(gem "hobo"\ngem "bootstrap-sass"\n))
+
+    refute_includes updater.retired_gems, "bootstrap-sass"
+    assert_includes updater.kept_gems, "bootstrap-sass"
+  end
+
+  # And it is said that it will not build: Propshaft serves files, it does not
+  # process them.
+  def test_the_sass_gems_are_named
+    write("Gemfile", %(gem "hobo"\ngem "bootstrap-sass"\n))
+
+    assert_equal ["bootstrap-sass"], updater.sass_gems
+  end
+
   # --- what is read from the application --------------------------------------
 
   def test_it_counts_the_dryml_and_tells_the_generated_ones_apart
@@ -121,6 +173,19 @@ class UpdateTest < Minitest::Test
   end
 
   private
+
+  # The pass writes files, so the fixture is a file and what comes back is what
+  # is on disk.
+  def rewrite_classes(markup)
+    target = File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3")
+    FileUtils.mkdir_p(File.join(target, "app", "views", "x"))
+    file = File.join(target, "app", "views", "x", "y.dryml")
+    File.write(file, markup)
+    updater.send(:write_theme_classes)
+    File.read(file)
+  ensure
+    FileUtils.rm_rf(target)
+  end
 
   def write(path, content)
     full = File.join(@directory, path)

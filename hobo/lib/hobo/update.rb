@@ -77,7 +77,7 @@ module Hobo
       "jquery-rails" => "jQuery ya no viene de serie: gema hobo_jquery si la quieres",
       "jquery-ui-themes" => "gema hobo_jquery_ui",
       "turbolinks" => "el relevo es turbo, y ya viene",
-      "bootstrap-sass" => "gema hobo_bootstrap",
+
       "will_paginate-bootstrap" => "la paginacion la pinta el tema",
       "protected_attributes" => "los permisos del modelo dicen que se puede asignar",
       "rails-dev-boost" => "la recarga de Rails 8 ya es rapida",
@@ -133,6 +133,7 @@ module Hobo
       write_autoload_ignores
       write_callback_switch
       write_settings
+      write_theme_classes
       write_gemfile
       say ""
       say "Hecho. Ahora:"
@@ -164,6 +165,19 @@ module Hobo
       note :plugins, vendor_plugins.length, "plugins en vendor/plugins" do
         ["Rails los dejo de cargar en la 4. Hay que meterlos en lib/ o en una gema.",
          vendor_plugins.join(", ")]
+      end
+
+      note :bootstrap, bootstrap_classes.length, "clases de Bootstrap viejo en las plantillas" do
+        ["No se tocan: son marcado de la aplicacion y son de Bootstrap, no de Hobo.",
+         "Su equivalente en Bootstrap 5, por si quieres cambiarlas:"] +
+          bootstrap_classes.map { |name| "  #{name} -> #{RENAMED_IN_BOOTSTRAP[name]}" }
+      end
+
+      note :sass, (sass_gems - retired_gems).length, "gemas de Sass que no compilaran" do
+        ["Rails 8 usa Propshaft, que **sirve** ficheros y no los procesa: no hay Sass.",
+         "Se llevan al Gemfile porque son tuyas, pero su css no se generara.",
+         "O anades dartsass-rails, o pones el css ya compilado en app/assets.",
+         (sass_gems - retired_gems).join(", ")]
       end
 
       note :gems, retired_gems.length, "gemas que ya no existen" do
@@ -217,7 +231,38 @@ module Hobo
       []
     end
 
-    def retired_gems = declared_gems & RETIRED.keys
+    # `bootstrap-sass` is retired **only when it was Hobo's**.
+    #
+    # In an application on the bootstrap theme it came in with
+    # `hobo_bootstrap`, and the theme brings its own Bootstrap now. In one on
+    # `clean` the application added it itself, for its own markup, and dropping
+    # it takes away a design nobody asked us to touch.
+    def retired_gems
+      retired = declared_gems & RETIRED.keys
+      retired += ["bootstrap-sass"] if declared_gems.include?("bootstrap-sass") && used_hobo_bootstrap?
+      retired
+    end
+
+    def used_hobo_bootstrap? = declared_gems.include?("hobo_bootstrap")
+
+    # And the ones that come across and **will not build**. Rails 8 compiles no
+    # Sass: Propshaft serves files, it does not process them. Saying it here is
+    # the difference between an afternoon and a stylesheet that is simply not
+    # there.
+    SASS_GEMS = %w[bootstrap-sass sass-rails compass-rails bourbon neat].freeze
+
+    def sass_gems = declared_gems & SASS_GEMS
+
+    # Which of the renamed-in-Bootstrap classes this application actually
+    # writes. Listing the ones it does not use would be noise.
+    def bootstrap_classes
+      @bootstrap_classes ||= begin
+        written = Dir[File.join(@source, "app", "views", "**", "*.{dryml,erb}")].flat_map do |file|
+          File.read(file).scan(/class=["\']([^"\']*)["\']/).flatten.flat_map(&:split)
+        end.uniq
+        RENAMED_IN_BOOTSTRAP.keys & written
+      end
+    end
 
     # What comes across: neither Hobo 2's own nor the retired ones.
     def kept_gems = declared_gems - HOBO_2_GEMS - RETIRED.keys
@@ -450,6 +495,63 @@ module Hobo
 
       File.write(application, text)
       say "  config/application.rb (autoload_lib: #{ignored.sort.join(", ")})"
+    end
+
+    # The classes Hobo 2's theme wrote, and the **role** Hobo 3 writes instead.
+    #
+    # This is the map Hobo can own, and only this one. In Hobo 3 a tag emits a
+    # role -- `action`, `card`, `aside-box` -- and the theme turns it into
+    # whatever that theme calls it, so a template that says the role is dressed
+    # by whichever theme is installed. A template that says `btn` is asking for
+    # Bootstrap, and gets Bootstrap 5 whether it wanted it or not.
+    #
+    # `span4` is **not** here, and that is decision 23: it maps to `col-md-4`,
+    # which is Bootstrap 2 to Bootstrap 5 -- somebody else's map, thousands of
+    # classes, and not ours to keep up to date. Those are listed instead.
+    THEME_CLASSES = {
+      "btn" => "action",
+      "btn-primary" => "new",
+      "btn-danger" => "delete",
+      "btn-mini" => "small",
+      "btn-small" => "small",
+      "well" => "aside-box",
+      "row-fluid" => "row",
+    }.freeze
+
+    # The ones that are Bootstrap and have a straight rename in 5. Said, not
+    # done: they are the application's markup and its call.
+    RENAMED_IN_BOOTSTRAP = {
+      "span1" => "col-md-1", "span2" => "col-md-2", "span3" => "col-md-3",
+      "span4" => "col-md-4", "span6" => "col-md-6", "span8" => "col-md-8",
+      "span12" => "col-md-12",
+      "pull-right" => "float-end", "pull-left" => "float-start",
+      "control-group" => "mb-3", "controls" => "(ya no hace falta)",
+      "form-horizontal" => "row (en cada campo)",
+      "input-block-level" => "form-control",
+      "hero-unit" => "p-5 bg-body-tertiary rounded",
+      "thumbnail" => "card",
+      "icon-trash" => "un svg o bootstrap-icons",
+    }.freeze
+
+    def write_theme_classes
+      changed = 0
+
+      Dir[File.join(target, "app", "views", "**", "*.{dryml,erb}")].each do |file|
+        text = File.read(file)
+        before = text.dup
+
+        text.gsub!(/class=(["'])([^"']*)\1/) do
+          quote, names = Regexp.last_match(1), Regexp.last_match(2)
+          %(class=#{quote}#{names.split.map { |n| THEME_CLASSES[n] || n }.join(" ")}#{quote})
+        end
+
+        next if text == before
+        File.write(file, text)
+        changed += 1
+      end
+
+      return if changed.zero?
+      say "  #{changed} plantillas (clases del tema -> papeles de Hobo 3)"
     end
 
     # The `config.` lines the old application had said itself.
