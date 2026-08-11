@@ -172,7 +172,12 @@ module HoboRapid
         directory = Pathname.new(root || Rails.root).join("app", "views", "taglibs")
         return [] unless directory.directory?
 
-        handlers = ActionView::Template::Handlers.extensions.map(&:to_s)
+        # And not `.dryml` either, even though `hobo_dryml` registers it as a
+        # template handler: that gem loads its own taglibs, in dependency order
+        # and one definition at a time. Loaded from here they would go
+        # alphabetically and all at once, so one broken `<extend>` would take
+        # the other twenty tags in the file with it.
+        handlers = ActionView::Template::Handlers.extensions.map(&:to_s) - %w[dryml]
         found = Dir[directory.join("*.*")].filter_map do |file|
           name, *rest = File.basename(file).split(".")
           name if rest.any? { |extension| handlers.include?(extension) }

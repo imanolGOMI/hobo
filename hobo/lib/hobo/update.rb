@@ -99,8 +99,8 @@ module Hobo
     def initialize(source, write: false, name: nil, out: $stdout)
       @source = File.expand_path(source)
       @write = write
-      # `--as` para decir como se llama la nueva; si no, la vieja con `_hobo3`
-      # detras, que deja claro cual es cual sin tener que mirar dentro.
+      # `--as` names the new one; without it, the old name with `_hobo3` behind,
+      # which makes it clear which is which without looking inside.
       @name = name || "#{File.basename(@source)}_hobo3"
       @out = out
       @notes = []
