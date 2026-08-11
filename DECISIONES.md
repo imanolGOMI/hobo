@@ -64,6 +64,21 @@ decidieron así en su momento sigue más abajo, en el diario.
     `hobo_dryml`, así que `<img/>` sale igual en un `.dryml` y en ERB se escribe
     HTML. Comprobado contra 807 plantillas reales.
 
+22. **Ninguna pieza devuelve vacío cuando le falta un dato.** O pinta algo
+    legible, o se queja. Los cuatro fallos del 2026-08-11 en amenti eran el
+    mismo silencio: un atributo que no llegaba, una ruta que no resolvía, un
+    idioma que no se conservaba y una traducción que no existía. Ninguno dio
+    error; los cuatro se vieron mirando la página.
+23. **`hobo update` traduce las clases del tema, y sólo ésas.** El mapa que
+    Hobo puede tener no es «Bootstrap 2 → Bootstrap 5» -- eso es de Bootstrap y
+    son miles de clases -- sino **lo que emitía el tema de Hobo 2 → lo que
+    emite el de Hobo 3**, que son las de la tabla de `hobo_bootstrap` y de las
+    que conocemos las dos puntas. Las clases propias del usuario no se tocan.
+24. **Un framework vendorizado no cruza.** Una aplicación que se llevó dentro
+    su copia de Bootstrap 2 se queda sin ella: se avisa de qué clases quedan
+    sueltas y con qué se corresponden, y el usuario decide. Arrastrarlo sería
+    tenerlo ahí dentro cinco años más sin que nadie sepa por qué.
+
 **Cambiadas, y por qué**
 
 3. ~~Primera fase: solo aplicación nueva. Actualizar aplicaciones viejas es otra
