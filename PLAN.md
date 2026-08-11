@@ -17,72 +17,93 @@
 | Primer intento | rama `hobo_2027`, tag **`intento-1-update`**. Descartado, se conserva |
 | Método | De abajo arriba, por capas. **Parar, probar y preguntar en cada capa** |
 
-En el repo hay ahora, además de las gemas de siempre:
+**Las gemas** (revisado 2026-08-11). Son cinco, cada una en su directorio de
+`hobo_oficial_2027/`:
 
-- `hobo_bootstrap/` y `hobo_bootstrap_ui/` — copias de los repos externos
-  (no submódulos), cada una con su `ORIGEN.md`. Faltaban y son piezas clave.
+| | |
+|---|---|
+| `hobo/` | La gema. Fusión de `hobo_support`, `hobo_fields`, `dryml`, `hobo` y `hobo_rapid` |
+| `hobo_bootstrap/` | El tema Bootstrap. El tema `clean` va dentro de `hobo` |
+| `hobo_jquery/` | El comportamiento con jQuery, para quien no quiera Stimulus |
+| `hobo_jquery_ui/` | Los tags de jQuery UI |
+| `hobo_dryml/` | El lenguaje DRYML, para aplicaciones que vienen de Hobo 2 |
+
+**El estado, en una línea cada uno:**
+
+- **Aplicación nueva**: completa. `hobo new` deja una app Rails 8 que arranca,
+  con su modelo, su CRUD, su login y sus páginas derivadas. 649 pruebas.
+- **Retocar una página derivada**: hecho, en ERB y en Slim -- los siete verbos y
+  el taglib de la aplicación.
+- **Actualizar una aplicación de Hobo 2**: `hobo update` la trae entera y
+  arranca. Amenti (32 modelos, 88 plantillas, 52 gemas) responde en el 3006.
+- **DRYML**: lector y compilador hechos y probados contra las 88 plantillas de
+  amenti. Falta el mobiliario del catálogo para que las páginas se pinten.
 
 ---
 
 ## Decisiones tomadas
 
-Fecha: 2026-08-07. No volver a discutirlas salvo que aparezca información nueva.
+Revisadas una a una contra el código el **2026-08-11**. Las que ya no son
+verdad están tachadas con lo que las sustituyó: el registro de por qué se
+decidieron así en su momento sigue más abajo, en el diario.
+
+**Vigentes**
 
 1. **Empezar de cero** sobre `master`, no continuar el primer intento.
-2. **De abajo arriba, por capas**, no en rebanada vertical. Con parada, prueba y
-   preguntas al final de cada capa.
-3. **Objetivo de la primera fase: solo aplicación nueva.** `hobo new` tiene que
-   dejar una app Rails 8 que arranque, con su modelo, su CRUD y su login.
-   Actualizar aplicaciones viejas es **otra fase y otra rama**.
-4. **La compatibilidad va por ramas, no por condicionales**: `master` para lo
-   nuevo, una rama por versión antigua (`2.1`, etc.). Mezclar las dos cosas fue
-   una de las causas del lío anterior.
-5. **DRYML: se migra a Ruby, con remix.** Se conserva la *semántica*, no el
-   lenguaje. Ver «La duda abierta» más abajo: falta elegir el sustrato.
-6. **El parser de DRYML no se tira**: se reutiliza como front-end del
-   actualizador que migrará las plantillas de las apps existentes.
-7. **`will_paginate` no se toca** al actualizar. Pagy no parchea nada y convive.
-8. **Se conserva el pipeline de assets que la app tenga.** Propshaft fue un error.
-9. **Las pruebas se portan todas a minitest.** Se acaba la dependencia de
-   `rubydoctest` (abandonada en 2014) y de `irt` (2015). El estándar de Rails,
-   que corre en paralelo y da fallos legibles. La capa 0 monta el andamiaje; el
-   port de cada gema se hace en su capa, no todo de golpe.
-10. **No se vendorizan más repos de la organización por ahora.** Quedan
-    inventariados aquí abajo y clonables cuando toque la capa que los necesite.
-11. **El resultado final es UNA SOLA GEMA `hobo`**, no cinco. `hobo_support`,
-    `hobo_fields`, `dryml`, `hobo` y `hobo_rapid` se funden. Los plugins siguen
-    siendo gemas aparte (pieza 17), pero dependerán de una sola.
-    Las capas del plan siguen valiendo como **unidades de trabajo**; lo que
-    cambia es que el resultado se empaqueta junto.
-12. **La fusión se hace al final, en la capa 7.** Hasta entonces se conservan las
-    fronteras actuales para que el diff de cada capa sea legible. El precio
-    aceptado: el andamiaje (gemspec, Gemfile, Rakefile, `test_helper`) se repite
-    en cada gema y luego se tira.
-14. **El JavaScript se migra a Stimulus y Turbo** (decidido el 2026-08-07, en la
-    capa 5). Hobo trae hoy 1.045 líneas de jQuery propio (`hobo_jquery`) que
-    **no son un adorno**: son la mitad interactiva —formularios ajax,
-    `input-many`, editores en línea, búsqueda en vivo, borrado con
-    confirmación—. Rails 8 trae Stimulus y Turbo de serie, y **se migra antes de
-    portar los tags**, para que el contrato con el navegador nazca ya con la
-    forma nueva en vez de portarse dos veces.
-    > Esta decisión es **distinta** de la del sustrato de DRYML (decisión 5). Esa
-    > era sobre el servidor —DSL en Ruby frente a ViewComponent— y está tomada.
-    > Ésta es sobre el navegador, y jQuery no competía con ViewComponent sino con
-    > Stimulus. No estaba escrita en ningún sitio.
-15. **El protocolo de «partes» se sustituye por Turbo Frames** (decidido el
-    2026-08-07). Hobo traía un protocolo propio de ~2008: el navegador mandaba
-    `render[i][part_context]`, un marcador serializado de qué trozo de plantilla
-    había pintado cada nodo; el servidor llamaba a `refresh_part`, **volvía a
-    ejecutar ese trozo** con su contexto guardado; y contestaba con
-    **JavaScript** (`hjq.ajax.update("id", "<html>")`) que lo sustituía.
-    Es lo que hacen los Turbo Frames de serie, sin marcador que serializar, sin
-    viaje por la sesión y sin contestar en JavaScript.
-    > **No había opción de dejarlo como estaba:** `refresh_part` vive en el
-    > compilador viejo de DRYML, que la capa 3 sustituyó. El runtime nuevo no
-    > tiene partes.
-13. **El tema por defecto va dentro de la gema única.** Una app recién creada
-    tiene que verse bien sin instalar nada más. Los temas *alternativos* siguen
-    siendo plugins aparte.
+2. **De abajo arriba, por capas**, con parada, prueba y preguntas al final de
+   cada una.
+9. **Las pruebas, todas en minitest.** Se acabó `rubydoctest` (abandonada en
+   2014) e `irt` (2015).
+10. **No se vendorizan repos de la organización.** Se clonan y se leen.
+12. **La fusión de las gemas se hizo al final**, en la capa 7, para que el diff
+    de cada capa fuera legible.
+13. **El tema por defecto va dentro de la gema.** Una aplicación recién creada
+    se ve bien sin instalar nada. Los alternativos son gemas aparte.
+14. **El JavaScript es Stimulus y Turbo**, no jQuery. `hobo_jquery` sigue
+    existiendo como gema para quien lo quiera.
+15. **El protocolo de «partes» son Turbo Frames.** No había opción de dejarlo:
+    `refresh_part` vivía en el compilador viejo de DRYML.
+
+**Cambiadas, y por qué**
+
+3. ~~Primera fase: solo aplicación nueva. Actualizar aplicaciones viejas es otra
+   fase y otra rama.~~ → **La actualización se hace en esta misma rama**
+   (2026-08-11). El criterio de aceptación de la aplicación nueva está completo,
+   así que la fase siguiente empezó, y separarla en otra rama solo habría
+   duplicado el trabajo de mantener las dos.
+4. ~~La compatibilidad va por ramas, no por condicionales.~~ → **Va por gemas.**
+   `hobo_dryml`, `hobo_jquery` y `hobo_bootstrap` son gemas que se instalan o
+   no. Es lo mismo que perseguía la decisión original -- que lo viejo no
+   ensucie lo nuevo con condicionales -- por un camino que no obliga a mantener
+   dos ramas.
+5. ~~DRYML: se conserva la semántica, no el lenguaje.~~ → **El lenguaje también**
+   (decidido por Imanol el 2026-08-11). Razón: una aplicación como amenti tiene
+   88 plantillas en DRYML, y sin el lenguaje **no se puede ver ni una pantalla**
+   -- todo lleva a `/`, que es DRYML. Vive en la gema `hobo_dryml`, y compila
+   contra Rapid: no hay un segundo runtime.
+6. ~~El parser de DRYML no se tira: se reutiliza como front-end del
+   actualizador.~~ → **Se tiró y se escribió otro** (2026-08-11). El viejo
+   heredaba de `REXML::Parsers::BaseParser` y usaba sus constantes internas, que
+   no son API de nadie y cambian entre versiones de Ruby -- se rompió dos veces
+   en una semana. El nuevo son ~270 líneas, no depende de REXML, lleva la línea
+   de cada nodo y lee las 88 plantillas de amenti. `hobo/lib/dryml/` sigue en el
+   árbol y **ya no lo usa nadie**: es lo siguiente que hay que borrar.
+7. ~~`will_paginate` no se toca.~~ → **Hubo que parchearlo** (2026-08-11).
+   `hobo_will_paginate` usa el `try` sin argumentos de Hobo 1, que en el `try`
+   de Rails acaba en `respond_to?(nil)` y revienta: cualquier `to_a` de una
+   lista paginada tiraba la página. El parche está en
+   `hobo/lib/hobo/extensions/will_paginate.rb`.
+8. ~~Se conserva el pipeline de assets que la app tenga. Propshaft fue un
+   error.~~ → **Las aplicaciones nuevas usan Propshaft**, que es lo que trae
+   Rails 8 y lo que escribe `hobo new`. La decisión original era sobre no
+   romperle el pipeline a una aplicación existente, y para eso sigue valiendo;
+   como está escrita dice otra cosa.
+11. ~~El resultado final es UNA SOLA GEMA.~~ → **Son cinco**: `hobo`, y
+    `hobo_bootstrap`, `hobo_jquery`, `hobo_jquery_ui` y `hobo_dryml` aparte. La
+    fusión de las cinco gemas *originales* (`hobo_support`, `hobo_fields`,
+    `dryml`, `hobo`, `hobo_rapid`) sí se hizo, y esa parte de la decisión se
+    cumplió. Lo que salió después fue lo opcional: un tema, un comportamiento,
+    un lenguaje. Quien no lo quiere no lo instala.
 
 ## Reglas absolutas sobre `git push`
 
@@ -107,8 +128,8 @@ Fecha: 2026-08-07. No volver a discutirlas salvo que aparezca información nueva
 | 5 | Lifecycles | Se queda, propia ✎ | Ninguna gema de estados da lo que hace falta |
 | 6 | Scopes automáticos | Se delega → Ransack | 429 líneas, solo 3 consumidores reales |
 | 7 | View hints | Se queda y crece ★ | No existe en Rails ni en el ecosistema |
-| 8 | DRYML | Semántica sí, lenguaje no | Falta elegir sustrato |
-| 9 | RAPID (catálogo) | Se reduce poco ✎ | Fuera ~15 envoltorios triviales, no 70 |
+| 8 | DRYML | **Semántica y lenguaje** ✎ | Revisado 2026-08-11: el lenguaje vuelve, en la gema `hobo_dryml`, compilado contra Rapid |
+| 9 | RAPID (catálogo) | **A medias** ⚠ | Revisado 2026-08-11: dice 112 → ~97 y hay **36**. Ver «El catálogo, contado» |
 | 10 | Motor de derivación | Se queda ★ | *El* motivo de usar Hobo |
 | 11 | Auto-actions | Se queda | Como *concern* legible, no `method_missing` |
 | 12 | Router | Se queda, sin fichero ✎ | Fuera `config/hobo_routes.rb` |
@@ -120,6 +141,47 @@ Fecha: 2026-08-07. No volver a discutirlas salvo que aparezca información nueva
 | 17 | Contrato de plugin | Se queda, encogido ✎ | Engine + un `require` de tags + assets. Instalar = poner la gema |
 
 Sobreviven unas **11.000-12.000 líneas de 17.700**, la mitad reescritas.
+
+### El catálogo, contado (2026-08-11)
+
+La decisión 9 decía que el catálogo se reducía poco: fuera unos 15 envoltorios
+triviales de 112. **Hay 36.** Nadie eligió esos 36: el catálogo no se portó, se
+reconstruyó de dentro afuera con lo que el motor de derivación necesitaba para
+pintar `index_page`, `show_page` y `form_page`. `field-list` nunca apareció
+porque la página derivada pinta su `<dl>` a mano, ahí mismo.
+
+Dónde está cada cosa: los 112 de Hobo 2 en
+`hobo_oficial/gemas/hobo/hobo_rapid/taglibs/`, los 36 de ahora en
+`hobo/lib/hobo_rapid/tags/*.rb` (1.659 líneas, siete ficheros).
+
+De los **94 sin portar**:
+
+| | |
+|---:|---|
+| 23 | envoltorios de HTML -- `<a>`, `<br>`, `<img>`, `<table>`, `<section>`. En DRYML hacían falta porque para colgarle un `param` o un `merge-attrs` a un elemento tenía que ser *un tag*; en Ruby se escribe `tag("a", …)`. **No hay que portarlos**, y son justo los ~15 que la decisión 9 daba por fuera |
+| 11 | caché y editores en vivo -- fuera, decidido el 2026-08-07 |
+| 9 | i18n (`model-name-human`, `human-collection-name`…) -- lo hace `t` de Rails |
+| 8 | páginas de auth -- las trae Rails 8 |
+| **43** | **mobiliario de página que falta de verdad** |
+
+Y de esos 43, amenti usa **13**: `field-list` (65 usos), `form` (25), `submit`
+(16), `or-cancel` (14), `formlet` (13), `collection`, `page-nav`,
+`transition-button`, `select-input`, `new-page`, `delete-button`, `edit-page`,
+`select-menu`. Los otros 30 (`gravatar`, `search-card`, `sti-type-input`,
+`remote-method-button`…) no los usa nadie y varios son de la época del AJAX de
+Hobo 2.
+
+**Lo que esto significa, y es lo que hay que decidir:** no es un problema de la
+migración. Una aplicación nueva escrita en ERB tampoco puede escribir hoy una
+lista de campos ni un formulario suelto. El catálogo de Hobo 3 está a medias, y
+hasta dónde tiene que llegar es una decisión de producto pendiente.
+
+**Y una conclusión del spike que quedó escrita y es falsa:** en «DECISIÓN
+TOMADA: opción A» se lee que el runtime obliga a que «los tags devuelvan
+cadenas, no escriban en un buffer compartido». Rapid escribe en un buffer
+compartido (`Rapid::Context.capture`) y el problema del `param` perdido se
+resolvió de otra forma. `<table-plus>`, que fue el spike, **no está en el
+catálogo**.
 
 ---
 
@@ -262,6 +324,15 @@ sobre una app que ya existe, que es de otra fase.
 **Decisión (2026-08-07):** se queda. Esta fase es **solo para aplicaciones
 nuevas**, así que lo de las migraciones de **datos** no bloquea; cuando alguien
 lo necesite, se verá. Pendiente para la capa 7: rescatar el generador inverso.
+
+## ~~La duda abierta: el sustrato de DRYML~~ — cerrada
+
+> **Cerrada dos veces.** El 2026-08-07 se eligió el DSL en Ruby (opción A), que
+> es Rapid y es lo que hay. El 2026-08-11 Imanol decidió además que **el
+> lenguaje vuelve**, en la gema `hobo_dryml`, compilado contra ese mismo DSL. No
+> son dos sustratos: hay uno, y DRYML es una forma de escribirlo.
+>
+> Lo de abajo se queda como registro de cómo se llegó ahí.
 
 ## La duda abierta: el sustrato de DRYML
 
@@ -3072,6 +3143,24 @@ Lo que encontró mirarlas, todo por Imanol y todo invisible desde la suite:
 > se podía añadir una fila. Lo que las encontró fue abrir las dos aplicaciones y
 > comparar la misma pantalla.
 
+## ~~¿Y recuperar el lenguaje DRYML?~~ — **decidido que sí** (2026-08-11)
+
+> Imanol: *«creo que dryml llegado este punto es innegociable y deberíamos de
+> crear la versión nueva de dryml que quite las debilidades y potencie las
+> mejoras»*.
+>
+> El argumento que lo zanjó no es de gusto: una aplicación actualizada en la que
+> **no se puede ver ni una pantalla** -- porque todo lleva a `/` y `/` es DRYML
+> -- no está actualizada. Y el análisis de abajo ya decía que el trabajo duro es
+> el mismo en los dos caminos, así que el lenguaje vivo no cuesta más que el
+> traductor: cuesta lo mismo y llega más lejos.
+>
+> Hecho hasta ahora, en `hobo_dryml/`: el lector (~270 líneas, sin REXML, lee
+> las 88 plantillas de amenti), el compilador a Rapid (compila las 82 escritas a
+> mano a Ruby válido), el handler de ActionView y el cargador de taglibs.
+>
+> Lo de abajo se queda como el análisis que llevó a la decisión.
+
 ## ¿Y recuperar el lenguaje DRYML? Anotado, sin decidir (2026-08-10)
 
 Preguntado por Imanol: *«¿costaría mucho recuperar el lenguaje? ¿no merece la
@@ -3211,15 +3300,28 @@ comparar las dos aplicaciones, y cada gema nueva es una cosa más que versionar.
 escribir vistas —salvo tres líneas para decir por dónde se filtra—, funciona, y
 se parece a la de Hobo 2. Lo que queda es empaquetar y pulir.
 
-**Lo siguiente, decidido con Imanol el 2026-08-10, y por este orden:**
+**El orden que se acordó el 2026-08-10, y en qué quedó (revisado 2026-08-11):**
 
-1. **El puente de plantillas.** Params rellenados desde tu propia plantilla
-   (Slim, ERB, HAML) y tags escritos como plantilla. Ver «la pregunta de verdad»
-   más arriba: es lo que queda de DRYML que merece la pena, sin lenguaje que
-   mantener.
-2. **El actualizador** de plantillas DRYML (decisión 6), con `amenti_v2`.
-3. **Decidir sobre el lenguaje** —gema `hobo_dryml` de compatibilidad, o nada—
-   con el mapeo delante y no antes.
+1. ~~El puente de plantillas~~ **hecho** (2026-08-11). Los siete verbos en
+   `hobo_rapid/params.rb` y el taglib en `app/views/taglibs/application.html.erb`.
+2. ~~El actualizador de plantillas DRYML~~ → **se convirtió en dos cosas
+   distintas**: `hobo update`, que trae una aplicación entera de Hobo 2 a esta
+   (Gemfile, config, rutas, modelos, base de datos), y la gema `hobo_dryml`, que
+   hace innecesario convertir las plantillas.
+3. ~~Decidir sobre el lenguaje~~ **decidido: sí** (2026-08-11).
+
+**Lo que queda, por orden:**
+
+1. **Que amenti se vea en el 3006.** Falta el mobiliario de página del catálogo
+   -- 13 tags que amenti usa, ver «El catálogo, contado» -- y decidir hasta
+   dónde llega el catálogo, que es una decisión de producto y no de migración.
+2. **Repasar los dos apaños de los verbos en ERB/Slim**, que Imanol pidió
+   debatir aparte: adivinar «¿la vista escribió marcado?» mirando el texto que
+   sale, y la vista viva del taglib, que no tiene petición. Ninguno de los dos
+   afecta a DRYML, donde la intención se dice explícitamente.
+3. **Borrar `hobo/lib/dryml/`**, que ya no lo usa nadie (3.585 líneas).
+4. **Revisar DRYML viejo contra DRYML nuevo**, que Imanol pidió: qué se
+   conserva, qué se quita y qué se mejora, con las dos gramáticas delante.
 
 **Los cuatro puntos de la lista anterior están hechos** (2026-08-09). Lo que
 queda anotado, sin orden y sin prisa:
