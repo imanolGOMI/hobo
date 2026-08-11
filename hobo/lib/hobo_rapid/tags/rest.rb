@@ -220,3 +220,48 @@ Rapid.define(:edit_page) { call_tag(:form_page, all_attributes, :as => :page) }
 Rapid.define(:after_submit, :attrs => [:go_to]) do
   tag("input", { :type => "hidden", :name => "after_submit", :value => attributes[:go_to].to_s })
 end
+
+# --- the last three -------------------------------------------------------------
+
+# `<collection-input>`: how a has_many is edited. A `<select multiple>` by
+# default, and polymorphic so an application can say otherwise for one model:
+#
+#   <% define :collection_input, :for => Category do %>…<% end %>
+Rapid.define(:collection_input) { call_tag(:select_many, all_attributes, :as => :input) }
+
+# `<sti-type-input>`: which subclass a record is, when the model uses single
+# table inheritance. Without it a form on an STI model cannot say what it is
+# creating, and the record comes out as the base class.
+Rapid.define(:sti_type_input) do
+  model = this.class
+  next unless model.respond_to?(:descendants) && model.respond_to?(:base_class)
+
+  subclasses = ([model.base_class] + model.base_class.descendants).uniq.select { |c| c.respond_to?(:name) && c.name }
+  next if subclasses.length < 2
+
+  tag("select", { "name" => "#{model.base_class.name.underscore}[type]", "class" => "sti-type" }, :select) do
+    subclasses.each do |subclass|
+      chosen = subclass == model ? { "selected" => true } : {}
+      tag("option", { "value" => subclass.name }.merge(chosen)) { text subclass.name.titleize }
+    end
+  end
+end
+
+# `<with-field-names fields="title, body">`: paint the same block once per
+# field, with `scope.field_name` set to each.
+#
+# It is how `<field-list>` is built from the inside, and what a page writes when
+# it wants the rows laid out its own way but still one per field. `this` moves
+# with the name, which the Hobo 2 one did **not** do -- there it only set the
+# scope and the block had to walk into the field itself.
+Rapid.define(:with_field_names, :attrs => [:fields]) do
+  record = this
+  names = attributes[:fields].to_s.split(",").map(&:strip).reject(&:empty?)
+  names = HoboRapid::Derivation.index_columns(record.class) if names.empty? && record.respond_to?(:class)
+
+  names.each do |field|
+    Rapid::Context.with(:scope => scope.merge(:field_name => field.to_s)) do
+      with_field(field, record) { param(:default) }
+    end
+  end
+end
