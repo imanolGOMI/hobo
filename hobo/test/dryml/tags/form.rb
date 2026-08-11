@@ -152,11 +152,11 @@ Rapid::Tag.include(FormSpike::Helper)
 # has a real one now, and a stand-in that shadows the thing it stood in for is a
 # stand-in that has outlived its job.
 
-Rapid.define(:submit, :attrs => [:label]) do
+Rapid.define(:spike_submit, :attrs => [:label]) do
   tag("input", { :type => "submit", :value => attributes[:label] || "Save" })
 end
 
-Rapid.define(:or_cancel, :attrs => [:label]) do
+Rapid.define(:spike_or_cancel, :attrs => [:label]) do
   raw " or "
   tag("a", { :href => "#", :class => "cancel" }) { text attributes[:label] || "Cancel" }
 end
@@ -172,7 +172,7 @@ end
 # (hobo_rapid/taglibs/lists/feckless_fieldset.dryml); what matters here is that
 # it declares a param per field with a *computed* name, so the params a caller
 # has to reach live one tag call deeper than the <form> they name.
-Rapid.define(:field_list, :attrs => [:fields]) do
+Rapid.define(:spike_field_list, :attrs => [:fields]) do
   tag("fieldset", { :class => "field-list" }, :fieldset) do
     tag("legend", {}, :legend) if all_parameters[:legend]
 
@@ -192,7 +192,7 @@ end
 #
 # <def tag="form" polymorphic attrs="before-unload">
 
-Rapid.define(:form, :attrs => FormSpike::Helper::FORM_ATTRS + [:before_unload]) do
+Rapid.define(:spike_form, :attrs => FormSpike::Helper::FORM_ATTRS + [:before_unload]) do
   pieces = form_helper(attributes)
 
   # `unless body.nil?` in the original: no permission, no form, no complaint.
@@ -221,13 +221,13 @@ end
 #   </form>
 # </def>
 
-Rapid.define_for(:form, FormSpike::Story) do
-  call_tag(:form, attributes, :as => :default, :merge_params => true) do
+Rapid.define_for(:spike_form, FormSpike::Story) do
+  call_tag(:spike_form, attributes, :as => :default, :merge_params => true) do
     call_tag(:error_messages, {}, :as => :error_messages)
-    call_tag(:field_list, { :fields => "title, status" }, :as => :field_list)
+    call_tag(:spike_field_list, { :fields => "title, status" }, :as => :field_list)
     tag("div", { :class => "actions" }, :actions) do
-      call_tag(:submit, { :label => "Save" }, :as => :submit)
-      call_tag(:or_cancel, {}, :as => :cancel)
+      call_tag(:spike_submit, { :label => "Save" }, :as => :submit)
+      call_tag(:spike_or_cancel, {}, :as => :cancel)
     end
   end
 end

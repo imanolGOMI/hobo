@@ -18,13 +18,13 @@ class FormContractTest < Minitest::Test
   # No exceptions. Every extension point <form> declares -- its own, and those
   # of the tags it calls -- is reachable from a caller who only names <form>.
   def test_every_param_of_the_form_is_overridable
-    assert_every_param_overridable(:form, scenarios)
+    assert_every_param_overridable(:spike_form, scenarios)
   end
 
   # --- what the form itself does ----------------------------------------------
 
   def test_a_new_record_posts_to_the_collection
-    output = Rapid.render(:form, {}, :this => new_story)
+    output = Rapid.render(:spike_form, {}, :this => new_story)
 
     assert_includes output, %(<form class="new story" action="/stories" method="post">)
     refute_includes output, "_method"
@@ -32,7 +32,7 @@ class FormContractTest < Minitest::Test
 
   # Browsers do not do PUT, so Rails reads the method from a hidden field.
   def test_a_saved_record_puts_through_the_method_field
-    output = Rapid.render(:form, {}, :this => saved_story)
+    output = Rapid.render(:spike_form, {}, :this => saved_story)
 
     assert_includes output, %(action="/stories/1" method="post")
     assert_includes output, %(<input type="hidden" name="_method" value="PUT">)
@@ -43,18 +43,18 @@ class FormContractTest < Minitest::Test
   def test_no_permission_means_no_form_at_all
     locked = FormSpike::Story.new(:id => 2, :title => "Locked", :editable => false)
 
-    assert_equal "", Rapid.render(:form, {}, :this => locked)
+    assert_equal "", Rapid.render(:spike_form, {}, :this => locked)
   end
 
   def test_an_explicit_action_skips_both_the_permission_check_and_the_css_classes
     locked = FormSpike::Story.new(:id => 2, :title => "Locked", :editable => false)
-    output = Rapid.render(:form, { :action => "/custom" }, :this => locked)
+    output = Rapid.render(:spike_form, { :action => "/custom" }, :this => locked)
 
     assert_includes output, %(<form action="/custom" method="post">)
   end
 
   def test_the_base_form_renders_without_a_record
-    output = Rapid.render(:form, { :action => "/search", :method => "get" }, :this => nil)
+    output = Rapid.render(:spike_form, { :action => "/search", :method => "get" }, :this => nil)
 
     assert_includes output, %(<form action="/search" method="get">)
     refute_includes output, "authenticity_token"
@@ -63,20 +63,20 @@ class FormContractTest < Minitest::Test
   # --- polymorphic dispatch ----------------------------------------------------
 
   def test_the_model_gets_its_own_form
-    assert_includes Rapid.render(:form, {}, :this => new_story), %(name="story[title]")
-    refute_includes Rapid.render(:form, { :action => "/x" }, :this => nil), "field-list"
+    assert_includes Rapid.render(:spike_form, {}, :this => new_story), %(name="story[title]")
+    refute_includes Rapid.render(:spike_form, { :action => "/x" }, :this => nil), "field-list"
   end
 
   # The regression this port found: `<form>` inside `<def tag="form" for="Story">`
   # used to dispatch back to itself, for ever.
   def test_the_generated_form_calls_the_base_one_and_not_itself
-    assert_equal 1, Rapid.render(:form, {}, :this => new_story).scan("<form ").length
+    assert_equal 1, Rapid.render(:spike_form, {}, :this => new_story).scan("<form ").length
   end
 
   # --- the params --------------------------------------------------------------
 
   def test_the_submit_button_can_be_replaced
-    output = Rapid.render(:form, {}, :this => new_story,
+    output = Rapid.render(:spike_form, {}, :this => new_story,
                           :submit => Rapid.parameter(:replace => true) do
                             tag("button", { :class => "primary" }) { text "Publish" }
                           end)
@@ -86,7 +86,7 @@ class FormContractTest < Minitest::Test
   end
 
   def test_the_actions_are_an_element_param_so_attributes_merge
-    output = Rapid.render(:form, {}, :this => new_story,
+    output = Rapid.render(:spike_form, {}, :this => new_story,
                           :actions => Rapid.parameter(:attributes => { :class => "footer" }))
 
     assert_includes output, %(<div class="actions footer">)
@@ -96,7 +96,7 @@ class FormContractTest < Minitest::Test
   # A field's input lives two tag calls below the <form> the caller names:
   # <form> calls <field-list>, which declares one param per field.
   def test_a_field_is_reached_by_nesting_through_the_field_list
-    output = Rapid.render(:form, {}, :this => saved_story,
+    output = Rapid.render(:spike_form, {}, :this => saved_story,
                           :field_list => Rapid.parameter(
                             :params => { :title_view => Rapid.markup { tag("textarea") { text this.title } } }))
 
@@ -105,7 +105,7 @@ class FormContractTest < Minitest::Test
   end
 
   def test_a_single_field_input_can_be_replaced_without_touching_its_label
-    output = Rapid.render(:form, {}, :this => saved_story,
+    output = Rapid.render(:spike_form, {}, :this => saved_story,
                           :field_list => Rapid.parameter(
                             :params => { :title_tag => Rapid.parameter(:replace => true) { text "-" } }))
 
@@ -116,8 +116,8 @@ class FormContractTest < Minitest::Test
   # <legend param if="&all_parameters[:legend]"/>: the param only exists when
   # the caller asks for it, and the caller is two levels up.
   def test_the_legend_appears_only_when_it_is_passed
-    without = Rapid.render(:form, {}, :this => new_story)
-    with = Rapid.render(:form, {}, :this => new_story,
+    without = Rapid.render(:spike_form, {}, :this => new_story)
+    with = Rapid.render(:spike_form, {}, :this => new_story,
                         :field_list => Rapid.parameter(
                           :params => { :legend => Rapid.markup { text "Details" } }))
 
@@ -128,7 +128,7 @@ class FormContractTest < Minitest::Test
   # `<form merge param="default">`: the caller's content replaces the whole body
   # of the form, and `old` gives the standard one back.
   def test_the_body_of_the_form_can_be_replaced_wholesale
-    output = Rapid.render(:form, {}, :this => new_story,
+    output = Rapid.render(:spike_form, {}, :this => new_story,
                           :default => Rapid.markup { text "just this" })
 
     assert_includes output, "just this"
@@ -137,7 +137,7 @@ class FormContractTest < Minitest::Test
   end
 
   def test_the_replaced_body_can_wrap_the_standard_one
-    output = Rapid.render(:form, {}, :this => new_story,
+    output = Rapid.render(:spike_form, {}, :this => new_story,
                           :default => Rapid.markup { tag("div", { :class => "extra" }) { old } })
 
     assert_includes output, %(<div class="extra"><fieldset class="field-list">)
@@ -152,7 +152,7 @@ class FormContractTest < Minitest::Test
   # the real tag is the better test anyway -- it is what an application gets.
   def test_the_error_messages_render_when_the_record_has_errors
     broken = FormSpike::Story.new(:title => "", :errors => ["Title can't be blank"])
-    output = Rapid.render(:form, {}, :this => broken)
+    output = Rapid.render(:spike_form, {}, :this => broken)
 
     assert_includes output, %(class="error-messages")
     assert_includes output, %(<li>Title can&#39;t be blank</li>)
@@ -161,14 +161,14 @@ class FormContractTest < Minitest::Test
   # --- ajax and the odd attributes ---------------------------------------------
 
   def test_the_ajax_attributes_are_taken_out_of_the_html_ones
-    output = Rapid.render(:form, { :update => "comments" }, :this => new_story)
+    output = Rapid.render(:spike_form, { :update => "comments" }, :this => new_story)
 
     assert_includes output, %(data-rapid-form="update")
     refute_includes output, %(update="comments")
   end
 
   def test_multipart_sets_the_encoding
-    output = Rapid.render(:form, { :multipart => true }, :this => new_story)
+    output = Rapid.render(:spike_form, { :multipart => true }, :this => new_story)
 
     assert_includes output, %(enctype="multipart/form-data")
   end
@@ -186,14 +186,14 @@ class FormPseudoParameterTest < Minitest::Test
   # handed -- inside the <form>, after the standard body -- which is the
   # "append parameter uses the default parameter" scenario of the feature.
   def test_append_on_a_tag_call_goes_inside_the_content_it_was_given
-    output = Rapid.render(:form, {}, :this => new_story,
+    output = Rapid.render(:spike_form, {}, :this => new_story,
                           :append_default => Rapid.markup { tag("p") { text "Small print" } })
 
     assert_includes output, "<p>Small print</p></form>"
   end
 
   def test_prepend_on_a_tag_call_goes_before_the_content
-    output = Rapid.render(:form, {}, :this => new_story,
+    output = Rapid.render(:spike_form, {}, :this => new_story,
                           :prepend_default => Rapid.markup { tag("p") { text "Heads up" } })
 
     assert_includes output, %(<p>Heads up</p><fieldset class="field-list">)
@@ -202,14 +202,14 @@ class FormPseudoParameterTest < Minitest::Test
   # It is applied once, not once per level: <form> forwards its params to the
   # base <form>, which declares a param of the same name.
   def test_it_is_applied_once_even_though_the_params_are_forwarded
-    output = Rapid.render(:form, {}, :this => new_story,
+    output = Rapid.render(:spike_form, {}, :this => new_story,
                           :append_default => Rapid.markup { text "ONCE" })
 
     assert_equal 1, output.scan("ONCE").length
   end
 
   def test_before_and_after_go_outside_the_whole_call
-    output = Rapid.render(:form, {}, :this => new_story,
+    output = Rapid.render(:spike_form, {}, :this => new_story,
                           :before_submit => Rapid.markup { text "[" },
                           :after_submit => Rapid.markup { text "]" })
 
@@ -217,14 +217,14 @@ class FormPseudoParameterTest < Minitest::Test
   end
 
   def test_without_removes_a_tag_call
-    output = Rapid.render(:form, { :without_submit => true }, :this => new_story)
+    output = Rapid.render(:spike_form, { :without_submit => true }, :this => new_story)
 
     refute_includes output, %(<input type="submit")
     assert_includes output, "Cancel"
   end
 
   def test_they_are_reached_through_nesting_too
-    output = Rapid.render(:form, {}, :this => new_story,
+    output = Rapid.render(:spike_form, {}, :this => new_story,
                           :field_list => Rapid.parameter(
                             :params => { :append_title_label => Rapid.markup { text " *" } }))
 
@@ -235,7 +235,7 @@ class FormPseudoParameterTest < Minitest::Test
   # given, so appending to it cannot work. Saying so beats dropping it.
   def test_appending_to_a_tag_that_ignores_its_content_is_refused
     error = assert_raises(ArgumentError) do
-      Rapid.render(:form, {}, :this => new_story,
+      Rapid.render(:spike_form, {}, :this => new_story,
                    :append_submit => Rapid.markup { text "!" })
     end
 

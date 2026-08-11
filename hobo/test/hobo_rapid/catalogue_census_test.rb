@@ -124,6 +124,12 @@ class CatalogueCensusTest < Minitest::Test
   # y, si hace falta, con qué atributos. Una ficha de una línea por tag es
   # justamente la documentación que no había.
   CENSUS = {
+    # --- los de forms/, portados de Hobo 2 el 2026-08-11 --------------------------
+    :field_list => [:record, { :fields => "title, body" }],
+    :form => [:record, {}],
+    :formlet => [:record, {}],
+    :submit => [:nothing, { :label => "Guardar" }],
+    :or_cancel => [:record, {}],
     # --- los de html/, portados de Hobo 2 el 2026-08-11 ---------------------------
     #
     # No son elementos: DRYML decide con una lista (`static_tags`) y estos estan
