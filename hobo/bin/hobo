@@ -7,6 +7,25 @@
 #
 #   rails new blog -m $(gem which hobo)/../generators/hobo/app_template.rb
 
+# **Este fichero se escribe en Ruby conservador a proposito.**
+#
+# `hobo update` se ejecuta dentro de la aplicacion que se va a actualizar, y esa
+# aplicacion fija su version de Ruby -- 1.9.3 en una de Hobo 2. El interprete
+# analiza el fichero **entero** antes de ejecutar una linea, asi que un `&.` o un
+# heredoc con `~` no dan un aviso util: dan un error de sintaxis en la primera
+# orden que alguien escribe de Hobo. Sin `&.` y sin `<<~`, el aviso de abajo
+# llega a imprimirse.
+if (RUBY_VERSION.split(".").map { |n| n.to_i } <=> [3, 2, 0]) < 0
+  abort(
+    "\nHobo 3 necesita Ruby 3.2 o mas; este es el #{RUBY_VERSION}.\n\n" +
+    "Si estas dentro de una aplicacion vieja, es **su** Ruby el que manda.\n" +
+    "Ejecutalo con el tuyo:\n\n" +
+    "    RBENV_VERSION=3.4.6 hobo update\n\n" +
+    "o desde fuera, diciendo cual es la aplicacion:\n\n" +
+    "    hobo update mi_app\n\n"
+  )
+end
+
 require "fileutils"
 
 TEMPLATE = File.expand_path("../lib/generators/hobo/app_template.rb", __dir__)
@@ -42,20 +61,25 @@ when "update"
 
   source = ARGV.find { |argument| !argument.start_with?("-") } || Dir.pwd
   write = ARGV.include?("--write")
-  name = ARGV.grep(/\A--as=/).first&.split("=", 2)&.last
+  con_valor = lambda do |bandera, por_defecto|
+    encontrada = ARGV.grep(/\A--#{bandera}=/).first
+    encontrada ? encontrada.split("=", 2).last : por_defecto
+  end
+  name = con_valor.call("as", nil)
+  theme = con_valor.call("theme", "clean")
   begin
-    Hobo::Update.new(source, :write => write, :name => name).run
+    Hobo::Update.new(source, :write => write, :name => name, :theme => theme).run
   rescue Hobo::Update::Error
     exit 1
   end
 when "version", "--version", "-v"
   puts File.read(File.expand_path("../VERSION", __dir__)).strip
 else
-  puts <<~USO
+  puts <<-USO.gsub(/^ {4}/, "")
     Hobo
 
       hobo new <app> [opciones]                Crea una aplicacion
-      hobo update [<app>] [--write]            Trae una aplicacion de Hobo 2:
+      hobo update [<app>] [--write] [--theme=]  Trae una aplicacion de Hobo 2:
                                                sin --write mira y cuenta, con
                                                --write escribe <app>_hobo3 al
                                                lado, sin tocar la vieja.

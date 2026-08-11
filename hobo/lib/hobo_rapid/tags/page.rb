@@ -292,3 +292,50 @@ module HoboRapid
   end
 
 end
+
+# --- the bar, written by hand (piece 13a, finished 2026-08-11) ----------------
+#
+# `<main-nav>` builds the bar from the models that have a page, which is what a
+# new application wants. These two are the other half: the bar written item by
+# item, which is what an application writes when the order matters, or when a
+# dropdown goes in the middle, or when one entry is not a model at all.
+#
+# They were in **the theme** in Hobo 2 -- `hobo_clean/taglibs/nav.dryml` -- and
+# that was the design error decision 13a names: with the nav in the theme,
+# changing theme changed which tags existed, and a template written for one
+# would not compile under another. The nav is not a matter of taste.
+
+Rapid.define(:navigation, :attrs => [:class]) do
+  tag("ul", all_attributes.merge("class" => ["nav", attributes[:class]].compact.join(" ")), :items) do
+    param(:default)
+  end
+end
+
+# `<nav-item with="&Expediente">Expedientes</nav-item>`
+#
+# The url comes from what it is painting -- a model goes to its index -- or from
+# `href`. With no content it says the name of the model, which is what made the
+# bar one line per entry.
+Rapid.define(:nav_item, :attrs => [:href, :current]) do
+  target = attributes[:href] || path_for(this)
+  next if target.nil?
+
+  here = attributes[:current] || (HoboRapid.query_parameters["__path"].to_s == target)
+  classes = ["nav-item", ("current" if here)].compact.join(" ")
+
+  tag("li", { "class" => classes }, :item) do
+    tag("a", { "href" => target, "class" => "nav-link" }, :link) do
+      param(:default) do
+        model = this.is_a?(Module) ? this : this.class
+        text HoboRapid::Derivation.plural_of(model)
+      end
+    end
+  end
+end
+
+# One transition of a lifecycle, as a button. `<transition-buttons>` paints them
+# all; this is the one an application names when it wants a single one
+# somewhere of its own.
+Rapid.define(:transition_button, :attrs => [:transition, :label]) do
+  call_tag(:transition_link, all_attributes, :as => :button)
+end

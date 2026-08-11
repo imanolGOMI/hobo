@@ -96,12 +96,13 @@ module Hobo
       "listen" => "ya viene",
     }.freeze
 
-    def initialize(source, write: false, name: nil, out: $stdout)
+    def initialize(source, write: false, name: nil, theme: "clean", out: $stdout)
       @source = File.expand_path(source)
       @write = write
       # `--as` names the new one; without it, the old name with `_hobo3` behind,
       # which makes it clear which is which without looking inside.
       @name = name || "#{File.basename(@source)}_hobo3"
+      @theme = theme
       @out = out
       @notes = []
     end
@@ -131,6 +132,7 @@ module Hobo
       write_controller_fixes
       write_autoload_ignores
       write_callback_switch
+      write_settings
       write_gemfile
       say ""
       say "Hecho. Ahora:"
@@ -222,11 +224,29 @@ module Hobo
 
     # --- writing ---------------------------------------------------------------
 
+    # The skeleton, built **from somewhere else**.
+    #
+    # `rails new` refuses to run inside the directory of another Rails
+    # application, and `hobo new` inherits that. Which is exactly where this is
+    # run from: you go into your application and say `hobo update`. Without the
+    # `chdir` the command fails on its first step, in the one place everybody
+    # will use it.
     def build_skeleton
       FileUtils.rm_rf(target)
       hobo = File.expand_path("../../bin/hobo", __dir__)
-      system(hobo, "new", target, "--theme=bootstrap", "--skip-migration",
-             :out => File::NULL) or abort_with("`hobo new` fallo")
+
+      Dir.chdir(File.dirname(target)) do
+        system(hobo, "new", target, *skeleton_flags, :out => File::NULL) or
+          abort_with("`hobo new` fallo")
+      end
+    end
+
+    # What the new application is generated with. The theme is the one question
+    # that shows on every page, so it is asked rather than assumed; the rest are
+    # `hobo new`'s own defaults, and `hobo:setup_wizard` changes any of them
+    # later in an application that already exists.
+    def skeleton_flags
+      ["--theme=#{@theme}", "--skip-migration"]
     end
 
     def carry
@@ -430,6 +450,41 @@ module Hobo
 
       File.write(application, text)
       say "  config/application.rb (autoload_lib: #{ignored.sort.join(", ")})"
+    end
+
+    # The `config.` lines the old application had said itself.
+    #
+    # `config/application.rb` is regenerated -- it has to be, five Rails
+    # versions changed it -- and the application's own settings went with it.
+    # The one that showed was `i18n.default_locale = :es`: the locale files were
+    # carried, the application ran in English, and every `<t key="…">` in every
+    # template came back empty. Not an error anywhere: an empty label.
+    #
+    # Only `config.` lines and only ones Rails 8 still has, one per line, so a
+    # setting that no longer exists is left behind rather than carried into a
+    # boot failure.
+    KEPT_SETTINGS = %w[
+      i18n.default_locale i18n.available_locales i18n.fallbacks
+      time_zone active_record.default_timezone
+      action_mailer.default_url_options action_mailer.delivery_method
+      hobo.app_name
+    ].freeze
+
+    def write_settings
+      old = File.read(File.join(@source, "config", "application.rb"))
+      lines = KEPT_SETTINGS.filter_map do |setting|
+        found = old[/^\s*(config\.#{Regexp.escape(setting)}\s*=.*)$/, 1]
+        "    #{found}" if found
+      end
+      return if lines.empty?
+
+      application = File.join(target, "config", "application.rb")
+      text = File.read(application)
+      block = "\n    # De la aplicacion vieja, dichas por ella.\n#{lines.join("\n")}\n"
+      return unless text.sub!(/^(\s*config\.autoload_lib.*\n)/) { "#{$1}#{block}" }
+
+      File.write(application, text)
+      say "  config/application.rb (#{lines.length} ajustes de la vieja)"
     end
 
     # Since Rails 7.1 a filter that names an action the controller does not have
