@@ -53,6 +53,14 @@ module Hobo
           return say("#{user_file} ya es un modelo de Hobo.", :yellow) if lifecycle_lines.empty? || lifecycle_written?
 
           say "#{user_file} ya es un modelo de Hobo: se le anade el ciclo de vida.", :green
+
+          # Y **fuera los permisos simples**, que los escribio este mismo
+          # generador para una aplicacion sin ciclo de vida y dicen lo contrario:
+          # `create_permitted? = true` contra `= self.class.count.zero?`. Los dos
+          # en la misma clase no es una duda, es que gana el de abajo -- y el de
+          # abajo es el que sobra: con activacion o invitaciones, crear un
+          # usuario a pelo es cosa del primero y de nadie mas.
+          gsub_file(user_file, PERMISOS_SIMPLES, "", :verbose => false)
           # **Detras del `include`**, y no con `inject_into_class`, que escribe
           # al principio de la clase: el ciclo de vida se declara con un metodo
           # que trae `Hobo::Model`, asi que puesto encima se ejecuta antes de
@@ -60,7 +68,7 @@ module Hobo
           #
           # Y una cadena, no un array: `indent` trabaja con texto, y con un
           # array devolvia algo que se escribia sin poner nada.
-          return inject_into_file(user_file, indent((["", *lifecycle_lines].join("\n") + "\n"), 2),
+          return inject_into_file(user_file, indent((["", *flag_lines].join("\n") + "\n"), 2),
                                   :after => /include Hobo::Model\n/)
         end
 
@@ -80,6 +88,9 @@ module Hobo
       end
 
       private
+
+      # El bloque de permisos que se escribe cuando **no** hay ciclo de vida.
+      PERMISOS_SIMPLES = /^[ \t]*# --- Permissions ---\n(?:.*?\n)*?[ \t]*def view_permitted\?\(_field\) = true\n/.freeze
 
       def already_taught?
         File.read(File.join(destination_root, user_file)).include?("include Hobo::Model")
@@ -120,6 +131,21 @@ module Hobo
           RUBY
           return lines.join("\n") + "\n"
         end
+
+        (lines + flag_lines).join("\n") + "\n"
+      end
+
+      # Todo lo que existe **solo porque hay un ciclo de vida**: el ciclo, quien
+      # puede entrar, el primer usuario y, con invitaciones, el campo de
+      # administrador y el relleno de la cuenta invitada.
+      #
+      # Vive aparte porque hace falta dos veces: al escribir el modelo entero y
+      # al anadirselo a uno que ya era de Hobo. Inyectando solo el ciclo de vida
+      # --que es lo que se hacia-- quedaba una aplicacion a medias: la cuenta
+      # nacia apagada y **se entraba igual**, porque la guarda que lo impide
+      # estaba en la otra mitad.
+      def flag_lines
+        lines = []
 
         if invite_only?
           lines << "# Who may invite. The first person in is the administrator, which is"
@@ -192,7 +218,7 @@ module Hobo
           def destroy_permitted? = false
           def view_permitted?(_field) = true
         RUBY
-        lines.join("\n") + "\n"
+        lines
       end
 
       def lifecycle_lines
