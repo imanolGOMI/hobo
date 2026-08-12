@@ -97,5 +97,19 @@ Rapid.define(:table_plus, :attrs => [:fields, :sort_columns]) do
     headings = model ? HoboRapid::Sorting.headings_for(model, Array(attributes[:sort_columns])) : {}
 
     call_tag(:table, rest.merge(:empty => true), :as => :table, **headings)
+
+    # Y las dos cosas que hacen que esto sea el «plus» y no una tabla.
+    #
+    # Faltaban las dos, y las dos estaban escritas: `<table empty>` pinta la
+    # tabla aunque no haya filas, asi que sin el mensaje lo que se ve es una
+    # cabecera sola y ni una palabra de por que. Y sin la barra de paginas, de
+    # una coleccion de 4.000 expedientes se ven treinta y **no hay forma de
+    # llegar a los demas** -- que es justo lo que un listado paginado tiene que
+    # resolver. En Hobo 2 iban aqui dentro, detras de la tabla.
+    #
+    # Cuando pintarse lo decide cada una: el mensaje mira si hay filas y la
+    # barra si hay mas de una pagina. Por eso se llaman siempre.
+    call_tag(:empty_collection_message, {}, :as => :empty_message) if Array(this).empty?
+    call_tag(:page_nav, {}, :as => :page_nav)
   end
 end
