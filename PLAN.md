@@ -162,7 +162,36 @@ porque Rails no tiene gancho de lectura.
 
 ---
 
----
+## Para cuando toque portar los plugins de jQuery
+
+Un patrón mental que Imanol quiere que se siga, antes de escribir un controlador
+de Stimulus desde cero para cada plugin:
+
+1. **¿Lo resuelve ya Bootstrap 5 de serie?** — carrusel, colapsables, modales,
+   tooltips y desplegables vienen dentro. Desde 2026-08-12 el tema trae también
+   su JavaScript, así que están disponibles sin hacer nada.
+2. **Si no, mirar Stimulus Components y Rails Blocks** antes de escribir nada.
+   Cubren la mayoría de los casos corrientes (carruseles, datepickers,
+   tooltips, colapsables, modales a medida).
+3. Y sólo entonces, escribirlo.
+
+## La medida de las clases de Bootstrap (2026-08-12)
+
+Hecha contra las hojas de verdad —el Bootstrap 2 que amenti vendoriza, un
+Bootstrap 3.2 del disco `E:` y nuestro 5.3.8— y contra las **867 plantillas** de
+`/mnt/e/APSOFT/UnoyCero/aplicaciones`. El guion está en el diario.
+
+| | |
+|---|---|
+| Clases distintas que escriben las plantillas | 863 |
+| De ésas, existían en Bootstrap 2 o 3 y **no** en el 5 | 77 (1.291 apariciones) |
+| Iconos (`icon-*`, sin traducción posible) | 23 clases / 163 apariciones |
+| El resto | 54 clases / 1.128 apariciones |
+| De ese resto, lo que hoy reescribe `hobo update` | 8 clases / 329 apariciones |
+| Lo que no está en la tabla | 41 clases / 602 apariciones |
+
+Y **45 de las 77 murieron ya en el salto 2→3**, no en el 4→5: por eso hace
+falta leer las dos guías, la de 3→4 y la de 4→5, y además la de 2→3.
 
 ## Lo siguiente, por orden
 
