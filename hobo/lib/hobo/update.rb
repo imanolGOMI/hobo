@@ -203,8 +203,15 @@ module Hobo
         ["Sin mantener desde 2018. La declaracion se traduce a has_one_attached;",
          "**los ficheros no**. Paperclip los dejaba donde dijera su :path y cuatro",
          "columnas al lado del registro; ActiveStorage guarda un blob en sus tablas.",
-         "Moverlos es lo unico que nadie puede hacer a ciegas: estan en un disco o en",
-         "un bucket, y solo la aplicacion sabe cual.",
+         "",
+         "Y esas tablas **no estan en tu base de datos**, que es de antes de que",
+         "ActiveStorage existiera. Es lo primero que falla, y no al arrancar sino en",
+         "la primera pagina que toque un adjunto, con «Could not find table",
+         "'active_storage_blobs'». Las crea Rails:",
+         "  bin/rails active_storage:install && bin/rails db:migrate",
+         "",
+         "Despues quedan los ficheros. Moverlos es lo unico que nadie puede hacer a",
+         "ciegas: estan en un disco o en un bucket, y solo la aplicacion sabe cual.",
          "Las columnas que quedan sin uso: #{paperclip_columns.first(8).join(", ")}",
          paperclip_models.first(6).join(", ")]
       end
