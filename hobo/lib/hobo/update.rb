@@ -774,7 +774,22 @@ module Hobo
                                 .select { |file| File.read(file).match?(SPROCKETS_DIRECTIVE) }
     end
 
-    SPROCKETS_DIRECTIVE = /^\s*[*#\/]*=\s*(require_self|require_tree|require_directory|require)\s*(\S*)/
+    # `[^\S\n]` y no `\s`: **espacios de la misma linea**.
+    #
+    # Con `\s*` delante del argumento, `require_self` --que no lleva ninguno--
+    # se comia el salto de linea y se quedaba con el `*=` de la linea siguiente.
+    # Esa linea dejaba entonces de empezar una directiva, y **la siguiente
+    # peticion de la lista desaparecia**. En un manifiesto de Rails, que es
+    # `require_self` y detras todo lo demas, eso es exactamente lo que pasa:
+    #
+    #     *= require_self
+    #     *= require application   <- esta no se veia
+    #     *= require hobo_rapid
+    #
+    # En amenti se perdio su `application.css` entero -- la hoja con sus propias
+    # reglas -- y con el, entre otras cosas, que el texto de las tablas no fuera
+    # azul. Sin ruido: el fichero se escribia, con todo lo demas dentro.
+    SPROCKETS_DIRECTIVE = /^[^\S\n]*[*#\/]*=[^\S\n]*(require_self|require_tree|require_directory|require)[^\S\n]*(\S*)/
 
     # A manifest, turned into the css it stood for. In order, because in css the
     # last rule wins and Sprockets kept the order of the directives.
@@ -1001,11 +1016,30 @@ module Hobo
     # `raise: false` es lo que esa linea queria decir: quitalo si esta.
     def write_repeatable_opt_out(concern)
       text = File.read(concern)
-      return unless text.sub!(/skip_before_action :require_authentication, \*\*options/,
-                              "skip_before_action :require_authentication, **{ :raise => false }.merge(options)")
+      changed = []
+
+      changed << "librarse dos veces no revienta" if
+        text.sub!(/skip_before_action :require_authentication, \*\*options/,
+                  "skip_before_action :require_authentication, **{ :raise => false }.merge(options)")
+
+      # Salir sin haber entrado por Rails.
+      #
+      # `terminate_session` hace `Current.session.destroy`, y la sesion de Rails 8
+      # es **una fila en una tabla** que esta aplicacion no tiene: aqui se entra
+      # por la sesion de Hobo. Asi que «Salir» --y ponerse «Invitado» en el
+      # selector, que es lo mismo por dentro-- contestaba
+      # `NoMethodError: undefined method 'destroy' for nil` en vez de cerrar la
+      # sesion. Un boton de salir que revienta es de las cosas que peor sientan.
+      #
+      # Con la guarda vale para los dos casos y no cambia nada para quien si
+      # tiene sesion de Rails.
+      changed << "salir sin sesion de Rails no revienta" if
+        text.sub!(/Current\.session\.destroy/, "Current.session&.destroy")
+
+      return if changed.empty?
 
       File.write(concern, text)
-      say "  app/controllers/concerns/authentication.rb (librarse dos veces no revienta)"
+      say "  app/controllers/concerns/authentication.rb (#{changed.join("; ")})"
     end
 
     # The routes, which are the application's and have to come across, written
