@@ -324,14 +324,14 @@ class TablePlusContractTest < Minitest::Test
   }.freeze
 
   def test_every_param_of_table_plus_is_overridable
-    assert_every_param_overridable(:table_plus, scenarios, :except => EXCEPTIONS)
+    assert_every_param_overridable(:spike_table_plus, scenarios, :except => EXCEPTIONS)
   end
 
   # The params whose name is computed at render time are the ones spike C lost.
   # Named here so a regression says which one broke.
   def test_the_params_with_a_computed_name_are_overridable_one_by_one
     %i[title_heading title_heading_link status_heading status_heading_link].each do |name|
-      output = render_tag(:table_plus, scenarios.first, name => ParamContract.replacement)
+      output = render_tag(:spike_table_plus, scenarios.first, name => ParamContract.replacement)
       assert_includes output, ParamContract::SENTINEL, "se perdio #{name.inspect}"
     end
   end
@@ -339,7 +339,7 @@ class TablePlusContractTest < Minitest::Test
   # `<title-heading: class="shouty">TITLE!</title-heading:>`: the <th> stays,
   # the class is merged onto it and only the content changes.
   def test_overriding_one_computed_param_leaves_its_neighbour_alone
-    output = render_tag(:table_plus, scenarios.first,
+    output = render_tag(:spike_table_plus, scenarios.first,
                         :title_heading => Rapid.parameter(:attributes => { :class => "shouty" }) { text "TITLE!" })
 
     assert_includes output, %(<th class="shouty">TITLE!</th>)
@@ -349,7 +349,7 @@ class TablePlusContractTest < Minitest::Test
   # The gap this closes: a param of <table>, reached from a caller of
   # <table-plus> by nesting through the call <table-plus> makes to it.
   def test_a_param_of_the_table_is_reached_by_nesting_through_it
-    output = render_tag(:table_plus, scenarios.first,
+    output = render_tag(:spike_table_plus, scenarios.first,
                         :table => Rapid.parameter(
                           :params => { :row => Rapid.markup { tag("td", { :class => "mine" }) { text this.title } } }))
 
@@ -358,7 +358,7 @@ class TablePlusContractTest < Minitest::Test
   end
 
   def test_the_heading_row_of_the_table_is_reached_by_nesting_through_it
-    output = render_tag(:table_plus, scenarios.first,
+    output = render_tag(:spike_table_plus, scenarios.first,
                         :table => Rapid.parameter(
                           :params => { :field_heading_row => Rapid.markup { tag("th") { text "Just one" } } }))
 
@@ -367,8 +367,8 @@ class TablePlusContractTest < Minitest::Test
 
   # all_parameters: a tag can ask whether the caller supplied a param at all.
   def test_all_parameters_reports_what_the_caller_passed
-    without = render_tag(:table_plus, scenarios.first)
-    with    = render_tag(:table_plus, scenarios.first, :controls => Rapid.markup { text "" })
+    without = render_tag(:spike_table_plus, scenarios.first)
+    with    = render_tag(:spike_table_plus, scenarios.first, :controls => Rapid.markup { text "" })
 
     refute_includes without, %(<th class="controls">)
     assert_includes with, %(<th class="controls">)

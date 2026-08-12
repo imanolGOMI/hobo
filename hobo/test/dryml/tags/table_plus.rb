@@ -43,7 +43,18 @@ Rapid.define(:with_field_names, :attrs => [:fields]) do
 end
 
 # A cut-down <table>: enough to show merge-params and a parameter tag with body.
-Rapid.define(:table, :attrs => [:fields, :empty]) do
+# `spike_table` y no `table`: **el registro de tags es global**.
+#
+# Este fichero es un spike y sus tags eran una version recortada de los de
+# verdad. Mientras el catalogo no tenia `<table>` daba igual; desde que la
+# pagina derivada llama al `<table>` del catalogo, la del spike se lo comia --
+# gana el que cargue el ultimo -- y la lista de un `index-page` salia sin clase,
+# sin cabeceras y con el registro en crudo en cada celda. Fallaba en otra suite,
+# nunca aqui, y solo al correrlas juntas.
+#
+# Es el mismo motivo por el que los otros tres se llaman `spike_*`, dicho ya en
+# `rapid_fixtures.rb`; a estos dos les faltaba el cambio.
+Rapid.define(:spike_table, :attrs => [:fields, :empty]) do
   tag("table", attributes.except(:fields, :empty)) do
     tag("thead") { param(:field_heading_row) }
     tag("tbody") do
@@ -59,7 +70,7 @@ end
 #
 # <def tag="table-plus" attrs="sort-field, sort-direction, sort-columns">
 
-Rapid.define(:table_plus, :attrs => [:sort_field, :sort_direction, :sort_columns]) do
+Rapid.define(:spike_table_plus, :attrs => [:sort_field, :sort_direction, :sort_columns]) do
   # <% sort_field ||= @sort_field; sort_columns ||= {} %>
   sort_field     = attributes[:sort_field]     || controller_ivar(:@sort_field)
   sort_direction = attributes[:sort_direction] || controller_ivar(:@sort_direction)
@@ -81,7 +92,7 @@ Rapid.define(:table_plus, :attrs => [:sort_field, :sort_direction, :sort_columns
     end
 
     # <table merge-attrs="..." empty merge-params param>
-    call_tag(:table,
+    call_tag(:spike_table,
              other_attrs.slice(*attrs_for(:table), *attrs_for(:with_field_names))
                .merge(:empty => true),
              :as => :table,
