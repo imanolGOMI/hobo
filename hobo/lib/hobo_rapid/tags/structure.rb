@@ -61,6 +61,11 @@ end
 
 # Every message the application left, in the order it left them.
 Rapid.define(:flash_messages) do
+  # Sin avisos no hay caja. El tema le da fondo y borde --es un aviso--, y
+  # pintarla vacia deja un rectangulo gris en lo alto de **todas** las paginas
+  # que no tienen nada que decir, que son casi todas.
+  next if flash_messages.values.all?(&:blank?)
+
   tag("div", { :class => "flash-messages" }, :messages) do
     flash_messages.each_key do |kind|
       call_tag(:flash_message, { :type => kind }, :as => :"#{kind}_message")

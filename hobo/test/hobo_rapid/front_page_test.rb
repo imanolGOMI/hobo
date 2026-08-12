@@ -134,16 +134,20 @@ class FrontPageTest < Minitest::Test
   # administrador era «You are now the site administrator» dos veces seguidas.
   #
   # Dicho sobre la caja y no sobre el mensaje: lo que se arregló es que la
-  # portada **dejara de pintar la suya**, y eso se ve haya mensajes o no. Contar
-  # el texto de un aviso obligaba a que el aviso llegase, que depende de media
-  # docena de cosas ajenas a esto.
+  # portada **dejara de pintar la suya**.
+  #
+  # Con un aviso puesto, porque desde que la caja vacía no se pinta -- un
+  # rectángulo gris en lo alto de cada página que no tiene nada que decir -- no
+  # hay caja que contar si no hay nada dentro.
   #
   # Con `<page>` cargada a propósito, porque el duplicado solo existe cuando la
   # hay: sin tema, `in_page` pinta el contenido a secas.
   def test_the_flash_is_painted_once_inside_the_page
     require "hobo_rapid/tags/page"
 
-    html = with_users(1) { Rapid.render(:front_page, {}) }
+    html = HoboRapid.with_request(nil, nil, { :notice => "Hecho" }) do
+      with_users(1) { Rapid.render(:front_page, {}) }
+    end
 
     assert_equal 1, html.scan(%(class="flash-messages")).length, html
   end
