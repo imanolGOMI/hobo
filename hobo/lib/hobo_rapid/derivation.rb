@@ -420,7 +420,11 @@ module HoboRapid
                 #         call_tag(:search_filter, :fields => "title, synopsis")
                 #         call_tag(:filter_menu, :field => "category")
                 #       } %>
-                tag("div", { :class => "filters" }, :filters)
+                # Y vacio **no se pinta**: el tema le da fondo y borde, porque
+                # cuando lleva filtros es una barra, y sin ellos deja una caja
+                # gris flotando encima del listado de cada pagina derivada que
+                # no los usa -- que son todas menos las que los piden.
+                tag("div", { :class => "filters" }, :filters) if all_parameters.key?(:filters)
 
                 if records.empty?
                   tag("p", { :class => "empty" }, :empty) { text t(:"index.empty", "Nothing here yet.") }

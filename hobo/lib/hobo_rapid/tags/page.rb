@@ -182,7 +182,14 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
           tag("div", { :class => "content content-#{content_size}" }, :main_column) do
             tag("section", { :class => "content-inner" }, :content) do
               tag("section", { :class => "main-content" }, :main_content) do
-                tag("header", { :class => "content-header" }, :content_header)
+                # Vacia no se pinta. El tema la viste de tarjeta --con fondo y
+                # borde, porque una cabecera de contenido lo lleva-- y una
+                # pagina que no la usa se quedaba con una caja gris flotando
+                # encima de todo. Las paginas derivadas pintan la suya **dentro**
+                # del cuerpo, asi que salian las dos: la de verdad y el hueco.
+                if all_parameters.keys.any? { |name| name.to_s.end_with?("content_header") }
+                  tag("header", { :class => "content-header" }, :content_header)
+                end
                 tag("section", { :class => "content-body" }, :content_body)
               end
             end

@@ -202,6 +202,7 @@ module Hobo
       write_bootstrap_classes
       write_stylesheets
       write_stylesheet_selectors
+      write_box_model
       write_asset_urls
       write_javascript_shadowing
       write_attachments
@@ -716,6 +717,48 @@ module Hobo
 
       say "  #{moved.length} javascript a legacy/ (tapaban el de Rails 8): " \
           "#{moved.map { |file| File.basename(file) }.join(", ")}"
+    end
+
+    # `height` dejo de significar lo mismo en Bootstrap 3.
+    #
+    # Bootstrap 3 puso `box-sizing: border-box` a todo, y desde entonces la
+    # altura **incluye el relleno**. Una hoja escrita para Bootstrap 2 dice
+    #
+    #     div.tabla-enlazada td a { display:block; padding:8px; height:20px }
+    #
+    # queriendo 20 de texto y 16 de aire: 36 en total. Con la regla nueva son 20
+    # contando el relleno, o sea 4 para un texto de 16, y **el texto se sale de
+    # la celda**. En el listado de expedientes de amenti las filas quedaban
+    # partidas por la mitad.
+    #
+    # Se le devuelve el significado que tenia **solo donde la hoja pidio una
+    # altura teniendo relleno**, que es donde cambio: en el resto, `border-box`
+    # es lo que quiere todo el mundo y lo que espera Bootstrap 5. No se tocan
+    # los tamanos: se dice de que se estaba hablando.
+    def write_box_model
+      changed = 0
+      rules = 0
+
+      Dir[File.join(target, "app", "assets", "stylesheets", "**", "*.css")].each do |file|
+        text = File.read(file)
+        before = text.dup
+
+        text.gsub!(/\{([^{}]*)\}/) do
+          body = Regexp.last_match(1)
+          next Regexp.last_match(0) unless body.match?(/(?<![-\w])height\s*:/) && body.match?(/(?<![-\w])padding(-|\s*:)/)
+          next Regexp.last_match(0) if body.match?(/box-sizing\s*:/)
+
+          rules += 1
+          "{#{body.rstrip.chomp(";")};box-sizing:content-box}"
+        end
+
+        next if text == before
+        File.write(file, text)
+        changed += 1
+      end
+
+      return if changed.zero?
+      say "  #{rules} reglas con altura y relleno (box-sizing como en Bootstrap 2)"
     end
 
     # Los selectores de la hoja de la aplicacion que nombran clases del tema
