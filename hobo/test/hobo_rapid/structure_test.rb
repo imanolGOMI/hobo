@@ -36,11 +36,15 @@ class StructureTest < Minitest::Test
     def viewable_by?(_user, _field = nil) = true
   end
 
+  # El flash se pone donde lo pone la aplicacion de verdad, que es el puente.
+  #
+  # Antes se redefinia `Rapid::Tag#flash_messages` y el `ensure` **no lo dejaba
+  # como estaba**: lo dejaba devolviendo `{}` para siempre. A partir de ahi,
+  # cualquier prueba de otro fichero que pintase un aviso lo veia vacio, segun
+  # el orden en que tocara correr. Un `ensure` que restaura otra cosa es peor
+  # que no tener `ensure`.
   def render(tag_name, this = nil, flash: {})
-    Rapid::Tag.class_eval { define_method(:flash_messages) { flash } }
-    Rapid.render(tag_name, {}, :this => this)
-  ensure
-    Rapid::Tag.class_eval { define_method(:flash_messages) { {} } }
+    HoboRapid.with_request(nil, nil, flash) { Rapid.render(tag_name, {}, :this => this) }
   end
 
   # --- flash ------------------------------------------------------------------
