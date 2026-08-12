@@ -32,7 +32,16 @@ module Hobo
           extend ClassMethods
 
 
-          helper_method :model, :current_user
+          # `this` tambien, y no es un detalle: es **el registro de la pagina**.
+          #
+          # Una plantilla `.dryml` se compila a `rapid_tag(:x_page, defined?(this)
+          # ? this : nil)`, y sin exponerlo aqui ese `defined?` es falso siempre:
+          # todas las paginas que escribe una aplicacion de Hobo 2 se pintaban
+          # **sin registro**. Se veia como cosas sueltas -- el alta de amenti
+          # salia con los campos del registro de Rails 8 en vez de los suyos,
+          # porque sin `this` no hay modelo al que preguntarle nada -- y era una
+          # sola causa. En Hobo 2 `this` estaba en la vista desde el primer dia.
+          helper_method :model, :current_user, :this
           before_action :set_no_cache_headers
 
           # Con un tema puesto, las paginas de Hobo **son el documento entero**
@@ -1080,11 +1089,17 @@ module Hobo
         end
       end
 
-      # Through the bridge, not straight to the runtime: `rapid_tag` is what
-      # hands the acting user, the forgery token and the flash to the tags.
-      # Calling Rapid.render directly skipped all three, so every derived page
-      # was painted as if nobody were logged in -- a form with no inputs, and
-      # no actions anywhere.
+      render_rapid_page(tag_name)
+    end
+
+    # Paint a tag and answer with it.
+    #
+    # Through the bridge, not straight to the runtime: `rapid_tag` is what hands
+    # the acting user, the forgery token and the flash to the tags. Calling
+    # Rapid.render directly skipped all three, so every derived page was painted
+    # as if nobody were logged in -- a form with no inputs, and no actions
+    # anywhere.
+    def render_rapid_page(tag_name)
       painted = rapid_tag(tag_name, this, **(@hobo_declared_params || {}))
 
       # A theme paints the whole document -- `<html>`, `<head>`, the lot -- so

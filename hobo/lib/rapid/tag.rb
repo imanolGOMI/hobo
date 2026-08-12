@@ -45,6 +45,24 @@ module Rapid
     def this_field  = Context.this_field
     def scope       = Context.scope
 
+    # De qué es la página: la clase de lo que se está pintando.
+    #
+    # Una plantilla lo escribe tal cual --`<model-name-human model="&model"/>`,
+    # que es como se pone el título de un listado-- y en Hobo 2 lo contestaba el
+    # controlador, que lo exponía a la vista. Aquí no había nadie: la primera
+    # página privada de amenti moría con «undefined local variable or method
+    # 'model'» dentro de su propio `<heading:>`.
+    #
+    # Las tres formas en que puede llegar, que ya se resolvían a mano y sueltas
+    # en cuatro tags del catálogo: una colección sabe su clase (`klass`), un
+    # array hay que preguntárselo al primero, y un registro es su propia clase.
+    def model
+      return this if this.is_a?(Class)
+      return this.klass if this.respond_to?(:klass)
+      return this.first&.class if this.is_a?(Array)
+      this&.class
+    end
+
     # The declared type of what is being painted. When there is a value, it is
     # the value's own class -- a rich type is a real class, so `:markdown` holds
     # a Markdown, not a String. When there is not, the parent model still knows
