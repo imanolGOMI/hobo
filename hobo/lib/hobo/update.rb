@@ -192,6 +192,7 @@ module Hobo
       write_routes
       write_model_fixes
       write_controller_fixes
+      write_rails_renames
       write_authentication
       write_autoload_ignores
       write_callback_switch
@@ -909,6 +910,36 @@ module Hobo
 
       return if changed.empty?
       say "  #{changed.length} controladores (before_filter -> before_action)"
+    end
+
+    # `update_attributes` se llama `update` desde Rails 6.1.
+    #
+    # Del mismo tipo que `before_filter`: un metodo de Rails que cambio de
+    # nombre, no una gema de nadie. Se reescribe por eso, y en toda la
+    # aplicacion y no solo en los controladores -- donde mas aparece es en los
+    # modelos, dentro de callbacks, que es donde revienta mas tarde: `amenti`
+    # perdia el alta entera en un `after_create` de Factura.
+    #
+    # El de la exclamacion tambien, y en ese orden: reescribir primero el corto
+    # dejaria `update!attributes`.
+
+    def write_rails_renames
+      changed = []
+
+      Dir[File.join(target, "app", "**", "*.rb")].each do |file|
+        text = File.read(file)
+        before = text.dup
+
+        text.gsub!(/\bupdate_attributes!/, "update!")
+        text.gsub!(/\bupdate_attributes\b/, "update")
+
+        next if text == before
+        File.write(file, text)
+        changed << file.sub("#{target}/", "")
+      end
+
+      return if changed.empty?
+      say "  #{changed.length} ficheros (update_attributes -> update)"
     end
 
     # Rails' authentication, wired into the `ApplicationController` that came
