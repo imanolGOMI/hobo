@@ -137,7 +137,11 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
       # old theme got it from `navbar-inner`, which Bootstrap 5 dropped.
       tag("nav", { :class => "navbar" }, :navbar) do
         tag("div", { :class => "navbar-inner" }, :navbar_container) do
-          tag("div", {}, :app_name) do
+          # Con su clase de papel, como los cuatro huecos del contenido: una
+          # aplicacion pone ahi su logo desde el css --amenti tiene
+          # `.app-name a.brand{background-image:url(logo_mini.png)}`-- y sin
+          # nombre al que agarrarse la marca se queda en el texto pelado.
+          tag("div", { :class => "app-name" }, :app_name) do
             tag("a", { :class => "brand", :href => "#{base_url}/" }) { call_tag(:app_name, {}, :as => :app_name_link) }
           end
           if nav_location.blank? || nav_location == "top"

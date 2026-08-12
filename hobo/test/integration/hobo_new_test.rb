@@ -34,9 +34,11 @@ class HoboNewTest < Minitest::Test
       assert_empty Dir[File.join(app, "app", "views", "stories", "*")],
                    "hobo:resource no deberia escribir vistas: las deriva"
 
-      # The migration is written from the model, not by hand: one for Story, and
-      # the two Rails' authentication generator brings.
-      assert_equal 3, Dir[File.join(app, "db", "migrate", "*.rb")].length, output
+      # The migration is written from the model, not by hand. Son cuatro: las
+      # dos que trae el generador de autenticacion de Rails, la que `hobo new`
+      # escribe para el `name` que le anade al usuario -- sin el, una persona es
+      # «User 1» en toda la aplicacion -- y la de Story.
+      assert_equal 4, Dir[File.join(app, "db", "migrate", "*.rb")].length, output
 
       # And it is *run*. `hobo:migration` refuses to work while another
       # generator has left pending migrations, so this used to come out as an

@@ -141,7 +141,14 @@ module Hobo
           lines << "# validation context is the **step's name** (:invite), which is what"
           lines << "# lets a model say `validates :x, :on => :signup`. A callback asking"
           lines << "# for :create never fires there. The state is the guard that matters."
+          lines << "#"
+          lines << "# Y el nombre, que este modelo declara obligatorio: quien invita solo"
+          lines << "# sabe la direccion, y sin nombre **no se puede invitar a nadie** -- el"
+          lines << "# formulario contesta \"Name can't be blank\" y no hay campo donde"
+          lines << "# ponerlo. Se pone uno provisional con la parte de delante de la"
+          lines << "# direccion, y la persona lo cambia al aceptar."
           lines << "before_validation do"
+          lines << "  self.name = email_address.to_s.split(\"@\").first if new_record? && name.blank?"
           lines << "  if new_record? && state.to_s == \"invited\" && password_digest.blank?"
           lines << "    self.password_digest = BCrypt::Password.create(SecureRandom.hex(32))"
           lines << "  end"
@@ -203,7 +210,7 @@ module Hobo
               end
 
               transition :accept_invitation, { :invited => :active }, :available_to => :key_holder,
-                         :params => [:password, :password_confirmation]
+                         :params => [:name, :password, :password_confirmation]
             end
           RUBY
         else
@@ -213,8 +220,13 @@ module Hobo
               state :inactive, :default => true
               state :active
 
+              # `:name` tambien: **el paso solo deja pasar lo que declara**, que
+              # es la capa de permisos haciendo su trabajo, y este modelo declara
+              # el nombre obligatorio. Sin el en la lista, el formulario lo pide,
+              # la persona lo escribe, el paso lo tira y el alta contesta «Name
+              # can't be blank» senalando un campo que si estaba relleno.
               create :signup, :available_to => :all,
-                     :params => [:email_address, :password, :password_confirmation],
+                     :params => [:name, :email_address, :password, :password_confirmation],
                      :become => :inactive, :new_key => true do
                 UserMailer.activation(self, lifecycle.key).deliver_now
                 # Development has nowhere to send mail, and an account nobody can
