@@ -3,6 +3,7 @@
 # `respond_with` at class level came out of Rails core in 5.0.
 require 'responders'
 require 'hobo/controller'
+require 'hobo/controller/layout'
 
 module Hobo
   module Controller
@@ -50,7 +51,10 @@ module Hobo
           # suyo lo dice como en cualquier controlador de Rails:
           #
           #   layout "application"
-          layout -> { Hobo.pages_are_whole_documents? ? false : nil }
+          # `Hobo::Controller::Layout` asks the template instead of deciding by
+          # the controller: a `.dryml` page brings its own document, an
+          # `.html.erb` view still wants the layout.
+          include Hobo::Controller::Layout
 
           rescue_from ActiveRecord::RecordNotFound, :with => :not_found unless Rails.env.development?
 

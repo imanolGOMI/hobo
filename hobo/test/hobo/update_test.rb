@@ -121,17 +121,71 @@ class UpdateTest < Minitest::Test
                  rewrite_classes(%(<div class="icono-box btn">x</div>))
   end
 
-  # `span4` maps to `col-md-4`, which is Bootstrap 2 to Bootstrap 5: somebody
-  # else's map, thousands of classes, and not ours to keep up to date
-  # (decision 23). It is listed, not changed.
-  def test_a_bootstrap_class_is_not_touched
+  # El paso del tema no las toca: son de Bootstrap, no de Hobo, y las cambia el
+  # paso de al lado.
+  def test_a_bootstrap_class_is_not_the_theme_pass_business
     assert_equal %(<div class="span4">x</div>), rewrite_classes(%(<div class="span4">x</div>))
   end
 
-  def test_the_bootstrap_classes_the_application_uses_are_listed
-    write("app/views/x/y.dryml", %(<div class="span4 pull-right">x</div>))
+  # --- Bootstrap 2 -> Bootstrap 5 -------------------------------------------------
+  #
+  # Se listaban y no se tocaban, y eso se cayo al mirar la pagina: `span5` y
+  # `span7` son las dos columnas de la portada de amenti, y sin ellas todo queda
+  # en una tira. `hidden` es peor -- en Bootstrap 5 no existe, asi que lo que
+  # estaba escondido **aparece**.
 
-    assert_equal %w[span4 pull-right].sort, updater.bootstrap_classes.sort
+  def test_the_grid_is_rewritten
+    assert_equal %(<div class="col-md-5">x</div>), rewrite_bootstrap(%(<div class="span5">x</div>))
+  end
+
+  def test_hidden_becomes_the_class_that_still_hides
+    assert_equal %(<h1 class="d-none">Amenti</h1>), rewrite_bootstrap(%(<h1 class="hidden">Amenti</h1>))
+  end
+
+  # Bootstrap 5 lee sus atributos con `bs` delante, y sin eso su javascript no
+  # se entera de que el componente existe: el carrusel se queda quieto con todas
+  # las fotos una encima de otra.
+  def test_the_data_attributes_get_their_bs
+    assert_includes rewrite_bootstrap(%(<a data-slide="prev" data-target="#c">x</a>)), %(data-bs-slide="prev")
+    assert_includes rewrite_bootstrap(%(<a data-slide="prev" data-target="#c">x</a>)), %(data-bs-target="#c")
+  end
+
+  # `item` es demasiado corriente para cambiarlo en cualquier sitio, y dentro de
+  # un carrusel tiene que ser `carousel-item` o las fotos se apilan.
+  def test_item_becomes_carousel_item_only_inside_a_carousel
+    inside = %(<div class="carousel-inner"><div class="active item">x</div></div>)
+
+    assert_includes rewrite_bootstrap(inside), %(class="active carousel-item")
+    assert_equal %(<li class="item">x</li>), rewrite_bootstrap(%(<li class="item">x</li>))
+  end
+
+  # Bootstrap 2 le daba `max-width: 100%` a toda imagen y Bootstrap 3 quito esa
+  # regla: sin clases, la foto sale a tamano natural y rompe la columna.
+  def test_the_photo_gets_the_classes_that_keep_it_inside
+    inside = %(<div class="carousel-inner"><div class="item"><img src="/a.png"/></div></div>)
+
+    assert_includes rewrite_bootstrap(inside), %(<img src="/a.png" class="d-block w-100"/>)
+  end
+
+  def test_an_image_that_already_says_its_classes_is_left_alone
+    inside = %(<div class="carousel-inner"><div class="item"><img src="/a.png" class="mia"/></div></div>)
+
+    assert_includes rewrite_bootstrap(inside), %(class="mia")
+    refute_includes rewrite_bootstrap(inside), "d-block"
+  end
+
+  def test_the_arrows_get_their_own_names
+    inside = %(<div class="carousel-inner">x</div><a class="carousel-control left">&lsaquo;</a>)
+
+    assert_includes rewrite_bootstrap(inside), %(class="carousel-control-prev")
+  end
+
+  # Y lo que no tiene traduccion exacta -- un icono, que en Bootstrap 5 es otra
+  # gema o un svg -- se sigue nombrando y no se toca.
+  def test_only_what_cannot_be_rewritten_is_listed
+    write("app/views/x/y.dryml", %(<div class="span4 icon-trash">x</div>))
+
+    assert_equal ["icon-trash"], updater.bootstrap_classes
   end
 
   # `bootstrap-sass` came in with `hobo_bootstrap` in an application on that
@@ -348,6 +402,17 @@ class UpdateTest < Minitest::Test
     File.read(file)
   ensure
     FileUtils.rm_rf(target)
+  end
+
+  def rewrite_bootstrap(markup)
+    target = File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3")
+    FileUtils.mkdir_p(File.join(target, "app", "views", "x"))
+    file = File.join(target, "app", "views", "x", "y.dryml")
+    File.write(file, markup)
+    updater.send(:write_bootstrap_classes)
+    File.read(file)
+  ensure
+    FileUtils.rm_rf(File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3"))
   end
 
   def rewrite_model(name, content)

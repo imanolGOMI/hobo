@@ -245,16 +245,47 @@ class ControllerTest < Minitest::Test
     refute Hobo.pages_are_whole_documents?
   end
 
-  def test_a_hobo_controller_asks_for_no_layout_when_it_paints_the_document
-    controller = controller_class.new
+  # La pregunta se le hace **a la plantilla**, no al controlador. Una pagina
+  # `.dryml` trae el documento entero -- el `<!DOCTYPE>`, el `<html>`, la cabeza
+  # y el cuerpo -- asi que el layout de Rails la envolveria en un segundo
+  # documento: dos `<head>`, dos mapas de importaciones y Stimulus registrado
+  # dos veces. Una vista `.html.erb` no trae nada de eso y lo sigue queriendo.
+  def test_a_dryml_page_asks_for_no_layout_when_it_paints_the_document
+    controller = with_template("app/views/stories/index.dryml")
 
-    painting(true) { assert_equal false, controller.send(:_layout, controller.lookup_context, [], nil) }
+    painting(true) { assert_equal false, controller.send(:hobo_layout) }
+  end
+
+  def test_an_erb_view_keeps_the_layout
+    controller = with_template("app/views/stories/index.html.erb")
+
+    painting(true) { assert_nil controller.send(:hobo_layout) }
   end
 
   def test_and_lets_the_layout_wrap_it_when_there_is_no_theme
-    controller = controller_class.new
+    controller = with_template("app/views/stories/index.dryml")
 
-    painting(false) { assert_nil controller.send(:_layout, controller.lookup_context, [], nil) }
+    painting(false) { assert_nil controller.send(:hobo_layout) }
+  end
+
+  # Una accion sin plantilla -- un `redirect_to` -- no puede quedarse sin
+  # contestar.
+  def test_no_template_is_not_an_error
+    painting(true) { assert_nil controller_class.new.send(:hobo_layout) }
+  end
+
+  # Un contexto de busqueda que devuelve la plantilla que se le diga, que es lo
+  # unico que `hobo_layout` le pregunta.
+  def with_template(identifier)
+    template = Struct.new(:identifier).new(identifier)
+    context = Object.new
+    context.define_singleton_method(:prefixes) { [] }
+    context.define_singleton_method(:find_all) { |*| [template] }
+
+    controller = controller_class.new
+    controller.define_singleton_method(:lookup_context) { context }
+    controller.define_singleton_method(:action_name) { "index" }
+    controller
   end
 
 end

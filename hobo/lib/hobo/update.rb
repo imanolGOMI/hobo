@@ -161,6 +161,7 @@ module Hobo
       write_callback_switch
       write_settings
       write_theme_classes
+      write_bootstrap_classes
       write_stylesheets
       write_attachments
       write_gemfile
@@ -201,9 +202,9 @@ module Hobo
          vendor_plugins.join(", ")]
       end
 
-      note :bootstrap, bootstrap_classes.length, "clases de Bootstrap viejo en las plantillas" do
-        ["No se tocan: son marcado de la aplicacion y son de Bootstrap, no de Hobo.",
-         "Su equivalente en Bootstrap 5, por si quieres cambiarlas:"] +
+      note :bootstrap, bootstrap_classes.length, "clases de Bootstrap viejo que hay que mirar a mano" do
+        ["Las de la rejilla, los flotados y el carrusel se cambian solas -- tienen una",
+         "traduccion exacta. Estas no la tienen y se quedan como estan:"] +
           bootstrap_classes.map { |name| "  #{name} -> #{RENAMED_IN_BOOTSTRAP[name]}" }
       end
 
@@ -402,7 +403,10 @@ module Hobo
         written = Dir[File.join(@source, "app", "views", "**", "*.{dryml,erb}")].flat_map do |file|
           File.read(file).scan(/class=["\']([^"\']*)["\']/).flatten.flat_map(&:split)
         end.uniq
-        RENAMED_IN_BOOTSTRAP.keys & written
+        # Menos las que se cambian solas: nombrar algo que el comando ya ha
+        # hecho es ruido, y el informe deja de decir la verdad en cuanto una
+        # cosa esta en las dos listas.
+        (RENAMED_IN_BOOTSTRAP.keys & written) - REWRITTEN_IN_BOOTSTRAP.keys
       end
     end
 
@@ -730,7 +734,11 @@ module Hobo
           "  # controladores de sesion y de claves. Quien tiene que identificarse lo\n" \
           "  # sigue decidiendo esta aplicacion, como ya lo hacia.\n" \
           "  include Authentication\n" \
-          "  allow_unauthenticated_access\n\n"
+          "  allow_unauthenticated_access\n\n" \
+          "  # Una pagina de Hobo es el documento entero, asi que el layout de\n" \
+          "  # Rails la envolveria en un segundo <html>. Lo decide la plantilla:\n" \
+          "  # una `.dryml` trae su documento y una `.html.erb` sigue con layout.\n" \
+          "  include Hobo::Controller::Layout\n\n"
       end
       return unless opened
 
@@ -959,6 +967,89 @@ module Hobo
 
       return if changed.zero?
       say "  #{changed} plantillas (clases del tema -> papeles de Hobo 3)"
+    end
+
+    # Bootstrap 2 -> Bootstrap 5, **escrito y no solo dicho**.
+    #
+    # Esto era una lista en el informe y ya no lo es. La razon de listarlas era
+    # buena -- es marcado de la aplicacion llamando a Bootstrap, no a Hobo -- y
+    # se cayo al mirar la pagina: `span5` y `span7` son las dos columnas de la
+    # portada, y sin ellas todo queda en una sola tira. `hidden` es peor: en
+    # Bootstrap 5 no existe, asi que **lo que estaba escondido aparece**, y la
+    # portada de amenti salio con un titulo duplicado que llevaba trece anos
+    # oculto. Una pagina que no se puede usar no es "el diseno del usuario".
+    #
+    # Se cambia solo lo que tiene una traduccion exacta y comprobable: la
+    # rejilla, los flotados, el carrusel y sus atributos. Lo que no la tiene --
+    # los iconos, que en Bootstrap 5 son otra gema o un svg -- se sigue
+    # nombrando y no se toca. Y la aplicacion vieja no se toca nunca: esto se
+    # escribe en la copia nueva, al lado.
+    REWRITTEN_IN_BOOTSTRAP = {
+      "row-fluid" => "row",
+      "pull-right" => "float-end", "pull-left" => "float-start",
+      "hidden" => "d-none",
+      "input-block-level" => "form-control",
+      "hero-unit" => "p-5 bg-body-tertiary rounded",
+      "thumbnail" => "card",
+      "nav-collapse" => "collapse navbar-collapse",
+      "btn-navbar" => "navbar-toggler",
+      "control-group" => "mb-3",
+    }.merge((1..12).to_h { |n| ["span#{n}", "col-md-#{n}"] }).freeze
+
+    # Los atributos que mueven los componentes. Bootstrap 5 los lee con `bs`
+    # delante, y sin eso el javascript no se entera de que existen: el carrusel
+    # se queda quieto con todas las fotos una encima de otra.
+    BOOTSTRAP_DATA = %w[toggle target slide slide-to dismiss parent ride spy].freeze
+
+    def write_bootstrap_classes
+      changed = 0
+
+      Dir[File.join(target, "app", "views", "**", "*.{dryml,erb}")].each do |file|
+        text = File.read(file)
+        before = text.dup
+
+        text.gsub!(/class=(["'])([^"']*)\1/) do
+          quote, names = Regexp.last_match(1), Regexp.last_match(2)
+          %(class=#{quote}#{names.split.flat_map { |n| (REWRITTEN_IN_BOOTSTRAP[n] || n).split }.uniq.join(" ")}#{quote})
+        end
+
+        BOOTSTRAP_DATA.each { |name| text.gsub!(/\bdata-#{name}=/, "data-bs-#{name}=") }
+        rewrite_carousel(text)
+
+        next if text == before
+        File.write(file, text)
+        changed += 1
+      end
+
+      return if changed.zero?
+      say "  #{changed} plantillas (clases de Bootstrap 2 -> Bootstrap 5)"
+    end
+
+    # El carrusel, que necesita saber donde esta.
+    #
+    # `item` es un nombre demasiado corriente para cambiarlo en cualquier sitio,
+    # y dentro de un carrusel **tiene que** ser `carousel-item` o las fotos se
+    # apilan. Asi que solo se toca en una plantilla que tiene un carrusel, y las
+    # flechas, que en Bootstrap 2 se decian con `left` y `right` y ahora tienen
+    # nombre propio.
+    def rewrite_carousel(text)
+      return text unless text.include?("carousel-inner")
+
+      text.gsub!(/class=(["'])([^"']*\bitem\b[^"']*)\1/) do
+        quote, names = Regexp.last_match(1), Regexp.last_match(2)
+        %(class=#{quote}#{names.split.map { |n| n == "item" ? "carousel-item" : n }.join(" ")}#{quote})
+      end
+      text.gsub!(/carousel-control left/, "carousel-control-prev")
+      text.gsub!(/carousel-control right/, "carousel-control-next")
+
+      # Y la foto, que se sale. Bootstrap 2 le ponia `max-width: 100%` a toda
+      # imagen; Bootstrap 3 quito esa regla global y desde entonces se pide con
+      # clases. Sin ellas la foto sale a tamano natural y rompe la columna, que
+      # es como se veia el carrusel de amenti: una imagen enorme desbordando.
+      text.gsub!(/(class="[^"]*carousel-item[^"]*"[^>]*>\s*<img)((?![^>]*\bclass=)[^>]*?)(\s*\/?>)/m) do
+        "#{Regexp.last_match(1)}#{Regexp.last_match(2)} class=\"d-block w-100\"#{Regexp.last_match(3)}"
+      end
+      text
     end
 
     # The `config.` lines the old application had said itself.
