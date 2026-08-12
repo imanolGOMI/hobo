@@ -121,6 +121,14 @@ module Hobo
         { :gem => "offsite_payments", :becomes => "OffsitePayments::ActionViewHelper",
           :and => "money",
           :since => "activemerchant 2.0 las saco a una gema aparte" },
+      # Y esta sale donde menos se espera. `factory_girl` es una gema de
+      # pruebas, pero amenti la llama desde un `after_create` del modelo -- la
+      # cuenta de demo se rellena con una factoria --, o sea desde el codigo que
+      # corre de verdad. El alta se quedaba en un 500 con «uninitialized
+      # constant FactoryGirl» **despues** de crear el usuario.
+      "FactoryGirl" =>
+        { :gem => "factory_bot", :becomes => "FactoryBot",
+          :since => "factory_girl se llama factory_bot desde 2017" },
     }.freeze
 
     def initialize(source, write: false, name: nil, theme: "clean", out: $stdout)
@@ -161,9 +169,12 @@ module Hobo
       write_autoload_ignores
       write_callback_switch
       write_settings
+      write_belongs_to_switch
       write_theme_classes
       write_bootstrap_classes
       write_stylesheets
+      write_stylesheet_selectors
+      write_asset_urls
       write_attachments
       write_gemfile
       say ""
@@ -557,6 +568,108 @@ module Hobo
       say "  app/assets/stylesheets (#{written.uniq.join(", ")}: directivas de Sprockets resueltas)"
     end
 
+    # `url('/assets/fondo_portada.png')`, que era la forma de escribirlo con
+    # Sprockets y con Propshaft es un 404.
+    #
+    # Propshaft sirve cada fichero con su huella --`fondo_portada-a1b2c3.png`--
+    # y reescribe los `url(...)` de las hojas para apuntar ahi. Lo hace por la
+    # **ruta logica**, y `resolve_path` con `/` delante lo unico que hace es
+    # quitar la barra: `/assets/fondo_portada.png` va a buscar
+    # `assets/fondo_portada.png`, que no es la ruta logica de nada -- la de esa
+    # imagen es `fondo_portada.png`, porque `app/assets/images` es una raiz.
+    # Propshaft no lo encuentra, avisa en el log y deja la ruta como estaba.
+    #
+    # En amenti eran las tres imagenes del fondo de la portada: el blanco de la
+    # caja y la franja de arriba desaparecieron, y en la pagina parecia que el
+    # tema estaba mal puesto.
+    #
+    # Quitar `/assets` deja `/fondo_portada.png`, que Propshaft si resuelve, y
+    # **la barra de delante importa**: sin ella la ruta se resuelve contra el
+    # directorio de la hoja, y una hoja en `front/` iria a buscar
+    # `front/fondo_portada.png`. Solo se toca lo que existe: una referencia a un
+    # fichero que no esta se queda como esta y se cuenta aparte, porque
+    # reescribirla seria cambiar un 404 por otro y esconder el motivo.
+    def write_asset_urls
+      changed = 0
+      missing = []
+
+      Dir[File.join(target, "app", "assets", "stylesheets", "**", "*.css")].each do |file|
+        text = File.read(file)
+        before = text.dup
+
+        text.gsub!(/url\(\s*(["']?)\/assets\/([^"'\s?#)]+)\1\s*\)/) do
+          quote, path = Regexp.last_match(1), Regexp.last_match(2)
+          if asset_exists?(path)
+            %(url(#{quote}/#{path}#{quote}))
+          else
+            missing << path
+            Regexp.last_match(0)
+          end
+        end
+
+        next if text == before
+        File.write(file, text)
+        changed += 1
+      end
+
+      say "  #{changed} hojas (url(/assets/…) -> la ruta que resuelve Propshaft)" if changed.positive?
+      return if missing.empty?
+
+      say "  #{missing.uniq.length} imagenes que una hoja pide y no estan; se dejan como estaban:"
+      missing.uniq.first(5).each { |path| say "    /assets/#{path}" }
+    end
+
+    # Los selectores de la hoja de la aplicacion que nombran clases del tema
+    # viejo. Ver `THEME_WRAPPERS`.
+    #
+    # Se reescribe el selector y no el html porque **la clase no es suya**: no
+    # la escribe ninguna plantilla de la aplicacion, la ponia el tema. Y solo
+    # las que tienen equivalente exacto; de las otras se avisa.
+    def write_stylesheet_selectors
+      changed = 0
+      renamed = Hash.new(0)
+      orphans = Hash.new(0)
+
+      Dir[File.join(target, "app", "assets", "stylesheets", "**", "*.css")].each do |file|
+        text = File.read(file)
+        before = text.dup
+
+        THEME_WRAPPERS.each do |old, new|
+          text.gsub!(/(?<![\w-])\.#{Regexp.escape(old)}(?![\w-])/) do
+            renamed[old] += 1
+            ".#{new}"
+          end
+        end
+
+        WRAPPERS_WITHOUT_NAME.each do |name|
+          orphans[name] += text.scan(/(?<![\w-])\.#{Regexp.escape(name)}(?![\w-])/).length
+        end
+
+        next if text == before
+        File.write(file, text)
+        changed += 1
+      end
+
+      if changed.positive?
+        say "  #{changed} hojas (#{renamed.keys.length} clases del tema viejo -> las de Hobo 3):"
+        renamed.sort_by { |_, count| -count }.each { |old, count| say "    .#{old} -> .#{THEME_WRAPPERS[old]} (#{count})" }
+      end
+
+      orphans.reject! { |_, count| count.zero? }
+      return if orphans.empty?
+
+      say "  #{orphans.keys.length} clases del tema viejo que su hoja usa y el tema nuevo no pinta:"
+      orphans.sort_by { |_, count| -count }.each { |name, count| say "    .#{name} (#{count}) -- el tema pinta ahi un elemento sin clase" }
+    end
+
+    # Donde Propshaft busca: cada directorio de `app/assets` es una raiz, y la
+    # ruta logica cuelga de ahi.
+    def asset_exists?(path)
+      Dir[File.join(target, "app", "assets", "*")].any? do |root|
+        File.directory?(root) && File.exist?(File.join(root, path))
+      end
+    end
+
     def stylesheet_manifests
       @stylesheet_manifests ||= Dir[File.join(@source, "app", "assets", "stylesheets", "*.{css,scss,sass}")]
                                 .select { |file| File.read(file).match?(SPROCKETS_DIRECTIVE) }
@@ -924,6 +1037,50 @@ module Hobo
       "row-fluid" => "row",
     }.freeze
 
+    # Las clases que ponia **el tema**, no la aplicacion, y que su hoja usa.
+    #
+    # Son de otra especie que las de arriba y por eso van aparte. `well` lo
+    # escribe la plantilla, asi que se arregla ahi. Estas no aparecen en ninguna
+    # plantilla: las emitia el `<page>` de hobo_bootstrap alrededor del
+    # contenido, y la aplicacion se colgo de ellas **desde su css**. Al cambiar
+    # de tema el nombre desaparece del html y la regla se queda apuntando al
+    # vacio, sin que nadie avise.
+    #
+    # En amenti era el fondo de la portada: `.front-page .bootstrap-content
+    # {background-color: white}` -- la caja blanca sobre la que va todo. La
+    # pagina salia con el fondo gris del body a la vista y parecia el tema mal
+    # puesto, cuando lo que fallaba era un selector de la propia aplicacion.
+    #
+    #   Hobo 2                          Hobo 3
+    #   container bootstrap-content     container
+    #   row main-row                    columns row
+    #   span12 main-column              content content-12 col-lg-12
+    #
+    # Solo estan las que tienen equivalente **exacto**.
+    #
+    # `content-header`, `content-body` y `main-content` estuvieron un rato en la
+    # lista de abajo, la de las que no lo tienen. Ya no: el tema de Hobo 3 pinta
+    # esos cuatro huecos **con el nombre de su papel**, que es el mismo que
+    # usaba Hobo 2, asi que la hoja de la aplicacion aplica sin que nadie
+    # reescriba nada. Era mejor arreglo que el de aqui.
+    THEME_WRAPPERS = {
+      "bootstrap-content" => "content",
+      "main-column" => "content",
+      "main-row" => "columns",
+      # El pie: era `<div class="footer page-footer">` y ahora es un
+      # `<footer class="page-footer">`. El elemento cambio y una de las dos
+      # clases se fue con el; amenti le pinta ahi su franja de fondo.
+      "footer" => "page-footer",
+    }.freeze
+
+    # Las que la hoja usa, el tema viejo ponia y el nuevo no dice de ninguna
+    # forma. No se tocan; se nombran.
+    #
+    # Queda una: `with-flash` marcaba «esta seccion lleva el aviso dentro», y en
+    # Hobo 3 el aviso es un hermano (`flash-messages`), no algo que le pase a la
+    # seccion. No hay a que reescribirla porque ya no existe esa idea.
+    WRAPPERS_WITHOUT_NAME = %w[with-flash].freeze
+
     # The ones that are Bootstrap and have a straight rename in 5. Said, not
     # done: they are the application's markup and its call.
     RENAMED_IN_BOOTSTRAP = {
@@ -949,8 +1106,18 @@ module Hobo
       "item" => "carousel-item (dentro de un carrusel)",
     }.freeze
 
+    # Lo mismo que hace el paso de Bootstrap, y por la misma razon: **lo que la
+    # aplicacion define en su propio css se queda al lado**.
+    #
+    # Faltaba aqui, y se vio en la portada de amenti. `well` es una clase del
+    # tema viejo y pasa a `aside-box card p-3`; pero amenti tiene ademas
+    # `.front-page .well{background-color: ghostwhite}` en su hoja, asi que
+    # cambiarle el nombre a secas se llevo por delante el color de sus cajas.
+    # Sale `class="iconos-row aside-box card p-3 well"`: la nueva pone el
+    # comportamiento y la suya sigue diciendo lo que decia.
     def write_theme_classes
       changed = 0
+      mine = Hobo::BootstrapMigration.application_classes(@source)
 
       Dir[File.join(target, "app", "views", "**", "*.{dryml,erb}")].each do |file|
         text = File.read(file)
@@ -958,7 +1125,12 @@ module Hobo
 
         text.gsub!(/class=(["'])([^"']*)\1/) do
           quote, names = Regexp.last_match(1), Regexp.last_match(2)
-          %(class=#{quote}#{names.split.map { |n| THEME_CLASSES[n] || n }.join(" ")}#{quote})
+          renamed = names.split.flat_map do |n|
+            replacement = THEME_CLASSES[n]
+            next [n] unless replacement
+            mine.include?(n) ? replacement.split + [n] : replacement.split
+          end.uniq
+          %(class=#{quote}#{renamed.join(" ")}#{quote})
         end
 
         next if text == before
@@ -1107,6 +1279,32 @@ module Hobo
 
       File.write(application, text)
       say "  config/application.rb (#{lines.length} ajustes de la vieja)"
+    end
+
+    # `belongs_to` dejo de ser opcional en Rails 5, y esta aplicacion se escribio
+    # antes.
+    #
+    # No es un detalle de configuracion: es que **cada `belongs_to` que la vieja
+    # dejaba vacio ahora no deja guardar**. En amenti el alta de la prueba
+    # gratuita creaba un usuario sin empresa --que es lo correcto, la empresa se
+    # rellena despues-- y el `save` volvia con `company: required`. La pagina
+    # decia «ha habido un error al crear la cuenta de demo» y no habia forma de
+    # saber cual: la aplicacion no habia cambiado ni una linea.
+    #
+    # El esqueleto trae `load_defaults 8.0`, que enciende de golpe todos los
+    # valores nuevos desde 2013. Este se apaga a proposito y se deja escrito
+    # donde se lee, con el motivo al lado: quien quiera la regla nueva la
+    # enciende cuando haya puesto los `optional: true` que le falten.
+    def write_belongs_to_switch
+      application = File.join(target, "config", "application.rb")
+      text = File.read(application)
+      switch = "\n    # Esta aplicacion es anterior a Rails 5, donde `belongs_to` era opcional.\n" \
+               "    # Con la regla nueva, cada asociacion que ella deja vacia impide guardar.\n" \
+               "    config.active_record.belongs_to_required_by_default = false\n"
+      return unless text.sub!(/^(\s*config\.autoload_lib.*\n)/) { "#{$1}#{switch}" }
+
+      File.write(application, text)
+      say "  config/application.rb (belongs_to_required_by_default => false)"
     end
 
     # Since Rails 7.1 a filter that names an action the controller does not have
