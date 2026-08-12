@@ -79,6 +79,22 @@ module Hobo
           self.sign_user_in(user, options, &block)
         end
       end
+
+      # Y pintar algo, que es lo que faltaba.
+      #
+      # Esta accion no renderizaba nunca: dejaba que Rails encontrase
+      # `users/login.dryml`, que en Hobo 2 era el `<login-page>` del catalogo
+      # --`hobo_rapid/taglibs/pages/login.dryml`, un fichero de la gema-- y en
+      # las aplicaciones que lo retocaban, el suyo. Un `hobo update` no se trae
+      # el de la gema, asi que en amenti `/login` contestaba **406**
+      # `MissingExactTemplate`: la aplicacion arrancaba, la portada se veia y no
+      # se podia entrar. Su `login` sigue estando --comprueba las cuentas
+      # caducadas-- y ahora tiene pagina.
+      #
+      # Si la aplicacion escribio la suya, esa manda: solo se pinta cuando no
+      # hay plantilla y nadie ha contestado ya (un `post` bueno redirige).
+      return if performed? || template_exists_for_this_action?
+      render_rapid_page(:login_page)
     end
 
     def hobo_signup(&b)
