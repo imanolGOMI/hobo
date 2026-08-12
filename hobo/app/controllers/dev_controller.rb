@@ -20,6 +20,22 @@ class DevController < (defined?(::ApplicationController) ? ::ApplicationControll
   # do -- it exists precisely to change who is logged in.
   allow_unauthenticated_access if respond_to?(:allow_unauthenticated_access)
 
+  # Y los que puso **la aplicacion**, que son otros.
+  #
+  # `allow_unauthenticated_access` solo levanta el filtro de Rails. Una
+  # aplicacion que viene de Hobo 2 tiene el suyo en su `ApplicationController`
+  # --`before_action { login_required unless User.count == 0 }`-- y este
+  # controlador hereda de ella, asi que lo heredaba tambien: elegir un usuario
+  # en el menu redirigia a `/login` y no cambiaba nada. Desde fuera «el selector
+  # no hace nada», sin error en ninguna parte.
+  #
+  # Se quitan **todos** los `before_action` heredados y no una lista: los nombres
+  # los pone cada aplicacion y no hay forma de saberlos. Los suyos se declaran
+  # despues, para que esto no se los lleve por delante.
+  _process_action_callbacks.select { |callback| callback.kind == :before }.each do |callback|
+    skip_before_action callback.filter, :raise => false
+  end
+
   before_action :developer_modes_only
   # ...and skipping that filter also skips reading the cookie, because Rails 8
   # resumes the session *inside* it. Without this, "be nobody" had nothing to
@@ -69,10 +85,22 @@ class DevController < (defined?(::ApplicationController) ? ::ApplicationControll
   # `start_new_session_for`; an application on Hobo's own user model has
   # `current_user=` instead. A blank choice means "be nobody", which is how you
   # look at your own application as a stranger sees it.
+  # Los dos sitios donde puede vivir «quien eres», y por ese orden.
+  #
+  # La sesion de Rails 8 es una **fila en una tabla**: `start_new_session_for`
+  # hace `user.sessions.create!`. Una aplicacion que viene de Hobo 2 no tiene ni
+  # la tabla ni el `has_many`, asi que ahi no revienta el metodo: revienta con
+  # `undefined method 'sessions'` y el selector se quedaba sin hacer nada
+  # visible. Es la misma tabla que el aviso del `hobo update` pide crear, y
+  # hasta que se cree, esto tiene que seguir funcionando -- es la herramienta
+  # con la que se mira la aplicacion recien traida.
+  #
+  # La otra es la de Hobo, que guarda el usuario en la sesion de Rails y no
+  # necesita tabla ninguna. Sirve para las dos.
   def become(user)
-    if user.nil?
-      terminate
-    elsif respond_to?(:start_new_session_for, true)
+    return terminate if user.nil?
+
+    if respond_to?(:start_new_session_for, true) && user.respond_to?(:sessions)
       send(:start_new_session_for, user)
     elsif respond_to?(:current_user=, true)
       self.current_user = user

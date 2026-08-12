@@ -2,9 +2,50 @@ module Hobo
   module Controller
     module AuthenticationSupport
 
+      # Todo lo de aquí abajo pregunta `current_user`, y hasta ahora este módulo
+      # daba por hecho que ya estaba puesto. Lo está en los controladores de
+      # modelo, porque `Hobo::Controller` reparte el helper al incluirse -- pero
+      # una aplicación de Hobo 2 pone esto **en su `ApplicationController`**, que
+      # es de donde cuelgan también los que no son de modelo.
+      #
+      # Y ahí se rompía: `DevController` (el selector de «cambiar de usuario»),
+      # los de sesión y los de claves heredan los `before_action` que la
+      # aplicación escribió --`login_required`, la multitenencia-- y ninguno de
+      # ellos sabía contestar quién pregunta. En amenti era un 500 con
+      # «undefined local variable or method 'current_user'» antes de entrar en
+      # la acción, y le pasa a cualquiera que mire el usuario desde arriba, que
+      # es lo corriente.
+      #
+      # La respuesta no se escribe otra vez aquí: se piden los mismos helpers que
+      # reparte `Hobo::Controller`, para que quien pregunta reciba **la misma**
+      # respuesta -- incluido el `Guest` cuando no hay nadie.
+      #
+      # Son dos, y por lo mismo. `current_user` lo contesta el de permisos; y
+      # cuando la respuesta es que no, `access_denied` manda a `login_url`, que
+      # es del de rutas. Con uno solo el 500 no desaparecía: se movía una línea
+      # más abajo, de «undefined current_user» a «undefined login_url».
+      def self.included(base)
+        return unless base.respond_to?(:helper_method)
+        HoboPermissionsHelper.add_to_controller(base)
+        HoboRouteHelper.add_to_controller(base)
+      end
+
       # Filter method to enforce a login requirement.
       def logged_in?
         not current_user.guest?
+      end
+
+      # Guardar quien eres en la sesion.
+      #
+      # Estaba en `Hobo::Controller` y **lo llama esto**: `login_required` lo usa
+      # tres lineas mas abajo. Un controlador que pide la autenticacion de Hobo
+      # sin ser de modelo se quedaba sin el, y no fallaba de forma ruidosa: el
+      # selector de «cambiar de usuario» buscaba a quien ponerse, no encontraba
+      # ni la sesion de Rails 8 ni esta, y redirigia tan contento sin haber
+      # cambiado nada. Un boton que no hace nada y no dice nada.
+      def current_user=(new_user)
+        session[:user] = (new_user.nil? || new_user.guest?) ? nil : new_user.typed_id
+        @current_user = new_user
       end
 
 

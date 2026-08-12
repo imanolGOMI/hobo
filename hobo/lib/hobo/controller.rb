@@ -107,11 +107,9 @@ module Hobo
     end
 
 
-    # Store the given user in the session.
-    def current_user=(new_user)
-      session[:user] = (new_user.nil? || new_user.guest?) ? nil : new_user.typed_id
-      @current_user = new_user
-    end
+    # `current_user=` se mudo a `Hobo::Controller::AuthenticationSupport`, que es
+    # quien lo llama (`login_required`) y de donde cuelga tambien la respuesta a
+    # quien pregunta. Aqui se sigue teniendo: este modulo lo incluye.
 
 
     def request_no_cache?
