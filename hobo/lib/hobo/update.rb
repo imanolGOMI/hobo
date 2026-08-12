@@ -1393,9 +1393,21 @@ module Hobo
     # se queda quieto con todas las fotos una encima de otra.
     BOOTSTRAP_DATA = %w[toggle target slide slide-to dismiss parent ride spy].freeze
 
+    # Clases cuyo relevo **no maqueta igual**, y por eso se dicen aparte.
+    #
+    # Renombrarlas es correcto y aun asi la pagina sale distinta, que es el peor
+    # caso posible: no hay error, no falta nada, y lo que se ve no es lo que
+    # habia. Mas vale una linea diciendolo que media hora buscandolo.
+    LAYOUT_CHANGERS = {
+      "affix" => "era `position: fixed` (fuera del flujo) y `sticky-top` es `position: sticky` " \
+                 "(dentro). Si la fila llevaba una columna vacia guardandole el hueco, ahora suma " \
+                 "de mas y lo de detras se cae al renglon siguiente: quita ese hueco.",
+    }.freeze
+
     def write_bootstrap_classes
       changed = 0
       stages = []
+      cambian_maquetacion = Hash.new { |hash, key| hash[key] = [] }
       # Lo que la aplicacion define en su propio css **no se le quita**: ver
       # `Hobo::BootstrapMigration.rename_classes`.
       mine = Hobo::BootstrapMigration.application_classes(@source)
@@ -1408,10 +1420,19 @@ module Hobo
         File.write(file, migrated)
         changed += 1
         stages |= applied
+
+        LAYOUT_CHANGERS.each_key do |name|
+          cambian_maquetacion[name] << file if text.match?(/class=["'][^"']*\b#{Regexp.escape(name)}\b/)
+        end
       end
 
       return if changed.zero?
       say "  #{changed} plantillas (Bootstrap #{stages.join(", ")})"
+
+      cambian_maquetacion.each do |name, files|
+        say "    ojo con `#{name}`: #{LAYOUT_CHANGERS[name]}"
+        say "      en #{files.map { |file| relative(file) }.join(", ")}"
+      end
     end
 
     # De que version de Bootstrap viene la aplicacion.

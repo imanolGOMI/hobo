@@ -156,6 +156,16 @@ module Hobo
       "label-danger" => "badge-danger",
       "list-inline-item" => "list-inline-item",
       "caret" => "",
+      # `affix` -> `sticky-top` **cambia la maquetacion**, y por eso lleva aviso.
+      #
+      # El de Bootstrap 2 ponia el elemento en `position: fixed`, o sea **fuera
+      # del flujo**: una barra lateral fija se acompanaba de una columna vacia
+      # que le guardaba el hueco. `sticky-top` es `position: sticky`, que sigue
+      # dentro del flujo y ocupa su columna, asi que esa fila pasa a sumar de
+      # mas y lo que venga detras se cae al renglon siguiente.
+      #
+      # En la pagina de ayuda de amenti son `span3` vacio + `span3 affix` +
+      # `span9`: doce columnas con el indice fijo, quince con el pegajoso.
       "affix" => "sticky-top",
       "pager" => "pagination",
       "progress-striped" => "progress-bar-striped",
