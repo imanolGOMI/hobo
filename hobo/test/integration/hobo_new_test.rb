@@ -231,7 +231,7 @@ class HoboNewTest < Minitest::Test
 
         # A key somebody made up opens nothing.
         File.write(File.join(app, "tmp", "otra.rb"), <<~RUBY)
-          User.lifecycle.signup(nil, :email_address => "otra@example.com",
+          User.lifecycle.signup(nil, :name => "Otra", :email_address => "otra@example.com",
                                      :password => "test1234", :password_confirmation => "test1234")
           print User.last.id
         RUBY
@@ -289,7 +289,7 @@ class HoboNewTest < Minitest::Test
         assert_includes run_command(app, "bin/rails runner tmp/quien.rb"), "invitada@example.com:false:invited"
 
         # And the link in the mail is where the password is chosen.
-        link = File.read(File.join(app, "log", "development.log"))[%r{INVITATION (/accept/\d+\?key=\w+)}, 1]
+        link = File.read(File.join(app, "log", "development.log"))[%r{INVITATION (/accept/[\w-]+\?key=\w+)}, 1]
         refute_nil link, "no se envio la invitacion"
 
         invitada = Browser.new(http)
