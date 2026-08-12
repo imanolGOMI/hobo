@@ -107,12 +107,26 @@ class DevController < (defined?(::ApplicationController) ? ::ApplicationControll
     end
   end
 
+  # «Ser nadie», que es la primera opcion del menu y como se mira la aplicacion
+  # con los ojos de quien no ha entrado.
+  #
+  # Las dos sesiones otra vez, y aqui hacia falta mas cuidado que al entrar: la
+  # de Rails 8 solo se puede cerrar si existe --`terminate_session` hace
+  # `Current.session.destroy`-- y en una aplicacion traida de Hobo 2 no existe
+  # nunca. Elegir «Invitado» contestaba `undefined method 'destroy' for nil`.
+  #
+  # Y se cierran **las dos**: quien haya entrado por Rails tiene la suya, quien
+  # haya entrado por aqui tiene la de Hobo, y salir a medias deja al usuario
+  # dentro por el otro lado.
   def terminate
-    if respond_to?(:terminate_session, true)
-      send(:terminate_session)
-    elsif respond_to?(:current_user=, true)
-      self.current_user = nil
-    end
+    send(:terminate_session) if respond_to?(:terminate_session, true) && rails_session?
+    self.current_user = nil if respond_to?(:current_user=, true)
+  end
+
+  def rails_session?
+    defined?(::Current) && ::Current.try(:session).present?
+  rescue StandardError
+    false
   end
 
 end
