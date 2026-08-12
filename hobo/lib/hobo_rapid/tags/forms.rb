@@ -44,7 +44,23 @@ Rapid.define(:field_list, :attrs => [:fields, :mode]) do
           tag("label", {}, :"#{field}_label") do
             text HoboRapid::Derivation.label_for(record.class, field)
           end
-          call_tag(mode == "input" ? :input : :view, {}, :as => :"#{field}_#{mode}")
+          # El hueco se llama `x_input` en un formulario y `x_view` fuera, que
+          # es lo que dice lo que hay dentro. **Hobo 2 lo llamaba `x-view` en
+          # los dos casos** -- su `<field-list>` pone
+          # `<item-value param="#{campo}-view">` pinte lo que pinte --, y las
+          # plantillas escriben eso:
+          #
+          #     <nombre-view:><input placeholder="Nombre"/></nombre-view:>
+          #
+          # dentro de un formulario. Sin atender ese nombre, el param no lo
+          # reclamaba nadie y se tiraba en silencio: el alta rapida de amenti
+          # salia con sus cinco campos y **sin un solo placeholder**, que es lo
+          # unico que decia cual era cual.
+          hueco = :"#{field}_#{mode}"
+          hueco = :"#{field}_view" if mode == "input" && !all_parameters.key?(hueco) &&
+                                      all_parameters.key?(:"#{field}_view")
+
+          call_tag(mode == "input" ? :input : :view, {}, :as => hueco)
         end
       end
     end
