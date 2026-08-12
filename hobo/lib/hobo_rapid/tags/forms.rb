@@ -28,6 +28,17 @@ require "hobo_rapid/tags/structure"
 # `view` shows and `input` edits. Inside a `<form>` it defaults to editing,
 # which is what made the tag usable without saying so every time.
 Rapid.define(:field_list, :attrs => [:fields, :mode]) do
+  # Sin registro no hay campos que pintar, y **no es un error**.
+  #
+  # Una plantilla de Hobo 2 pone un formulario para algo que puede no estar --
+  # amenti tiene un modal con `<formlet with="&@modelo">` en el listado de
+  # conceptos, y en esa accion `@modelo` es nil hasta que abres uno --. En
+  # Hobo 2 eso no pintaba nada; aqui tumbaba la pagina entera con «undefined
+  # method 'nombre' for nil», que no dice ni de que formulario habla.
+  #
+  # Los campos de nada no significan nada: no se pintan y la pagina sigue.
+  next if this.nil?
+
   names = attributes[:fields].to_s.split(",").map(&:strip).reject(&:empty?)
   names = HoboRapid::Derivation.index_columns(this.class) if names.empty? && this.respond_to?(:class)
 
@@ -98,6 +109,14 @@ end
 # that is submitted with the rest -- and the reason it exists is that a `<form>`
 # inside a `<form>` is not valid html and browsers drop it silently.
 Rapid.define(:formlet) do
+  # Como el `<field-list>`: un formulario para nada no significa nada.
+  #
+  # Las plantillas de Hobo 2 ponen modales con `<formlet with="&@modelo">` donde
+  # el registro solo existe cuando abres uno -- el listado de conceptos de
+  # amenti tiene dos --, y alli el cuerpo simplemente no se pintaba. Aqui
+  # reventaba la pagina entera al pedirle un campo a nil.
+  next if this.nil?
+
   tag("div", all_attributes.merge("class" => ["formlet", all_attributes["class"]].compact.join(" "))) do
     param(:default)
   end
