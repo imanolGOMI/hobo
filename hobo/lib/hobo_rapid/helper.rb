@@ -52,7 +52,7 @@ module HoboRapid
       params, attributes = attributes.partition { |_, value| value.is_a?(Rapid::Parameter) }
                                      .map(&:to_h)
 
-      HoboRapid.with_request(token, user, messages || {}, query || {}, subsite, http_request) do
+      HoboRapid.with_request(token, user, messages || {}, query || {}, subsite, http_request, self) do
         if this.equal?(INHERIT)
           Rapid.render(name, attributes, **params).html_safe
         else

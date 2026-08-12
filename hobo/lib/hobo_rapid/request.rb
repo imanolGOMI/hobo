@@ -16,11 +16,11 @@ module HoboRapid
   class << self
 
     KEYS = %i[hobo_rapid_token hobo_rapid_user hobo_rapid_flash hobo_rapid_query
-              hobo_rapid_subsite hobo_rapid_request].freeze
+              hobo_rapid_subsite hobo_rapid_request hobo_rapid_view].freeze
 
-    def with_request(token, user, flash = {}, query = {}, subsite = nil, request = nil)
+    def with_request(token, user, flash = {}, query = {}, subsite = nil, request = nil, view = nil)
       previous = KEYS.map { |key| Thread.current[key] }
-      values = [token, user, flash, query, subsite, request]
+      values = [token, user, flash, query, subsite, request, view]
       KEYS.each_with_index { |key, i| Thread.current[key] = values[i] }
       yield
     ensure
@@ -50,6 +50,20 @@ module HoboRapid
     def current_user = Thread.current[:hobo_rapid_user]
 
     def flash_messages = Thread.current[:hobo_rapid_flash] || {}
+
+    # La vista que esta pintando, si la hay. **Igual que `request`: es para
+    # `hobo_dryml` y el catalogo no la usa.**
+    #
+    # Una plantilla de Hobo 2 llama a los helpers de su aplicacion como quien
+    # respira, porque DRYML se compilaba dentro de la vista y estaban todos ahi.
+    # El listado de expedientes de amenti llama a `clase_enlace_tabla`, que es
+    # suyo y vive en `app/helpers`. Sin esto no hay forma de alcanzarlo: el
+    # runtime de tags no es una vista de Rails y no tiene por que serlo.
+    #
+    # Quien lo ofrece como palabra es `HoboDryml::Vocabulary`, o sea que una
+    # aplicacion escrita hoy sigue sin poder llamar a un helper desde un tag --
+    # que es lo correcto, porque un tag tiene que poder probarse solo.
+    def view = Thread.current[:hobo_rapid_view]
 
     # What is being filtered right now. A filter that cannot see the query
     # string cannot show what is selected, and cannot keep the other filters
