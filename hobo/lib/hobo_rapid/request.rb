@@ -16,11 +16,12 @@ module HoboRapid
   class << self
 
     KEYS = %i[hobo_rapid_token hobo_rapid_user hobo_rapid_flash hobo_rapid_query
-              hobo_rapid_subsite hobo_rapid_request hobo_rapid_view].freeze
+              hobo_rapid_subsite hobo_rapid_request hobo_rapid_view
+              hobo_rapid_page_record].freeze
 
-    def with_request(token, user, flash = {}, query = {}, subsite = nil, request = nil, view = nil)
+    def with_request(token, user, flash = {}, query = {}, subsite = nil, request = nil, view = nil, record = nil)
       previous = KEYS.map { |key| Thread.current[key] }
-      values = [token, user, flash, query, subsite, request, view]
+      values = [token, user, flash, query, subsite, request, view, record]
       KEYS.each_with_index { |key, i| Thread.current[key] = values[i] }
       yield
     ensure
@@ -64,6 +65,17 @@ module HoboRapid
     # aplicacion escrita hoy sigue sin poder llamar a un helper desde un tag --
     # que es lo correcto, porque un tag tiene que poder probarse solo.
     def view = Thread.current[:hobo_rapid_view]
+
+    # El registro de la **pagina**, que en Hobo 2 se leia `@this`.
+    #
+    # No es lo mismo que `this`: dentro de un campo o de un `<repeat>`, `this`
+    # es el campo o el elemento, y `@this` sigue siendo lo que puso el
+    # controlador. Las plantillas usan esa diferencia -- amenti pinta el codigo
+    # de una empresa con `@this.estilo_codigo` desde dentro del campo `codigo`
+    # --, asi que traducir el uno por el otro daria una respuesta distinta.
+    #
+    # Es para `hobo_dryml`, como `request` y `view`: el catalogo no lo usa.
+    def page_record = Thread.current[:hobo_rapid_page_record]
 
     # What is being filtered right now. A filter that cannot see the query
     # string cannot show what is selected, and cannot keep the other filters
