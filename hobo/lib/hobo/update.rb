@@ -26,6 +26,7 @@
 # anybody trusts an upgrade.
 
 require "fileutils"
+require "hobo/bootstrap_migration"
 
 module Hobo
 
@@ -1003,26 +1004,47 @@ module Hobo
 
     def write_bootstrap_classes
       changed = 0
+      stages = []
+      # Lo que la aplicacion define en su propio css **no se le quita**: ver
+      # `Hobo::BootstrapMigration.rename_classes`.
+      mine = Hobo::BootstrapMigration.application_classes(@source)
 
       Dir[File.join(target, "app", "views", "**", "*.{dryml,erb}")].each do |file|
         text = File.read(file)
-        before = text.dup
+        migrated, applied = Hobo::BootstrapMigration.apply(text, :from => bootstrap_version, :keep => mine)
+        next if migrated == text
 
-        text.gsub!(/class=(["'])([^"']*)\1/) do
-          quote, names = Regexp.last_match(1), Regexp.last_match(2)
-          %(class=#{quote}#{names.split.flat_map { |n| (REWRITTEN_IN_BOOTSTRAP[n] || n).split }.uniq.join(" ")}#{quote})
-        end
-
-        BOOTSTRAP_DATA.each { |name| text.gsub!(/\bdata-#{name}=/, "data-bs-#{name}=") }
-        rewrite_carousel(text)
-
-        next if text == before
-        File.write(file, text)
+        File.write(file, migrated)
         changed += 1
+        stages |= applied
       end
 
       return if changed.zero?
-      say "  #{changed} plantillas (clases de Bootstrap 2 -> Bootstrap 5)"
+      say "  #{changed} plantillas (Bootstrap #{stages.join(", ")})"
+    end
+
+    # De que version de Bootstrap viene la aplicacion.
+    #
+    # Se lee de lo que pide, no se adivina: `bootstrap-sass` fijado a una 2.x, o
+    # la rejilla vieja escrita en las plantillas -- `span5` es Bootstrap 2 y no
+    # existe desde la 3.
+    def bootstrap_version
+      @bootstrap_version ||= begin
+        gemfile = File.read(File.join(@source, "Gemfile")) rescue ""
+        if gemfile.match?(/bootstrap-sass["'],\s*["']~?>?\s*2\./) || bootstrap_classes_written.any? { |n| n.match?(/\Aspan\d+\z/) }
+          2
+        elsif gemfile.match?(/bootstrap[^"']*["'],\s*["']~?>?\s*4\./)
+          4
+        else
+          3
+        end
+      end
+    end
+
+    def bootstrap_classes_written
+      @bootstrap_classes_written ||= Dir[File.join(@source, "app", "views", "**", "*.{dryml,erb}")]
+                                     .flat_map { |file| File.read(file).scan(/class=["']([^"']*)["']/).flatten }
+                                     .flat_map(&:split).uniq
     end
 
     # El carrusel, que necesita saber donde esta.

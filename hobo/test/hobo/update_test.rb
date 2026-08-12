@@ -134,8 +134,12 @@ class UpdateTest < Minitest::Test
   # en una tira. `hidden` es peor -- en Bootstrap 5 no existe, asi que lo que
   # estaba escondido **aparece**.
 
+  # `col-lg-5` y no `col-md-5`: son **dos** saltos. Bootstrap 3 lo llamo
+  # `col-md-5` y Bootstrap 4 corrio la rejilla un punto, asi que el equivalente
+  # de un `span5` de Bootstrap 2 en el 5 es `col-lg-5`. Encadenar no es lo mismo
+  # que traducir de una vez, y esta prueba es la que lo dice.
   def test_the_grid_is_rewritten
-    assert_equal %(<div class="col-md-5">x</div>), rewrite_bootstrap(%(<div class="span5">x</div>))
+    assert_equal %(<div class="col-lg-5">x</div>), rewrite_bootstrap(%(<div class="span5">x</div>))
   end
 
   def test_hidden_becomes_the_class_that_still_hides
@@ -180,12 +184,25 @@ class UpdateTest < Minitest::Test
     assert_includes rewrite_bootstrap(inside), %(class="carousel-control-prev")
   end
 
-  # Y lo que no tiene traduccion exacta -- un icono, que en Bootstrap 5 es otra
-  # gema o un svg -- se sigue nombrando y no se toca.
-  def test_only_what_cannot_be_rewritten_is_listed
-    write("app/views/x/y.dryml", %(<div class="span4 icon-trash">x</div>))
+  # Bootstrap **si** tiene iconos: `bootstrap-icons`, oficial. Lo que no hace es
+  # meterlos en el css del framework. Los nombres no coinciden -- `ok` es
+  # `check`, `remove` es `x` -- asi que hay tabla.
+  def test_the_icons_become_bootstrap_icons
+    assert_equal %(<i class="bi bi-trash"></i>), rewrite_bootstrap(%(<i class="icon-trash"></i>))
+    assert_equal %(<i class="bi bi-check-lg"></i>), rewrite_bootstrap(%(<i class="icon-ok icon-white"></i>))
+  end
 
-    assert_equal ["icon-trash"], updater.bootstrap_classes
+  # Y lo que la aplicacion define en su propio css **se queda al lado**: si
+  # retoco `.well` a mi gusto, cambiarle el nombre a secas se lleva mi regla por
+  # delante y la pagina sale distinta sin que nadie sepa por que.
+  def test_a_class_the_application_styles_itself_is_kept_alongside
+    write("app/assets/stylesheets/mio.css", ".well { background: pink }")
+
+    assert_equal %(<div class="card card-body well">x</div>), rewrite_bootstrap(%(<div class="well">x</div>))
+  end
+
+  def test_a_class_the_application_does_not_style_is_simply_replaced
+    assert_equal %(<div class="card card-body">x</div>), rewrite_bootstrap(%(<div class="well">x</div>))
   end
 
   # `bootstrap-sass` came in with `hobo_bootstrap` in an application on that
@@ -405,6 +422,10 @@ class UpdateTest < Minitest::Test
   end
 
   def rewrite_bootstrap(markup)
+    # Tambien en la aplicacion vieja: de ahi se lee **de que version viene**,
+    # porque `span5` es Bootstrap 2 y no existe desde la 3.
+    write("app/views/x/y.dryml", markup)
+
     target = File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3")
     FileUtils.mkdir_p(File.join(target, "app", "views", "x"))
     file = File.join(target, "app", "views", "x", "y.dryml")
