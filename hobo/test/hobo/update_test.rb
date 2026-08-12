@@ -20,7 +20,14 @@ class UpdateTest < Minitest::Test
 
   def teardown = FileUtils.remove_entry(@directory)
 
-  def updater = Hobo::Update.new(@directory, :out => StringIO.new)
+  # Con `--as`, o sea escribiendo **al lado**.
+  #
+  # Casi todo lo que se prueba aqui es como se trae una cosa de la aplicacion
+  # vieja a la nueva, y para mirarlo hacen falta las dos: con la actualizacion en
+  # el sitio -- que es lo que hace el comando por defecto desde hoy -- origen y
+  # destino son el mismo directorio y la mitad de estas pruebas dejan de
+  # significar nada. Lo de en el sitio tiene las suyas, mas abajo.
+  def updater = Hobo::Update.new(@directory, :name => "#{File.basename(@directory)}_hobo3", :out => StringIO.new)
 
   # --- the routes -------------------------------------------------------------
 
@@ -304,7 +311,7 @@ class UpdateTest < Minitest::Test
   def test_the_skeleton_keeps_what_the_old_application_does_not_have
     write("app/models/user.rb", "class User; end")
 
-    skeleton = File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3")
+    skeleton = destino
     FileUtils.mkdir_p(File.join(skeleton, "app", "controllers"))
     File.write(File.join(skeleton, "app", "controllers", "sessions_controller.rb"), "generado")
     FileUtils.mkdir_p(File.join(skeleton, "app", "models"))
@@ -315,8 +322,6 @@ class UpdateTest < Minitest::Test
     assert_equal "generado", File.read(File.join(skeleton, "app", "controllers", "sessions_controller.rb"))
     assert_equal "class User; end", File.read(File.join(skeleton, "app", "models", "user.rb")),
                  "lo que la aplicacion vieja si trae, manda"
-  ensure
-    FileUtils.rm_rf(File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3"))
   end
 
   # --- las hojas de estilo ------------------------------------------------------
@@ -403,22 +408,68 @@ class UpdateTest < Minitest::Test
     assert_match(/1 plantillas DRYML/, out.string)
     assert_match(/turbolinks/, out.string)
     assert_match(/Nada escrito/, out.string)
-    refute File.exist?(File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3"))
+    refute File.exist?(destino)
+  end
+
+  # --- actualizar en el sitio ---------------------------------------------------
+  #
+  # Es lo que hace el comando cuando nadie dice `--as`: la aplicacion se llama
+  # como se llama, y lo que cambia de una version a la otra se lee en su
+  # repositorio. Y por eso mismo **exige repositorio**: reescribe la aplicacion
+  # entera, asi que sin git no habria forma de volver atras ni de ver que ha
+  # pasado.
+
+  def test_in_place_is_the_default
+    assert_equal @directory, Hobo::Update.new(@directory, :out => StringIO.new).send(:target)
+  end
+
+  def test_as_writes_beside
+    updater = Hobo::Update.new(@directory, :name => "otra", :out => StringIO.new)
+    assert_equal File.join(File.dirname(@directory), "otra"), updater.send(:target)
+  end
+
+  def test_in_place_refuses_without_a_repository
+    salida = StringIO.new
+    error = assert_raises(Hobo::Update::Error) do
+      Hobo::Update.new(@directory, :write => true, :out => salida).run
+    end
+
+    assert_match(/no es un repositorio de git/, error.message)
+    assert_match(/git init/, error.message, "y dice como salir del paso")
+  end
+
+  def test_in_place_refuses_with_unsaved_changes
+    system("git", "-C", @directory, "init", "-q")
+    system("git", "-C", @directory, "add", "-A")
+    system("git", "-C", @directory, "-c", "user.email=x@y.z", "-c", "user.name=x",
+           "commit", "-qm", "primero")
+    File.write(File.join(@directory, "config", "application.rb"), "# a medias")
+
+    error = assert_raises(Hobo::Update::Error) do
+      Hobo::Update.new(@directory, :write => true, :out => StringIO.new).run
+    end
+
+    assert_match(/cambios sin guardar/, error.message)
+    assert_match(/application\.rb/, error.message, "y cuales son")
   end
 
   private
 
+  # **Al comando, no a mano.** Estas ayudantes construian la ruta del destino
+  # ellas mismas -- `<nombre>_hobo3` --, asi que el dia que esa convencion
+  # cambio se cayeron dieciocho pruebas que no tenian nada que ver con lo que
+  # habia cambiado. Quien sabe donde escribe es el comando.
+  def destino = updater.send(:target)
+
   # The pass writes files, so the fixture is a file and what comes back is what
   # is on disk.
   def rewrite_classes(markup)
-    target = File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3")
+    target = destino
     FileUtils.mkdir_p(File.join(target, "app", "views", "x"))
     file = File.join(target, "app", "views", "x", "y.dryml")
     File.write(file, markup)
     updater.send(:write_theme_classes)
     File.read(file)
-  ensure
-    FileUtils.rm_rf(target)
   end
 
   def rewrite_bootstrap(markup)
@@ -426,25 +477,21 @@ class UpdateTest < Minitest::Test
     # porque `span5` es Bootstrap 2 y no existe desde la 3.
     write("app/views/x/y.dryml", markup)
 
-    target = File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3")
+    target = destino
     FileUtils.mkdir_p(File.join(target, "app", "views", "x"))
     file = File.join(target, "app", "views", "x", "y.dryml")
     File.write(file, markup)
     updater.send(:write_bootstrap_classes)
     File.read(file)
-  ensure
-    FileUtils.rm_rf(File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3"))
   end
 
   def rewrite_model(name, content)
-    target = File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3")
+    target = destino
     FileUtils.mkdir_p(File.join(target, "app", "models"))
     file = File.join(target, "app", "models", name)
     File.write(file, content)
     updater.send(:write_attachments)
     File.read(file)
-  ensure
-    FileUtils.rm_rf(target)
   end
 
   def write(path, content)
@@ -455,25 +502,21 @@ class UpdateTest < Minitest::Test
 
   # Corre el paso de las hojas y devuelve lo que ha quedado escrito, por nombre.
   def resolve_stylesheets
-    target = File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3")
+    target = destino
     FileUtils.mkdir_p(File.join(target, "app", "assets", "stylesheets"))
     updater.send(:write_stylesheets)
 
     Dir[File.join(target, "app", "assets", "stylesheets", "*")].to_h { |file| [File.basename(file), File.read(file)] }
-  ensure
-    FileUtils.rm_rf(File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3"))
   end
 
   # Stands in for what `hobo new` leaves behind, so that `write_gemfile` has a
   # skeleton Gemfile to read and to append to.
   def gemfile_after_update(skeleton)
-    target = File.join(File.dirname(@directory), "#{File.basename(@directory)}_hobo3")
+    target = destino
     FileUtils.mkdir_p(target)
     File.write(File.join(target, "Gemfile"), skeleton)
     updater.send(:write_gemfile)
     File.read(File.join(target, "Gemfile"))
-  ensure
-    FileUtils.rm_rf(target)
   end
 
 end

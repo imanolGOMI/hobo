@@ -26,6 +26,8 @@
 # anybody trusts an upgrade.
 
 require "fileutils"
+require "tmpdir"
+require "shellwords"
 require "hobo/bootstrap_migration"
 
 module Hobo
@@ -160,10 +162,22 @@ module Hobo
 
     def initialize(source, write: false, name: nil, theme: "clean", out: $stdout)
       @source = File.expand_path(source)
+      # Donde vive la aplicacion, que **no cambia** aunque `@source` pase a
+      # apuntar a la copia de seguridad: es de donde sale `target`.
+      @app = @source
       @write = write
-      # `--as` names the new one; without it, the old name with `_hobo3` behind,
-      # which makes it clear which is which without looking inside.
-      @name = name || "#{File.basename(@source)}_hobo3"
+      # Sin `--as`, **la aplicacion se actualiza donde esta**.
+      #
+      # Escribia al lado, en `<nombre>_hobo3`, y para probar venia de perlas: se
+      # comparaba una carpeta con la otra. Para usarlo de verdad es al reves de
+      # lo que quiere cualquiera -- una aplicacion se llama como se llama, y su
+      # historia esta en su repositorio: es **ahi** donde se ve lo que cambia una
+      # version respecto de la otra, rama contra rama, con las herramientas que
+      # ya se usan todos los dias.
+      #
+      # Con `--as=otro_nombre` se sigue escribiendo al lado, que es lo que hace
+      # falta para mirar las dos a la vez.
+      @name = name
       @theme = theme
       @out = out
       @notes = []
@@ -171,19 +185,23 @@ module Hobo
 
     attr_reader :source, :name, :notes
 
-    def target = File.join(File.dirname(@source), @name)
+    def target = @name ? File.join(File.dirname(@app), @name) : @app
+
+    def in_place? = @name.nil?
 
     def run
       abort_with("#{@source} no existe") unless File.directory?(@source)
       abort_with("#{@source} no parece una aplicacion Rails") unless File.exist?(File.join(@source, "config", "application.rb"))
 
-      say "Aplicacion:  #{@source}"
-      say "Resultado:   #{target}"
+      say "Aplicacion:  #{@app}"
+      say(in_place? ? "Resultado:   aqui mismo (git dira que ha cambiado)" : "Resultado:   #{target}")
       say ""
 
       look
       report
       return unless @write
+
+      exigir_repositorio_limpio if in_place?
 
       say ""
       say "Escribiendo…"
@@ -209,7 +227,14 @@ module Hobo
       write_gemfile
       say ""
       say "Hecho. Ahora:"
-      say "  cd #{target} && bundle install && bin/rails server"
+      if in_place?
+        say "  git diff --stat                     # lo que ha cambiado"
+        say "  bundle install && bin/rails server"
+        say ""
+        say "  git checkout .                      # si prefieres dejarlo como estaba"
+      else
+        say "  cd #{target} && bundle install && bin/rails server"
+      end
     end
 
     # --- looking ---------------------------------------------------------------
@@ -512,6 +537,43 @@ module Hobo
       []
     end
 
+    # Actualizar en el sitio **sin repositorio es irreversible**, y con el
+    # repositorio sucio se pierde lo que no estuviera guardado.
+    #
+    # Esto no es una formalidad: el comando reescribe la aplicacion entera. Con
+    # git delante, lo que hace se lee como un `git diff` y se deshace con un
+    # `git checkout .`; sin el, la version vieja no esta en ninguna parte.
+    #
+    # Y es ademas como se mira una migracion: se hace en una rama, y se compara
+    # contra la anterior con las herramientas de siempre.
+    def exigir_repositorio_limpio
+      dentro = `git -C #{Shellwords.escape(@app)} rev-parse --is-inside-work-tree 2>/dev/null`.strip
+      unless dentro == "true"
+        abort_with([
+          "#{@app} no es un repositorio de git.",
+          "",
+          "Actualizar en el sitio reescribe la aplicacion entera, y sin repositorio",
+          "no hay forma de volver atras ni de ver que ha cambiado. Dos salidas:",
+          "",
+          "  git init && git add -A && git commit -m 'antes de hobo update'",
+          "  hobo update --write --as=#{File.basename(@app)}_hobo3   # escribir al lado",
+        ].join("\n"))
+      end
+
+      sucio = `git -C #{Shellwords.escape(@app)} status --porcelain`.strip
+      return if sucio.empty?
+
+      abort_with([
+        "#{@app} tiene cambios sin guardar.",
+        "",
+        "Guardalos antes: lo que este a medias se pierde, y ademas el `git diff`",
+        "de la migracion saldria mezclado con ellos, que es justo lo que se viene",
+        "a mirar.",
+        "",
+        sucio.lines.first(5).map { |line| "  #{line.chomp}" }.join("\n"),
+      ].join("\n"))
+    end
+
     # --- writing ---------------------------------------------------------------
 
     # The skeleton, built **from somewhere else**.
@@ -522,13 +584,81 @@ module Hobo
     # `chdir` the command fails on its first step, in the one place everybody
     # will use it.
     def build_skeleton
-      FileUtils.rm_rf(target)
       hobo = File.expand_path("../../bin/hobo", __dir__)
 
-      Dir.chdir(File.dirname(target)) do
-        system(hobo, "new", target, *skeleton_flags, :out => File::NULL) or
-          abort_with("`hobo new` fallo")
+      # El esqueleto se construye **aparte** y luego se copia.
+      #
+      # `rails new` no quiere correr dentro de otra aplicacion, y actualizando en
+      # el sitio el destino es una. Asi que se hace en un directorio temporal --
+      # que ademas deja la aplicacion intacta si algo falla a medias -- y despues
+      # se pone encima.
+      Dir.mktmpdir("hobo_update") do |taller|
+        nuevo = File.join(taller, File.basename(target))
+        Dir.chdir(taller) do
+          system(hobo, "new", nuevo, *skeleton_flags, :out => File::NULL) or
+            abort_with("`hobo new` fallo")
+        end
+
+        if in_place?
+          apartar_lo_viejo
+        else
+          FileUtils.rm_rf(target)
+          FileUtils.mkdir_p(target)
+        end
+
+        # **Sin su `.git`.** El esqueleto se genera con `--skip-git` justo para
+        # que no lo tenga, y aun asi se excluye aqui: copiarlo encima de la
+        # aplicacion le cambia HEAD, el indice y la configuracion -- o sea, su
+        # historia -- por los de un directorio temporal que se borra a
+        # continuacion. El repositorio de la aplicacion es suyo y no se toca.
+        FileUtils.cp_r(Dir.glob(File.join(nuevo, "*"), File::FNM_DOTMATCH)
+                          .reject { |path| %w[. .. .git].include?(File.basename(path)) },
+                       target)
       end
+    end
+
+    # Actualizando en el sitio: fuera lo que la aplicacion tenia **versionado**,
+    # que es lo que el esqueleto nuevo va a reemplazar.
+    #
+    # Solo lo versionado, y por eso hace falta git: lo que no esta en el
+    # repositorio se queda donde esta. Ahi viven la base de datos, los ficheros
+    # que subieron los usuarios, los logs y el fichero de claves -- cosas que no
+    # se pueden recuperar de ningun sitio y que **borrar seria imperdonable**.
+    #
+    # Y antes, una copia entera en un temporal, porque de ahi se lee todo lo que
+    # se trae despues: los modelos, las plantillas, las rutas y el Gemfile viejos
+    # ya no estarian donde estaban.
+    # Lo que **no** se copia a la copia de seguridad: son cientos de megas que
+    # no se traen nunca -- `vendor/bundle` sola son 287 en amenti -- y copiarlos
+    # convierte un minuto en diez.
+    FUERA_DE_LA_COPIA = ["vendor/bundle", "log", "tmp", "node_modules", ".git"].freeze
+
+    def apartar_lo_viejo
+      copia = Dir.mktmpdir("hobo_update_origen")
+      FileUtils.cp_r(Dir.glob(File.join(@app, "*"), File::FNM_DOTMATCH)
+                        .reject { |path| %w[. ..].include?(File.basename(path)) }
+                        .reject { |path| FUERA_DE_LA_COPIA.include?(File.basename(path)) }
+                        .reject { |path| path.end_with?("/vendor") && Dir.exist?(File.join(path, "bundle")) },
+                     copia)
+
+      # `vendor` sin `bundle`: lo demas de ahi si se trae (`vendor/assets`).
+      vendor = File.join(@app, "vendor")
+      if Dir.exist?(vendor)
+        FileUtils.mkdir_p(File.join(copia, "vendor"))
+        Dir.children(vendor).reject { |child| child == "bundle" }.each do |child|
+          FileUtils.cp_r(File.join(vendor, child), File.join(copia, "vendor"))
+        end
+      end
+
+      @source = copia
+
+      versionados = `git -C #{Shellwords.escape(@app)} ls-files -z`.split("\0")
+      versionados.each { |path| FileUtils.rm_f(File.join(@app, path)) }
+      # Los directorios que se quedan vacios al llevarse sus ficheros.
+      Dir.glob(File.join(@app, "**", "*"), File::FNM_DOTMATCH)
+         .select { |path| File.directory?(path) && File.basename(path) != ".git" }
+         .sort_by { |path| -path.length }
+         .each { |path| Dir.rmdir(path) if Dir.empty?(path) }
     end
 
     # What the new application is generated with. The theme is the one question
@@ -536,7 +666,10 @@ module Hobo
     # `hobo new`'s own defaults, and `hobo:setup_wizard` changes any of them
     # later in an application that already exists.
     def skeleton_flags
-      ["--theme=#{@theme}", "--skip-migration"]
+      # `--skip-git`: el esqueleto es material de paso y su repositorio no le
+      # sirve a nadie. La aplicacion trae el suyo, que es donde se lee lo que
+      # esta migracion ha cambiado.
+      ["--theme=#{@theme}", "--skip-migration", "--skip-git"]
     end
 
     def carry
