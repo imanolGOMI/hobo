@@ -1078,10 +1078,23 @@ module Hobo
       # the two meet.
       route_names(body).each { |name| text.sub!(/^.*\bas:\s*:#{name}\b.*\n/, "") }
 
-      text.sub!(/\nend\s*\z/, "\n\n#{ROUTES_HEADING}\n#{body}\nend\n")
+      # Y `hobo_routes` **detras**, que es lo que «sobre las de Hobo 3» tenia que
+      # querer decir y no queria.
+      #
+      # Rails coge la primera ruta que case. `hobo_routes` genera un `resources`
+      # por modelo, y `resources :users` casa `/users/pagina_web` leyendo
+      # `pagina_web` como si fuera un id -- asi que la pagina propia de la
+      # aplicacion contestaba 404 y el motivo no se ve en ninguna parte: la ruta
+      # esta escrita en el fichero, doce lineas mas abajo, y no la mira nadie.
+      #
+      # Lo generico va detras de lo concreto. En Hobo 2 pasaba solo, porque las
+      # rutas de Hobo se dibujaban al final del fichero de la aplicacion.
+      hobo = text.slice!(/^[^\S\n]*hobo_routes[^\S\n]*\n/)
+
+      text.sub!(/\nend\s*\z/, "\n\n#{ROUTES_HEADING}\n#{body}\n#{hobo}\nend\n")
 
       File.write(routes, text)
-      say "  config/routes.rb (las rutas propias, sobre las de Hobo 3)"
+      say "  config/routes.rb (las rutas propias, y hobo_routes detras)"
     end
 
     ROUTES_HEADING = "  # --- de la aplicacion vieja --------------------------------------------".freeze
