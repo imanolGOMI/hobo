@@ -57,7 +57,7 @@ This tag uses Enumerable#chunk, which is only available with Ruby 1.9.2 and late
   <% chunker ||= Proc.new{|el| counter=counter+1; (counter-1)/per_section+1} %>
   <repeat with="&this.to_a.chunk(&chunker)">
     <% chunk, list = this %>
-    <% list.member_class = this.member_class if this._?.member_class%>
+    <% list.member_class = this.member_class if this&.member_class%>
     <set-scoped chunk="&chunk">
       <do with="&list">
         <div class="hjq-accordion-element">

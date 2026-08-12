@@ -1,16 +1,15 @@
-ActiveModel::Name.class_eval do
-    # adds a default pluralization for english
-    # useful to avoid to set a locale 'en' file and avoid
-    # to pass around pluralize calls for 'en' defaults in hobo
-    def human_with_en_pluralization_default(options={})
-      if I18n.locale.to_s.match(/^en/)
-        unless options[:count] == 1 || options[:count].blank?
-          default = ActiveSupport::Inflector.pluralize(@human)
-          options.merge! :default => default
-        end
+# A default English pluralisation, so an application does not need an `en`
+# locale file just to say "Stories". It was alias_method_chain; a prepended
+# module composes with anything else that wraps `human`.
+module Hobo
+  module EnPluralizationDefault
+    def human(options = {})
+      if I18n.locale.to_s.match(/^en/) && !(options[:count] == 1 || options[:count].blank?)
+        options = options.merge(:default => ActiveSupport::Inflector.pluralize(@human))
       end
-      human_without_en_pluralization_default(options)
+      super(options)
     end
-    alias_method_chain :human, :en_pluralization_default
-
+  end
 end
+
+ActiveModel::Name.prepend(Hobo::EnPluralizationDefault)

@@ -1,0 +1,185 @@
+require 'rails/generators/migration'
+require 'rails/generators/active_record'
+require 'generators/hobo_support/thor_shell'
+# The migrator was found by the classic autoloader; it says so now.
+require 'generators/hobo/migration/migrator'
+
+module Hobo
+  class MigrationGenerator < Rails::Generators::Base
+    source_root File.expand_path('../templates', __FILE__)
+
+    argument :name, :type => :string, :optional => true
+
+    include Rails::Generators::Migration
+    # `::Generators` and not `Generators`: this class is inside `module Hobo`,
+    # and the day something else defined `Hobo::Generators` -- which is where
+    # every other generator lives -- Ruby started looking for
+    # `Hobo::Generators::HoboSupport` and Rails answered with a warning nobody
+    # was going to read:
+    #
+    #   [WARNING] Could not load generator "generators/hobo/migration/..."
+    #
+    # and then behaved as if the generator did not exist. It appeared the day
+    # the wizard learnt to call this one, because that is the day both were
+    # loaded into the same process.
+    include ::Generators::HoboSupport::ThorShell
+
+    # the Rails::Generators::Migration.next_migration_number gives a NotImplementedError
+    # in Rails 3.0.0.beta4, so we need to implement the logic of ActiveRecord.
+    # For other ORMs we will wait for the rails implementation
+    # see http://groups.google.com/group/rubyonrails-talk/browse_thread/thread/a507ce419076cda2
+    def self.next_migration_number(dirname)
+      ActiveRecord::Generators::Base.next_migration_number dirname
+    end
+
+    def self.banner
+      "rails generate hobo:migration #{self.arguments.map(&:usage).join(' ')} [options]"
+    end
+
+    class_option :drop,
+                 :aliases => '-d',
+                 :type => :boolean,
+                 :desc => "Don't prompt with 'drop or rename' - just drop everything"
+
+    class_option :default_name,
+                 :aliases => '-n',
+                 :type => :boolean,
+                 :desc => "Don't prompt for a migration name - just pick one"
+
+    class_option :generate,
+                 :aliases => '-g',
+                 :type => :boolean,
+                 :desc => "Don't prompt for action - generate the migration"
+
+    class_option :migrate,
+                 :aliases => '-m',
+                 :type => :boolean,
+                 :desc => "Don't prompt for action - generate and migrate"
+
+    def migrate
+      return if migrations_pending?
+
+      generator = ::Generators::Hobo::Migration::Migrator.new(lambda{|c,d,k,p| extract_renames!(c,d,k,p)})
+      up, down = generator.generate
+
+      if up.blank?
+        say "La base de datos y los modelos coinciden: nada que cambiar."
+        return
+      end
+
+      # La migración **antes** de la pregunta, que es lo que hace que la
+      # pregunta se pueda contestar: nadie decide si aplicar algo que no ha
+      # visto. El asistente preguntaba por su cuenta antes de llegar aquí, y era
+      # pedir una decisión a ciegas; ahora se calla y deja preguntar a quien
+      # tiene la migración delante.
+      say "\n---------- Migracion, hacia adelante ----------"
+      say up
+      say "-----------------------------------------------"
+
+      say "\n---------- Y hacia atras ----------------------"
+      say down
+      say "-----------------------------------------------"
+
+      action = options[:generate] && 'g' ||
+               options[:migrate] && 'm' ||
+               choose("\nQue hago: solo [e]scribirla, escribirla y [a]plicarla, o [c]ancelar?", /^(e|a|c)$/)
+                 .tr('ea', 'gm')
+
+      if action != 'c'
+        if name.blank? && !options[:default_name]
+          final_migration_name = choose("\nNombre del fichero: [<enter>=#{migration_name}|<otro_nombre>]:", /^[a-z0-9_ ]*$/, migration_name).strip.gsub(' ', '_')
+        end
+        final_migration_name = migration_name if final_migration_name.blank?
+
+        up.gsub!("\n", "\n    ")
+        up.gsub!(/ +\n/, "\n")
+        down.gsub!("\n", "\n    ")
+        down.gsub!(/ +\n/, "\n")
+
+        @up = up
+        @down = down
+        @migration_class_name = final_migration_name.camelize
+
+        migration_template 'migration.rb.erb', "db/migrate/#{final_migration_name.underscore}.rb"
+        rake('db:migrate') if action == 'm'
+      end
+    rescue HoboFields::Model::FieldSpec::UnknownSqlTypeError => e
+      say "Invalid field type: #{e}"
+    end
+
+  private
+
+    def migrations_pending?
+      # `ActiveRecord::Migrator.migrations` and that three-argument constructor
+      # went away years ago. Which migrations are pending is something the
+      # connection pool's migration context answers now, and it is the only
+      # public way to ask.
+      pending_migrations = ActiveRecord::Base.connection_pool.migration_context.open.pending_migrations
+
+      if pending_migrations.any?
+        say "You have #{pending_migrations.size} pending migration#{'s' if pending_migrations.size > 1}:"
+        pending_migrations.each do |pending_migration|
+          say '  %4d %s' % [pending_migration.version, pending_migration.name]
+        end
+        true
+      else
+        false
+      end
+    end
+
+    def extract_renames!(to_create, to_drop, kind_str, name_prefix="")
+      to_rename = {}
+
+      unless options[:drop]
+
+        rename_to_choices = to_create
+        to_drop.dup.each do |t|
+          while true
+            if rename_to_choices.empty?
+              say "\nCONFIRM DROP! #{kind_str} #{name_prefix}#{t}"
+              resp = ask("Enter 'drop #{t}' to confirm or press enter to keep:")
+              if resp.strip == "drop " + t.to_s
+                break
+              elsif resp.strip.empty?
+                to_drop.delete(t)
+                break
+              else
+                next
+              end
+            else
+              say "\nDROP, RENAME or KEEP?: #{kind_str} #{name_prefix}#{t}"
+              say "Rename choices: #{to_create * ', '}"
+              resp = ask "Enter either 'drop #{t}' or one of the rename choices or press enter to keep:"
+              resp.strip!
+
+              if resp == "drop " + t
+                # Leave things as they are
+                break
+              else
+                resp.gsub!(' ', '_')
+                to_drop.delete(t)
+                if resp.in?(rename_to_choices)
+                  to_rename[t] = resp
+                  to_create.delete(resp)
+                  rename_to_choices.delete(resp)
+                  break
+                elsif resp.empty?
+                  break
+                else
+                  next
+                end
+              end
+            end
+          end
+        end
+      end
+      to_rename
+    end
+
+    def migration_name
+      name || ::Generators::Hobo::Migration::Migrator.default_migration_name
+    end
+
+  end
+end
+

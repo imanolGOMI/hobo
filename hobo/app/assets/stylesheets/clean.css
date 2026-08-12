@@ -1,0 +1,380 @@
+/* El tema Clean: el de Hobo, y el que viene por defecto.
+ *
+ * Es **el port de `hobo_clean` de Hobo 2**, que era el aspecto con el que se
+ * reconocía una aplicación de Hobo: la banda azul de arriba, las pestañas
+ * oscuras del menú con la actual levantada en claro, y la columna de contenido
+ * en blanco cálido sobre azul muy pálido.
+ *
+ * Lo que cambia respecto a aquel es **cómo está hecho**, no cómo se ve:
+ *
+ *   - los degradados eran cuatro PNG de 30 y 300 píxeles repetidos en
+ *     horizontal, porque en 2010 no había otra manera. Aquí son
+ *     `linear-gradient`, así que la gema no lleva imágenes y la banda se adapta
+ *     a cualquier altura.
+ *   - el ancho era `960px` fijo. Aquí es un máximo, y por debajo se estrecha.
+ *   - aquel tema traía 224 líneas de DRYML que **redefinían la página entera**.
+ *     Este no redefine nada: viste los papeles que escribe el catálogo
+ *     (`index-page`, `content-header`, `field-list`, `action`), que es lo que
+ *     un tema es en Hobo 3.
+ *
+ * La paleta es la de Hobo 2, tal cual, porque es la mitad de la identidad.
+ */
+
+:root {
+  /* La paleta de hobo_clean, con sus nombres de siempre. */
+  --hobo-ink: #193440;          /* el azul casi negro del texto */
+  --hobo-muted: #5b7080;
+  --hobo-line: #cfd8dd;
+  --hobo-bg: #ffffff;
+  --hobo-soft: #fcfff5;         /* el blanco cálido de la columna de contenido */
+  --hobo-sky: #acd3e6;          /* el azul de la banda */
+  --hobo-navy-top: #3e547a;     /* las pestañas del menú */
+  --hobo-navy-bottom: #242e42;
+  --hobo-header-top: #3b5f87;
+  --hobo-accent: #5b8ba0;       /* los botones */
+  --hobo-danger: #c8342b;
+  --hobo-radius: 4px;
+  --hobo-gap: 1rem;
+}
+
+/* El degradado de la página: azul arriba, blanco a los 300 píxeles. Era
+   `url(300-ACD3E6-fff.png) repeat-x`. */
+body {
+  color: var(--hobo-ink);
+  background: linear-gradient(180deg, var(--hobo-sky) 0, #ffffff 300px) no-repeat #ffffff;
+  font-family: "Lucida Grande", "Trebuchet MS", system-ui, -apple-system, Arial, sans-serif;
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  margin: 0 0 1.25rem;
+}
+
+h1, h2, h3, h4 { font-weight: normal; }
+a { color: var(--hobo-ink); }
+
+/* --- la banda y las pestañas -------------------------------------------------
+   La cabecera era `url(101-3B5F87-ACD3E6.png) repeat-x #3F606E` y cada pestaña
+   `url(30-3E547A-242E42.png)`. La actual venía en claro y con borde blanco por
+   tres lados, que es lo que la levanta. */
+
+.navbar {
+  color: #ffffff;
+  background: linear-gradient(180deg, var(--hobo-header-top) 0, var(--hobo-sky) 101px) no-repeat #3f606e;
+  margin-bottom: 1.5rem;
+}
+
+.navbar-inner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--hobo-gap);
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 0.75rem 1.25rem 0;
+}
+
+.brand { font-size: 1.5rem; color: #ffffff; border: 0; }
+.brand:hover { color: #ffffff; text-decoration: none; }
+
+.nav { display: flex; align-items: flex-end; gap: 0.25rem; list-style: none; margin: 0; padding: 0; }
+.main-nav { margin-right: auto; }
+
+.nav-link {
+  display: block;
+  padding: 0.4rem 0.9rem;
+  color: #ffffff;
+  background: linear-gradient(180deg, var(--hobo-navy-top) 0, var(--hobo-navy-bottom) 30px) no-repeat var(--hobo-navy-bottom);
+  border: 1px solid transparent;
+  border-radius: var(--hobo-radius) var(--hobo-radius) 0 0;
+  text-decoration: none;
+}
+
+.nav-link:hover { background: var(--hobo-ink); color: #ffffff; }
+
+/* La pestaña en la que estás: en claro, con el borde blanco que la separa de
+   las demás. Es lo que hace que el menú se lea como pestañas y no como botones. */
+.nav-link.current,
+.nav-link.current:hover {
+  color: #222;
+  background: linear-gradient(180deg, #dbe1e5 0, #fcfef5 30px) no-repeat #fcfef5;
+  border-color: #ffffff #ffffff transparent;
+}
+
+.account-nav .nav-link { background: none; border: 0; color: #ffffff; }
+.account-nav .nav-link:hover { background: none; text-decoration: underline; }
+
+.subnav { border-bottom: 1px solid var(--hobo-line); margin-bottom: 1.5rem; }
+
+/* --- la columna ---------------------------------------------------------------
+   `body { width: 960px; margin: 0 auto }` y `.section.content { background:
+   #FCFFF5 }`. Aquí el ancho es un máximo y no una medida fija. */
+
+.container {
+  max-width: 60rem;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem;
+  background: var(--hobo-soft);
+  border: 1px solid var(--hobo-line);
+  border-radius: var(--hobo-radius);
+}
+
+.columns { display: flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap; }
+.content { flex: 1 1 24rem; min-width: 0; }
+.aside { flex: 0 0 13rem; background: #e5e5e5; padding: 1.25rem; border-radius: var(--hobo-radius); }
+.page-footer { max-width: 60rem; margin: 1rem auto; padding: 0 1.25rem; color: var(--hobo-muted); }
+
+/* --- the head of a page --------------------------------------------------- */
+
+.content-header {
+  border: 1px solid var(--hobo-line);
+  border-radius: var(--hobo-radius);
+  background: var(--hobo-soft);
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+}
+
+.header-line { display: flex; justify-content: space-between; align-items: center; gap: var(--hobo-gap); }
+.content-header h1, .content-header h2 { margin: 0; font-size: 1.4rem; }
+.count, .empty { color: var(--hobo-muted); margin: 0.25rem 0 0; }
+.description { margin: 0 0 1.5rem; }
+
+/* --- lists ---------------------------------------------------------------- */
+
+.collection-table { width: 100%; border-collapse: collapse; }
+.collection-table th, .collection-table td {
+  text-align: left;
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid var(--hobo-line);
+  vertical-align: top;
+}
+.collection-table th { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.03em; color: var(--hobo-muted); }
+.collection-table tbody tr:hover { background: var(--hobo-soft); }
+.collection-table td.actions, .collection-table th.actions { width: 1%; white-space: nowrap; text-align: right; }
+
+/* La caja con fondo, como la de Hobo 2: una tarjeta sin fondo sobre una pagina
+   blanca es un rectangulo con una raya, y no se lee como una pieza. */
+.card {
+  border: 1px solid var(--hobo-line);
+  border-radius: var(--hobo-radius);
+  background: var(--hobo-soft);
+  padding: 1rem;
+  margin-bottom: var(--hobo-gap);
+}
+.card h3, .card-title { margin: 0; font-size: 1.1rem; }
+.card dl { margin: 0.5rem 0 0; }
+/* Y el nombre **sin subrayar**: dentro de una caja que ya es un sitio al que
+   ir, el subrayado sobra y ensucia. Se subraya al pasar por encima, que es
+   donde hace falta saber que se puede pulsar. */
+.card h3 a, .card-title a, .card-link {
+  text-decoration: none;
+  font-weight: 700;
+}
+.card h3 a:hover, .card-title a:hover, .card-link:hover { text-decoration: underline; }
+
+/* Y separadas entre si, no pegadas: son cosas distintas. */
+.collection-cards { display: flex; flex-direction: column; gap: 0.25rem; }
+.collection-cards .card { margin-bottom: 0; }
+
+.collection-view { list-style: none; margin: 0; padding: 0; }
+.collection-section { margin-top: 2rem; }
+
+/* --- a record ------------------------------------------------------------- */
+
+.field-list { display: grid; grid-template-columns: minmax(8rem, 12rem) 1fr; gap: 0.4rem 1rem; margin: 0; }
+.field-label { color: var(--hobo-muted); }
+.field-value { margin: 0; }
+
+/* --- forms ---------------------------------------------------------------- */
+
+.field { margin-bottom: var(--hobo-gap); }
+.field label { display: block; margin-bottom: 0.25rem; color: var(--hobo-muted); }
+
+input[type=text], input[type=email], input[type=password], input[type=date],
+input[type=number], input[type=search], input[type=url], input[type=tel],
+textarea, select {
+  width: 100%;
+  max-width: 32rem;
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--hobo-line);
+  border-radius: var(--hobo-radius);
+  background: var(--hobo-bg);
+  color: inherit;
+  font: inherit;
+}
+input:focus, textarea:focus, select:focus { outline: 2px solid var(--hobo-accent); outline-offset: 1px; }
+textarea { min-height: 8rem; }
+
+.actions { display: flex; gap: 0.5rem; align-items: center; margin-top: 1.25rem; }
+
+/* El pie de un formulario, en su propia franja. Hobo 2 lo llamaba
+   `form-actions` y lo pintaba en gris, y tenia razon: los botones que deciden
+   que pasa con lo que acabas de escribir no deben parecer un campo mas. */
+.form-actions {
+  margin-top: 1.5rem;
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--hobo-line);
+  background: var(--hobo-soft);
+  border-radius: var(--hobo-radius);
+}
+.action.cancel {
+  background: none;
+  border-color: transparent;
+  color: var(--hobo-muted, inherit);
+  opacity: 0.8;
+}
+.action.cancel:hover { opacity: 1; text-decoration: underline; }
+
+/* --- what you press -------------------------------------------------------- */
+
+/* `:not(...)` and not a bare `button[type=submit]`: the delete of a row **is** a
+   submit button -- a delete has to be a form, or a crawler empties the database
+   -- and a rule that paints every submit painted it as a big primary button
+   next to a tiny pencil. The same mistake the Bootstrap theme made, from the
+   same cause. */
+.action,
+button[type=submit]:not(.action-delete):not(.action-edit):not(.nav-link) {
+  display: inline-block;
+  padding: 0.45rem 0.9rem;
+  border: 1px solid var(--hobo-line);
+  border-radius: var(--hobo-radius);
+  background: var(--hobo-bg);
+  color: var(--hobo-ink);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: none;
+}
+.action:hover,
+button[type=submit]:not(.action-delete):not(.action-edit):not(.nav-link):hover {
+  background: var(--hobo-soft);
+  text-decoration: none;
+}
+
+/* The one that carries the action of the page. */
+.action.new, .action.submit,
+button[type=submit]:not(.action-delete):not(.action-edit):not(.nav-link) {
+  background: var(--hobo-accent);
+  border-color: var(--hobo-accent);
+  color: #fff;
+}
+/* `#193440` al pasar por encima, como en hobo_clean: el boton se oscurece hacia
+   el color del texto en vez de aclararse. */
+.action.new:hover, .action.submit:hover,
+button[type=submit]:not(.action-delete):not(.action-edit):not(.nav-link):hover {
+  background: var(--hobo-ink);
+  border-color: var(--hobo-ink);
+  color: #fff;
+}
+.action.delete { color: var(--hobo-danger); border-color: var(--hobo-danger); background: var(--hobo-bg); }
+.action.small { padding: 0.2rem 0.5rem; font-size: 0.9rem; }
+
+/* A "log out" is a form, because logging somebody out with a link is asking a
+   crawler to do it. It still has to look like the link next to it. */
+.nav-link[type=submit], button.nav-link {
+  border: 0;
+  background: none;
+  padding: 0.25rem 0;
+  font: inherit;
+  color: var(--hobo-muted);
+  cursor: pointer;
+}
+.nav-link[type=submit]:hover, button.nav-link:hover { color: var(--hobo-ink); }
+
+/* The icons of the actions column: a link and a form button that must look the
+   same, because they are the same kind of thing to a person. */
+.record-actions { display: flex; gap: 0.5rem; align-items: center; justify-content: flex-end; }
+.record-actions form { display: inline; margin: 0; }
+.action-edit, .action-delete {
+  border: 0;
+  background: none;
+  padding: 0.15rem 0.35rem;
+  font-size: 1.15rem;
+  line-height: 1;
+  cursor: pointer;
+  color: var(--hobo-muted);
+  text-decoration: none;
+}
+.action-edit:hover { color: var(--hobo-accent); }
+.action-delete { color: var(--hobo-danger); opacity: 0.75; }
+.action-delete:hover { opacity: 1; }
+
+/* --- the box that searches the whole site -------------------------------------- */
+
+/* A la derecha de la barra, como en Hobo 2, y el campo y el boton pegados: son
+   una pieza, no dos cosas sueltas separadas por un hueco.
+   El empuje lo da el menu (.main-nav, mas abajo): un solo margen automatico.
+   Con uno aqui y otro en la cuenta, el hueco se reparte y la caja se queda en
+   mitad de la barra. */
+.site-search-form { display: flex; align-items: stretch; }
+.site-search .search-input {
+  max-width: 12rem;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+  margin-right: -1px;
+}
+/* Escrita para quien no ve la pagina, escondida para quien la ve: encima del
+   campo ya esta el placeholder. */
+.search-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.search-submit {
+  border: 1px solid var(--hobo-line);
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+  border-top-right-radius: var(--hobo-radius);
+  border-bottom-right-radius: var(--hobo-radius);
+  background: var(--hobo-soft);
+  color: inherit;
+  padding: 0.35rem 0.75rem;
+  cursor: pointer;
+}
+.search-submit:hover { border-color: var(--hobo-accent); }
+
+/* --- filters ---------------------------------------------------------------- */
+
+.filters { display: flex; flex-wrap: wrap; gap: var(--hobo-gap); margin-bottom: 1.25rem; }
+.search-filter, .filter-menu { display: inline-flex; gap: 0.5rem; align-items: center; }
+.search-filter input, .filter-menu select { max-width: 16rem; }
+
+/* --- messages ---------------------------------------------------------------- */
+
+.flash-messages:empty { display: none; }
+.flash {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--hobo-line);
+  border-left: 3px solid var(--hobo-accent);
+  border-radius: var(--hobo-radius);
+  padding: 0.75rem 1rem;
+  margin-bottom: var(--hobo-gap);
+  background: var(--hobo-soft);
+}
+.flash-text { flex: 1; }
+/* La × para quitarlo de en medio. Llega oculta y la enseña Stimulus: sin
+   JavaScript, un boton que no cierra nada es peor que no tenerlo. */
+.flash-dismiss {
+  border: 0;
+  background: none;
+  color: inherit;
+  opacity: 0.5;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0 0 0 1rem;
+  cursor: pointer;
+}
+.flash-dismiss:hover { opacity: 1; }
+.flash-error, .error-messages { border-left-color: var(--hobo-danger); }
+.error-messages { border: 1px solid var(--hobo-danger); border-radius: var(--hobo-radius); padding: 0.75rem 1rem; margin-bottom: var(--hobo-gap); }
+.error-messages h2 { font-size: 1rem; margin: 0 0 0.5rem; }
+
+/* --- the developer's user changer --------------------------------------------- */
+
+.dev-user-changer select { max-width: 14rem; }
+
+/* --- what an input-many looks like ---------------------------------------------- */
+
+.input-many-item { display: flex; gap: 0.5rem; align-items: flex-start; margin-bottom: 0.5rem; }
+.input-many-item input, .input-many-item select { max-width: 20rem; }

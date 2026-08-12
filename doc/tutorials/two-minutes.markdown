@@ -6,7 +6,7 @@ Before installing Hobo, you must have
 [Ruby](http://www.ruby-lang.org/en/) and
 [RubyGems](http://docs.rubygems.org/). You will also need the "git" command.
 
-Installing Hobo 2.1 will cause Rails 4 to be installed when the Hobo application generator first runs 'bundle install'.
+Installing Hobo 2.2 will cause Rails 4 to be installed when the Hobo application generator first runs 'bundle install'.
 
 For example, these are the steps you would need in Ubuntu 12.04:
 
@@ -18,7 +18,7 @@ For example, these are the steps you would need in Ubuntu 12.04:
         echo 'PATH="$HOME/.gem/bin:$PATH"' >> .bashrc
 
 
-Note: Hobo 2.1 is currently tested against Rails 4.0.6 and Ruby 2.0. Ruby 2.1 should work with the master branch too, but it has not been so thoroughly tested ([read conversation](https://groups.google.com/forum/#!msg/hobousers/Ylugi_lygYs/cVJObcuzXyAJ)).
+Note: Hobo 2.2 is currently tested against Rails 4.2.7.1 and Ruby 2.4.3.
 
 ## Install Hobo
 

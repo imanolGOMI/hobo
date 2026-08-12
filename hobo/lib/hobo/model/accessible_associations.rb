@@ -40,7 +40,12 @@ module Hobo
           # Remove completely blank hashes
           return nil if hash.values.all?(&:blank?)
 
-          id = hash.delete(:id)
+          # Taken out either way it is spelled. Coming off a request the hash is
+          # a HashWithIndifferentAccess and `:id` finds `"id"`; called from Ruby
+          # with a plain hash it does not, and the id was left in the attributes
+          # -- so a row that meant "change this one" was assigned an id it
+          # already had and blew up on the unique index.
+          id = hash.delete(:id) || hash.delete("id")
 
           record = yield id
           record.attributes = hash
@@ -64,9 +69,17 @@ module Hobo
       end
 
 
+      # The rows come back as `{"0" => {...}, "1" => {...}}`, because that is
+      # what a browser sends for `movie[movie_genres][0][genre_id]`, and the
+      # order of the rows is the order of those keys read as numbers -- string
+      # order would put "10" between "1" and "2".
+      #
+      # `Hash#get` was hobo_support sugar, and layer 1 removed it in favour of
+      # `values_at`. This line kept it, and nothing failed until the day the
+      # accessible writer it lives in ran for the first time.
       def params_hash_to_array(array_or_hash)
         if array_or_hash.is_a?(Hash)
-          array = array_or_hash.get(*array_or_hash.keys.sort_by(&:to_i))
+          array = array_or_hash.values_at(*array_or_hash.keys.sort_by(&:to_i))
         elsif array_or_hash.is_a?(String)
           # Due to the way that rails works, there's no good way to tell
           # the difference between an empty array and a params hash that
@@ -96,96 +109,105 @@ module Hobo
         conditions == [[]] || conditions == [[],[]] ? refl.klass : refl.klass.scoped(:conditions => conditions)
       end
 
-    end
+      # There was an `end` here, and it closed this module eighty lines early.
+      # Everything below -- the macros and the `included` hook that installs
+      # them -- was defined in Hobo::Model instead, so `:accessible => true` was
+      # accepted, recorded in the reflection and **never did anything**: the
+      # hash of rows went straight to ActiveRecord's writer, which wants
+      # records. And the stray `def self.included` was then Hobo::Model's own;
+      # only the load order kept it from replacing it.
 
+      # The `:accessible => true` option on an association, and the writer it
+      # generates. Everything here used to be alias_method_chain: five of them,
+      # two on the association macros themselves and three on the generated
+      # writers. They are `prepend` + `super` now.
+      #
+      # The macros also carried a hack that guessed whether the second argument
+      # was a scope or an options hash, and when it guessed "options" it passed
+      # the hash *positionally* -- so Rails took it as the scope and asked it for
+      # its arity. Since Rails 5 the signature is `(name, scope = nil, **options)`
+      # and there is nothing left to guess. It is the same bug layer 2 found in
+      # hobo_fields' belongs_to.
+      module AccessibleMacros
 
-    classy_module(AccessibleAssociations) do
+        def has_many(name, scope = nil, **options, &block)
+          super
+          return unless options[:accessible]
 
-      # --- has_many mass assignment support --- #
-
-      def self.has_many_with_accessible(name, *args, &block)
-        # Rails 4 supports a lambda as the second argument in a has_many association
-        # We need to support it too (required for gems like papertrail)
-        # The problem is that when it is not used, the options hash is taken as the scope
-        # To fix this, we make a small hack checking the second argument's class
-        if args.size == 0 || (args.size == 1 && args[0].kind_of?(Proc))
-            options = {}
-            args.push(options)
-        elsif args.size == 1
-            options = args[0]
-        else
-            options = args[1]
-        end
-        has_many_without_accessible(name, *args, &block)
-        # End of the received_scope hack
-
-        if options[:accessible]
-          class_eval %{
-            def #{name}_with_accessible=(array_or_hash)
-              __items = Hobo::Model::AccessibleAssociations.prepare_has_many_assignment(#{name}, :#{name}, array_or_hash)
-              self.#{name}_without_accessible = __items
+          hobo_accessible_writers.module_eval do
+            define_method("#{name}=") do |array_or_hash|
+              items = AccessibleAssociations.prepare_has_many_assignment(send(name), name.to_sym, array_or_hash)
+              super(items)
               # ensure the loaded array contains any changed records
-              self.association(:#{name}).target[0..-1] = __items
+              association(name.to_sym).target[0..-1] = items
             end
-          }, __FILE__, __LINE__ - 7
-          alias_method_chain :"#{name}=", :accessible
+          end
         end
-      end
-      metaclass.alias_method_chain :has_many, :accessible
 
-
-
-      # --- belongs_to assignment support --- #
-
-      def self.belongs_to_with_accessible(name,*args, &block)
-        if args.size == 0 || (args.size == 1 && args[0].kind_of?(Proc))
-            options = {}
-            args.push(options)
-        elsif args.size == 1
-            options = args[0]
-        else
-            options = args[1]
+        def belongs_to(name, scope = nil, **options, &block)
+          super
+          options[:accessible] ? define_accessible_writer(name) : define_finder_writer(name)
         end
-        belongs_to_without_accessible(name,*args, &block)
 
-        if options[:accessible]
-          class_eval %{
-            def #{name}_with_accessible=(record_hash_or_string)
-              finder = Hobo::Model::AccessibleAssociations.finder_for_belongs_to(self, :#{name})
-              record = Hobo::Model::AccessibleAssociations.find_or_create_and_update(self, :#{name}, finder, record_hash_or_string) do |id|
+        # A module of our own, prepended once, where the generated writers live.
+        # `super` from inside it reaches the writer ActiveRecord generated, which
+        # is what alias_method_chain used to arrange by renaming.
+        def hobo_accessible_writers
+          @hobo_accessible_writers ||= Module.new.tap { |mod| prepend(mod) }
+        end
+
+        private
+
+        def define_accessible_writer(name)
+          hobo_accessible_writers.module_eval do
+            define_method("#{name}=") do |record_hash_or_string|
+              finder = AccessibleAssociations.finder_for_belongs_to(self, name.to_sym)
+              record = AccessibleAssociations.find_or_create_and_update(self, name.to_sym, finder, record_hash_or_string) do |id|
                 if id
-                  raise ArgumentError, "attempted to update the wrong record in belongs_to association #{self}##{name}" unless
-                    #{name} && id.to_s == self.#{name}.id.to_s
-                  #{name}
+                  current = send(name)
+                  unless current && id.to_s == current.id.to_s
+                    raise ArgumentError, "attempted to update the wrong record in belongs_to association #{self}##{name}"
+                  end
+                  current
                 else
                   finder.new
                 end
               end
-              self.#{name}_without_accessible = record
+              super(record)
             end
-          }, __FILE__, __LINE__ - 15
-          alias_method_chain :"#{name}=", :accessible
-        else
-          # Not accessible - but finding by name and ID is still supported
-          class_eval %{
-            def #{name}_with_finder=(record_or_string)
+          end
+        end
+
+        # Not accessible, but finding by name or id is still supported.
+        def define_finder_writer(name)
+          hobo_accessible_writers.module_eval do
+            define_method("#{name}=") do |record_or_string|
               record = if record_or_string.is_a?(String)
-                         finder = Hobo::Model::AccessibleAssociations.finder_for_belongs_to(self, :#{name})
-                         Hobo::Model::AccessibleAssociations.find_by_name_or_id(finder, record_or_string)
-                       else # it is a record
+                         finder = AccessibleAssociations.finder_for_belongs_to(self, name.to_sym)
+                         AccessibleAssociations.find_by_name_or_id(finder, record_or_string)
+                       else
                          record_or_string
                        end
-              self.#{name}_without_finder = record
+              super(record)
             end
-          }, __FILE__, __LINE__ - 12
-          alias_method_chain :"#{name}=", :finder
+          end
         end
+
       end
-      metaclass.alias_method_chain :belongs_to, :accessible
 
+      def self.included(base)
+        base.singleton_class.prepend(AccessibleMacros)
+      end
 
-      # Add :accessible to the valid options so AR doesn't complain
-      ::ActiveRecord::Associations::Builder::Association.valid_options << :accessible
+      # Tell AR that `:accessible` is a legitimate association option.
+      #
+      # It used to be `valid_options << :accessible`, a class-level array. In
+      # Rails 8 valid_options is a private method that takes the options hash.
+      ::ActiveRecord::Associations::Builder::Association.singleton_class.prepend(Module.new do
+        def valid_options(options)
+          super + [:accessible]
+        end
+      end)
 
     end
   end

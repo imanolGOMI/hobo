@@ -1,23 +1,272 @@
-require 'generators/hobo_support/model'
+require "rails/generators"
+require "generators/hobo/user_options"
+
 module Hobo
-  class UserModelGenerator < Rails::Generators::NamedBase
-    source_root File.expand_path('../templates', __FILE__)
+  module Generators
 
-    # overrides the default
-    argument :name, :type => :string, :default => 'user', :optional => true
+    # `rails generate hobo:user_model [name]`
+    #
+    # Turns a model into the one people log in as: the lifecycle that says how
+    # an account is made, and the permissions that say who may touch it.
+    #
+    # In Hobo 2 this **wrote** the model, because Hobo owned the user. Rails 8
+    # writes it now (`bin/rails generate authentication`) and this adds Hobo's
+    # half to whatever is there -- which is why it declares its columns with
+    # `add_fields` and not `fields do`: the table is Rails' and Hobo only adds
+    # to it (decisión 26).
+    class UserModelGenerator < Rails::Generators::Base
 
-    include Generators::HoboSupport::Model
-    include Generators::Hobo::InviteOnly
-    include Generators::Hobo::ActivationEmail
+      include UserOptions
 
-    def self.banner
-      "rails generate hobo:user_model [NAME=user] [options]"
+      argument :name, :type => :string, :default => "User",
+               :desc => "El modelo de las personas (por defecto: User)"
+
+      # There is always something to teach it, and it is the person's **name**.
+      #
+      # `bin/rails generate authentication` writes an address and a password
+      # digest, and that is all Rails needs to let somebody in. Hobo shows a
+      # record by its `name` field, so a user without one is "User 1" -- in the
+      # bar, in every link to them, in every page title -- and the form that
+      # asks for the first user asks for an address and a password and never for
+      # a name. Hobo 2's user model declared `name :string, :required, :unique`
+      # and this is what became of it.
+      #
+      # The lifecycle on top of that, only when there is one to write: it calls
+      # a mailer, and without `--activation-email` or `--invite-only` nobody
+      # generated one.
+      def teach_the_model
+        return complain_about_the_missing_model unless user_exists?
+
+        # Ya es de Hobo, **pero puede faltarle el ciclo de vida**.
+        #
+        # `hobo new` deja el modelo con `include Hobo::Model` puesto, asi que
+        # este generador se daba por hecho y se iba. Consecuencia: en una
+        # aplicacion recien creada, `hobo:signup --activation-email` escribia las
+        # rutas, el controlador y el mailer, y **el ciclo de vida no llegaba
+        # nunca al modelo**. La activacion por correo no se podia anadir a una
+        # aplicacion de Hobo: solo a un modelo que no fuera de Hobo todavia.
+        #
+        # No daba error -- decia «ya es un modelo de Hobo» en amarillo y seguia
+        # --, y lo que fallaba despues era la migracion, que no encontraba las
+        # columnas `state` y `key_timestamp` de un ciclo de vida que no existe.
+        if already_taught?
+          return say("#{user_file} ya es un modelo de Hobo.", :yellow) if lifecycle_lines.empty? || lifecycle_written?
+
+          say "#{user_file} ya es un modelo de Hobo: se le anade el ciclo de vida.", :green
+
+          # Y **fuera los permisos simples**, que los escribio este mismo
+          # generador para una aplicacion sin ciclo de vida y dicen lo contrario:
+          # `create_permitted? = true` contra `= self.class.count.zero?`. Los dos
+          # en la misma clase no es una duda, es que gana el de abajo -- y el de
+          # abajo es el que sobra: con activacion o invitaciones, crear un
+          # usuario a pelo es cosa del primero y de nadie mas.
+          gsub_file(user_file, PERMISOS_SIMPLES, "", :verbose => false)
+          # **Detras del `include`**, y no con `inject_into_class`, que escribe
+          # al principio de la clase: el ciclo de vida se declara con un metodo
+          # que trae `Hobo::Model`, asi que puesto encima se ejecuta antes de
+          # que exista y el modelo no carga -- «undefined method 'lifecycle'».
+          #
+          # Y una cadena, no un array: `indent` trabaja con texto, y con un
+          # array devolvia algo que se escribia sin poner nada.
+          return inject_into_file(user_file, indent((["", *flag_lines].join("\n") + "\n"), 2),
+                                  :after => /include Hobo::Model\n/)
+        end
+
+        # `indent`: `inject_into_class` puts the text in as it comes, and a
+        # model with everything flush against the margin reads like a mistake.
+        inject_into_class user_file, user_model, indent(model_lines, 2)
+      end
+
+      def remind_about_the_migration
+        say [
+          "",
+          "El modelo tiene columnas nuevas. Para crearlas:",
+          "",
+          "  bin/rails generate hobo:migration",
+          "",
+        ].join("\n"), :green
+      end
+
+      private
+
+      # El bloque de permisos que se escribe cuando **no** hay ciclo de vida.
+      PERMISOS_SIMPLES = /^[ \t]*# --- Permissions ---\n(?:.*?\n)*?[ \t]*def view_permitted\?\(_field\) = true\n/.freeze
+
+      def already_taught?
+        File.read(File.join(destination_root, user_file)).include?("include Hobo::Model")
+      end
+
+      # Si el ciclo de vida ya esta escrito, para no ponerlo dos veces al
+      # repetir el generador.
+      def lifecycle_written?
+        File.read(File.join(destination_root, user_file)).include?("lifecycle do")
+      end
+
+      def model_lines
+        lines = ["include Hobo::Model", ""]
+
+        # El nombre, siempre. Ver arriba: sin él una persona es «User 1» en toda
+        # la aplicación, y el alta no lo pide porque no existe.
+        lines << "# How this person is shown: Hobo names a record by its `name`, and"
+        lines << "# Rails' user model has only an address."
+        lines << "add_fields do"
+        lines << "  name :string, :required"
+        lines << "end"
+        lines << ""
+
+        unless activation_email? || invite_only?
+          # Sin lifecycle, quien decide quién puede hacer qué es esto y no hay
+          # nada más. Los permisos de Hobo **deniegan por defecto**, así que un
+          # modelo con `include Hobo::Model` y sin ellos es una aplicación donde
+          # nadie puede darse de alta.
+          lines.concat(<<~'RUBY'.lines.map(&:chomp))
+            # --- Permissions ---
+            #
+            # Signing up is open, and after that a person is the only one who can
+            # change their own account.
+            def create_permitted?  = true
+            def update_permitted?  = acting_user == self
+            def destroy_permitted? = false
+            def view_permitted?(_field) = true
+          RUBY
+          return lines.join("\n") + "\n"
+        end
+
+        (lines + flag_lines).join("\n") + "\n"
+      end
+
+      # Todo lo que existe **solo porque hay un ciclo de vida**: el ciclo, quien
+      # puede entrar, el primer usuario y, con invitaciones, el campo de
+      # administrador y el relleno de la cuenta invitada.
+      #
+      # Vive aparte porque hace falta dos veces: al escribir el modelo entero y
+      # al anadirselo a uno que ya era de Hobo. Inyectando solo el ciclo de vida
+      # --que es lo que se hacia-- quedaba una aplicacion a medias: la cuenta
+      # nacia apagada y **se entraba igual**, porque la guarda que lo impide
+      # estaba en la otra mitad.
+      def flag_lines
+        lines = []
+
+        if invite_only?
+          lines << "# Who may invite. The first person in is the administrator, which is"
+          lines << "# what the front page has been promising all along."
+          lines << "add_fields do"
+          lines << "  administrator :boolean, :default => false"
+          lines << "end"
+          lines << ""
+          lines << "# An invited account has no password until the person accepts it, and"
+          lines << "# Rails' has_secure_password insists on a digest being there. This one"
+          lines << "# matches nothing anybody can type."
+          lines << "#"
+          lines << "# The digest and not `self.password = ...`: **inside a lifecycle step"
+          lines << "# only the attributes the step declares get through** -- that is the"
+          lines << "# permission layer doing its job -- so assigning the password here is"
+          lines << "# quietly dropped and the record fails with \"Password can't be blank\"."
+          lines << "#"
+          lines << "# And no `:on => :create`: while a lifecycle step is running the"
+          lines << "# validation context is the **step's name** (:invite), which is what"
+          lines << "# lets a model say `validates :x, :on => :signup`. A callback asking"
+          lines << "# for :create never fires there. The state is the guard that matters."
+          lines << "#"
+          lines << "# Y el nombre, que este modelo declara obligatorio: quien invita solo"
+          lines << "# sabe la direccion, y sin nombre **no se puede invitar a nadie** -- el"
+          lines << "# formulario contesta \"Name can't be blank\" y no hay campo donde"
+          lines << "# ponerlo. Se pone uno provisional con la parte de delante de la"
+          lines << "# direccion, y la persona lo cambia al aceptar."
+          lines << "before_validation do"
+          lines << "  self.name = email_address.to_s.split(\"@\").first if new_record? && name.blank?"
+          lines << "  if new_record? && state.to_s == \"invited\" && password_digest.blank?"
+          lines << "    self.password_digest = BCrypt::Password.create(SecureRandom.hex(32))"
+          lines << "  end"
+          lines << "end"
+          lines << ""
+        end
+
+        # The first person in arrives through the front page, which creates the
+        # record **directly** -- there is nobody yet to run a lifecycle step and
+        # no mail to answer. So the default state does not apply to them: they
+        # are in, and they own the application. Without this the first user was
+        # created `inactive` (or `invited`) and could not log in, which is a
+        # locked door with the key inside.
+        lines << "# The first person in owns the application, and is already in: the front"
+        lines << "# page creates them directly, so no lifecycle step ran for them."
+        lines << "before_create do"
+        lines << "  if self.class.count.zero?"
+        lines << "    self.administrator = true" if invite_only?
+        lines << "    self.state = \"active\""
+        lines << "  end"
+        lines << "end"
+        lines << ""
+
+        lines.concat(lifecycle_lines)
+        lines << ""
+        lines.concat(<<~'RUBY'.lines.map(&:chomp))
+          # An account that is not active does not get in. Here rather than in the
+          # sessions controller, so it holds wherever the application
+          # authenticates.
+          def self.authenticate_by(...)
+            user = super
+            user if user.nil? || user.state.to_s == "active"
+          end
+
+          # --- Permissions ---
+          #
+          # Creating a user directly is for the first one only; everybody else
+          # arrives through the lifecycle, which is the authority for its own step.
+          def create_permitted?  = self.class.count.zero?
+          def update_permitted?  = acting_user == self
+          def destroy_permitted? = false
+          def view_permitted?(_field) = true
+        RUBY
+        lines
+      end
+
+      def lifecycle_lines
+        if invite_only?
+          <<~'RUBY'.lines.map(&:chomp)
+            # Nobody signs up: somebody invites you, and you choose a password.
+            lifecycle do
+              state :invited, :default => true
+              state :active
+
+              create :invite, :available_to => "acting_user if acting_user.try(:administrator?)",
+                     :params => [:email_address], :become => :invited, :new_key => true do
+                UserMailer.invitation(self, lifecycle.key, acting_user).deliver_now
+                Rails.logger.info("INVITATION #{Rails.application.routes.url_helpers.accept_path(self, :key => lifecycle.key)}")
+              end
+
+              transition :accept_invitation, { :invited => :active }, :available_to => :key_holder,
+                         :params => [:name, :password, :password_confirmation]
+            end
+          RUBY
+        else
+          <<~'RUBY'.lines.map(&:chomp)
+            # Sign up, and stay inactive until the key in the mail comes back.
+            lifecycle do
+              state :inactive, :default => true
+              state :active
+
+              # `:name` tambien: **el paso solo deja pasar lo que declara**, que
+              # es la capa de permisos haciendo su trabajo, y este modelo declara
+              # el nombre obligatorio. Sin el en la lista, el formulario lo pide,
+              # la persona lo escribe, el paso lo tira y el alta contesta «Name
+              # can't be blank» senalando un campo que si estaba relleno.
+              create :signup, :available_to => :all,
+                     :params => [:name, :email_address, :password, :password_confirmation],
+                     :become => :inactive, :new_key => true do
+                UserMailer.activation(self, lifecycle.key).deliver_now
+                # Development has nowhere to send mail, and an account nobody can
+                # activate is hard to debug. The link is in the log.
+                Rails.logger.info("ACTIVATION #{Rails.application.routes.url_helpers.activate_path(self, :key => lifecycle.key)}")
+              end
+
+              transition :activate, { :inactive => :active }, :available_to => :key_holder
+            end
+          RUBY
+        end
+      end
+
     end
-
-    class_option :admin_subsite_name,
-                 :type => :string,
-                 :desc => "Admin Subsite Name",
-                 :default => 'admin'
 
   end
 end

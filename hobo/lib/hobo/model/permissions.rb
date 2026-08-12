@@ -7,28 +7,23 @@ module Hobo
         klass.class_eval do
           extend ClassMethods
 
-          alias_method_chain :_create_record, :hobo_permission_check
-          alias_method_chain :_update_record, :hobo_permission_check
-          alias_method_chain :destroy, :hobo_permission_check
-          class << self
-            alias_method_chain :has_many, :hobo_permission_check
-            alias_method_chain :has_one, :hobo_permission_check
-            alias_method_chain :belongs_to, :hobo_permission_check
-          end
+          # The check used to wrap _create_record, _update_record and destroy
+          # with alias_method_chain. The first two are private to ActiveRecord;
+          # all three have a public callback that means the same thing, and the
+          # callbacks also catch the paths that do not go through those methods
+          # -- creating through an association, for one.
+          #
+          # `prepend` so the check runs before anything else on the same
+          # callback, Rails' own dependent-destroy included: no point destroying
+          # the children of a record you are not allowed to destroy.
+          before_create  :hobo_check_create_permission,  :prepend => true
+          before_update  :hobo_check_update_permission,  :prepend => true
+          before_destroy :hobo_check_destroy_permission, :prepend => true
 
           attr_accessor :acting_user, :origin, :origin_attribute
 
           bool_attr_accessor :exempt_from_edit_checks
         end
-      end
-
-      def self.find_aliased_name(klass, method_name)
-        # The method +method_name+ will have been aliased. We jump through some hoops to figure out
-        # what it's new name is
-        method_name = method_name.to_sym
-        method = klass.instance_method method_name
-        methods = (klass.private_instance_methods + klass.instance_methods).*.to_sym
-        new_name = methods.select {|m| klass.instance_method(m) == method }.find { |m| m != method_name }
       end
 
       module ClassMethods
@@ -46,7 +41,7 @@ module Hobo
             r.set_creator user
             yield r if block_given?
             r.user_view(user)
-            r.with_acting_user(user) { r.try.after_user_new }
+            r.with_acting_user(user) { r.try(:after_user_new) }
           end
         end
 
@@ -79,47 +74,22 @@ module Hobo
         #  ensure active_user gets passed down to :dependent => destroy
         #  associations  (Ticket #528)
 
-        def has_many_with_hobo_permission_check(association_id, *args, &extension)
-          has_many_without_hobo_permission_check(association_id, *args, &extension)
-          reflection = reflections[association_id.to_s]
-          if reflection.options[:dependent]==:destroy
-            #overriding dynamic method created in ActiveRecord::Associations#configure_dependency_for_has_many
-            method_name =  "has_many_dependent_destroy_for_#{reflection.name}".to_sym
-            define_method(method_name) do
-              send(reflection.name).each { |r| r.is_a?(Hobo::Model) ? r.user_destroy(acting_user) : r.destroy }
-            end
-          end
-        end
-
-        def has_one_with_hobo_permission_check(association_id, *args, &extension)
-          has_one_without_hobo_permission_check(association_id, *args, &extension)
-          reflection = reflections[association_id.to_s]
-          if reflection.options[:dependent]==:destroy
-            #overriding dynamic method created in ActiveRecord::Associations#configure_dependency_for_has_one
-            method_name =  "has_one_dependent_destroy_for_#{reflection.name}".to_sym
-            define_method(method_name) do
-              association = send(reflection.name)
-              unless association.nil?
-                association.is_a?(Hobo::Model) ? association.user_destroy(acting_user) : association.destroy
-              end
-            end
-          end
-        end
-
-        def belongs_to_with_hobo_permission_check(association_id, *args, &extension)
-          belongs_to_without_hobo_permission_check(association_id, *args, &extension)
-          reflection = reflections[association_id.to_s]
-          if reflection.options[:dependent]==:destroy
-            #overriding dynamic method created in ActiveRecord::Associations#configure_dependency_for_belongs_to
-            method_name =  "belongs_to_dependent_destroy_for_#{reflection.name}".to_sym
-            define_method(method_name) do
-              association = send(reflection.name)
-              unless association.nil?
-                association.is_a?(Hobo::Model) ? association.user_destroy(acting_user) : association.destroy
-              end
-            end
-          end
-        end
+        # There were three wrappers here, around has_many, has_one and
+        # belongs_to. Each one redefined `<macro>_dependent_destroy_for_<name>`,
+        # a method ActiveRecord generated for `:dependent => :destroy`, so that
+        # the children went through `user_destroy` instead of `destroy`.
+        #
+        # Rails stopped generating those methods in 4.1: since then dependent
+        # destruction goes through a before_destroy callback that calls
+        # `association.handle_dependency`. So the three wrappers have been
+        # redefining methods nobody calls for over a decade, and the children
+        # have been destroyed without any permission check at all.
+        #
+        # What replaces them is smaller and does not touch the association
+        # macros: the parent hands its acting_user down to the children it is
+        # about to destroy, and each child then checks its own permission
+        # through the same before_destroy as everybody else. See
+        # hobo_propagate_acting_user_to_dependents below.
 
       end
 
@@ -132,26 +102,35 @@ module Hobo
         acting_user && !(self.class.has_lifecycle? && lifecycle.active_step)
       end
 
-      def _create_record_with_hobo_permission_check(*args, &b)
-        if permission_check_required?
-          create_permitted? or raise PermissionDeniedError, "#{self.class.name} #{self.id}#create"
-        end
-        _create_record_without_hobo_permission_check(*args, &b)
+      def hobo_check_create_permission
+        return unless permission_check_required?
+        create_permitted? or raise PermissionDeniedError, "#{self.class.name} #{self.id}#create"
       end
 
-      def _update_record_with_hobo_permission_check(*args)
-        if permission_check_required?
-          update_permitted? or raise PermissionDeniedError, "#{self.class.name} #{self.id}#update"
-        end
-        _update_record_without_hobo_permission_check(*args)
+      def hobo_check_update_permission
+        return unless permission_check_required?
+        update_permitted? or raise PermissionDeniedError, "#{self.class.name} #{self.id}#update"
       end
 
-      def destroy_with_hobo_permission_check
+      def hobo_check_destroy_permission
         if permission_check_required?
           destroy_permitted? or raise PermissionDeniedError, "#{self.class.name} #{self.id}#.destroy"
         end
+        hobo_propagate_acting_user_to_dependents
+      end
 
-        destroy_without_hobo_permission_check
+      # Rails destroys `:dependent => :destroy` children through a callback of
+      # its own, which knows nothing about who is acting. Handing them the
+      # acting_user before it runs is all it takes for each child to check its
+      # own destroy permission on the way out.
+      def hobo_propagate_acting_user_to_dependents
+        return unless acting_user
+        self.class.reflect_on_all_associations.each do |reflection|
+          next unless reflection.options[:dependent] == :destroy
+          Array(send(reflection.name)).each do |record|
+            record.acting_user = acting_user if record.is_a?(Hobo::Model)
+          end
+        end
       end
 
       # -------------------------------------- #
@@ -254,20 +233,25 @@ module Hobo
       end
 
 
+      # Whether the user is allowed nowhere near this attribute, whatever the
+      # permissions say. It is what keeps the lifecycle's state field, and the
+      # authentication fields, out of the generated forms.
+      #
+      # This used to lean on `attr_protected`, `accessible_attributes` and
+      # `attributes_protected_by_default`, all of which Rails moved out to the
+      # protected_attributes gem in Rails 4 and which has been unmaintained
+      # since 2016. Rails' answer is strong parameters, in the controller -- but
+      # the question here is asked by the *form builder*, about a field, before
+      # any parameters exist. So Hobo keeps its own list, which is all it ever
+      # used of that gem. See `attr_protected` in Hobo::Model::ClassMethods.
       def attribute_protected?(attribute)
         return false if attribute.nil?
         attribute = attribute.to_s
 
-        return true if self.class.send(:attributes_protected_by_default).include? attribute
-
-        if !self.class.accessible_attributes.empty?
-          return true if !self.class.accessible_attributes.include?(attribute)
-        elsif self.class.protected_attributes
-          return true if self.class.protected_attributes.include?(attribute)
-        end
+        return true if self.class.protected_attributes.include?(attribute)
 
         # Readonly attributes can be set on creation but not thereafter
-        return self.class.readonly_attributes.include?(attribute) if !new_record? && self.class.readonly_attributes
+        return self.class.readonly_attributes.include?(attribute) unless new_record?
 
         false
       end
@@ -380,7 +364,7 @@ module Hobo
       # Add some singleton methods to +record+ to give the effect that +attribute+ is unknown. That is,
       # attempts to access the attribute will result in a Hobo::UndefinedAccessError
       def unknownify_attribute(attr)
-        metaclass.class_eval do
+        singleton_class.class_eval do
           define_method attr do
             raise Hobo::UndefinedAccessError
           end
@@ -393,7 +377,7 @@ module Hobo
         else
           # A regular field -- hack the dirty tracking methods
 
-          metaclass.class_eval do
+          singleton_class.class_eval do
 
             define_method "#{attr}_change" do
               raise Hobo::UndefinedAccessError
@@ -427,7 +411,7 @@ module Hobo
       def deunknownify_attribute(attr, remove_globals = true)
         attr = attr.to_sym
 
-        metaclass.send :remove_method, attr
+        singleton_class.send :remove_method, attr
 
         if (refl = self.class.reflections[attr.to_s]) && refl.macro == :belongs_to
           # A belongs_to -- restore the underlying fields
@@ -438,7 +422,7 @@ module Hobo
           # if remove_globals is false, skip the top-level methods, as we have already removed them
           to_remove = remove_globals ? [:changed?, :changed, :changes] : []
           (["#{attr}_change", "#{attr}_was", "#{attr}_changed?"] + to_remove).each do |m|
-            metaclass.send :remove_method, m.to_sym
+            singleton_class.send :remove_method, m.to_sym
           end
         end
       end

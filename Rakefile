@@ -1,97 +1,75 @@
 RUBY = File.join(RbConfig::CONFIG['bindir'], RbConfig::CONFIG['ruby_install_name']).sub(/.*\s.*/m, '"\&"')
-RUBYDOCTEST = ENV['RUBYDOCTEST'] || "#{RUBY} `which rubydoctest`"
-GEMS_ROOT = File.expand_path('../')
 
-desc "Run tests and doctests for all components."
-task :test do |t|
-  puts 'You probably want to set the HOBODEV variable before running rake test_all' if ENV['HOBODEV'].nil?
-  system("cd dryml ; #{RUBY} -S bundle exec rake test:doctest") &&
-    system("cd hobo_fields ; #{RUBY} -S bundle exec rake test:doctest < test_responses.txt") &&
-    system("cd hobo_fields ; #{RUBY} -S bundle exec rake test:unit") &&
-    system("cd hobo_support ; #{RUBY} -S bundle exec rake test:doctest") &&
-    system("cd hobo ; #{RUBY} -S bundle exec rake test:doctest") &&
-    system("cd hobo ; #{RUBY} -S bundle exec rake test:irt") &&
-    system("cd hobo ; #{RUBY} -S bundle exec rake test")
+# One gem (decision 11 of PLAN.md).
+#
+# There used to be three lists here -- PORTED_GEMS, PARTIAL_GEMS,
+# PENDING_GEMS -- and they earned their keep: each layer moved a gem from one
+# to the next, and `rake test` said out loud which ones were not being checked
+# yet. That is over. `hobo_support`, `hobo_fields`, `dryml`, `hobo_rapid` and
+# the Bootstrap theme are one lib tree under `hobo/`, with one gemspec, one
+# Rakefile and one suite.
+#
+# The old themes and the jQuery plugins are still separate directories, and they
+# are **not** ported: they are the Hobo 2 originals, kept to read. Nothing here
+# runs them.
+GEM = "hobo".freeze
+
+# `hobo_timeago` is the exception, and it is not part of the gem: it is a plugin
+# (piece 17), written to be the proof that the contract is what it says it is.
+# It has its own gemspec and its own suite because a plugin has to be able to
+# live outside this repository, and a plugin nobody can test without the whole
+# repository does not.
+PLUGIN = "hobo_timeago".freeze
+
+desc "Run the test suite"
+task :test do
+  exit(1) unless system("cd #{GEM} && #{RUBY} -S rake test")
+end
+
+desc "Run the example plugin's suite (the plugin contract)"
+task :test_plugin do
+  exit(1) unless system("cd #{PLUGIN} && #{RUBY} -S rake test")
+end
+
+desc "Run the integration tests (agility_bootstrap)"
+task :test_integration do
+  system("cd integration_tests/agility_bootstrap && #{RUBY} -S rake test")
   exit($?.exitstatus)
 end
 
-desc "Run tests and doctests for all components."
-task :test_jruby do |t|
-  puts 'You probably want to set the HOBODEV variable before running rake test_all' if ENV['HOBODEV'].nil?
-  system("cd dryml ; #{RUBY} -S bundle exec rake test:doctest") &&
-    system("cd hobo_fields ; #{RUBY} -S bundle exec rake test:doctest") &&
-    system("cd hobo_fields ; #{RUBY} -S bundle exec rake test:unit") &&
-    system("cd hobo_support ; #{RUBY} -S bundle exec rake test:doctest") &&
-    system("cd hobo ; #{RUBY} -S bundle exec rake test:doctest") &&
-    system("cd hobo ; #{RUBY} -S bundle exec rake test:irt") &&
-    system("cd hobo ; #{RUBY} -S bundle exec rake test")
-  exit($?.exitstatus)
-end
-
-desc "Run the integration tests"
-task :test_integration do |t|
-  system("cd integration_tests/agility; #{RUBY} -S rake test:integration")
-  exit($?.exitstatus)
-end
-
-desc "Build and push or install all the hobo-gems"
+desc "Build, install or push the gem"
 task :gems, :action, :force do |t, args|
-  unless args.action.match(/^push|install|build$/)
+  unless args.action.to_s.match(/^push|install|build$/)
     puts "Unknown '#{args.action}' action: it must be either 'push' or 'install' or 'build'."
     exit(1)
   end
-  if ! args.force && ! `git status -s`.empty?
+  if !args.force && !`git status -s`.empty?
     puts <<-EOS.gsub(/^ {6}/, '')
       Rake task aborted: the working tree is dirty!
-      If you know what you are doing you can use \`rake gems[#{args.action},force]\`"
+      If you know what you are doing you can use `rake gems[#{args.action},force]`
     EOS
     exit(1)
   end
 
-
-  %w[hobo_support hobo_fields dryml hobo hobo_rapid hobo_jquery hobo_jquery_ui hobo_clean hobo_clean_admin hobo_clean_sidemenu].each do |name|
-    chdir(File.expand_path("../#{name}", __FILE__)) do
-      orig_version = version = File.read('VERSION').strip
+  chdir(File.expand_path("../#{GEM}", __FILE__)) do
+    orig_version = version = File.read('VERSION').strip
+    gem_name = nil
     begin
-      # add the commit ID to the version, since it might not be the real gem version that will be published
+      # The commit id goes into a local install, because what is installed is
+      # not necessarily what will be published.
       if args.action == 'install'
-        commit_id = `git log -1 --format="%h" HEAD`.strip
-        version = "#{orig_version}.#{commit_id}"
-        File.open('VERSION', 'w') do |f|
-          f.puts version
-        end
+        version = "#{orig_version}.#{`git log -1 --format="%h" HEAD`.strip}"
+        File.write('VERSION', "#{version}\n")
       end
 
-      gem_name = "#{name}-#{version}.gem"
-      sh %(gem build #{name}.gemspec)
-      sh %(gem #{args.action} #{gem_name} #{args.action == 'install' ? '--local' : ''}) unless args.action=='build'
-
+      gem_name = "#{GEM}-#{version}.gem"
+      sh %(gem build #{GEM}.gemspec)
+      sh %(gem #{args.action} #{gem_name} #{args.action == 'install' ? '--local' : ''}) unless args.action == 'build'
     ensure
-      remove_entry_secure gem_name, true unless args.action=='build'
-      if args.action == 'install'
-        File.open('VERSION', 'w') do |f|
-          f.puts orig_version
-        end
-      end
-    end
-
+      remove_entry_secure gem_name, true if gem_name && args.action != 'build'
+      File.write('VERSION', "#{orig_version}\n") if args.action == 'install'
     end
   end
-
-  if args.action == 'install'
-    puts <<-EOS.gsub(/^ {6}/, '')
-
-      *******************************************************************************
-      *                                   NOTICE                                    *
-      *******************************************************************************
-      * The version id of locally installed hobo gems is comparable to a --pre      *
-      * version: i.e. it is alphabetically ordered (not numerically ordered),       *
-      * besides it includes the sah1 commit id which is not aphabetically ordered,  *
-      * so be sure your application picks the version you really intend to use by   *
-      * setting it explicitly in the Gemfile.                                       *
-      *******************************************************************************
-
-    EOS
-  end
-
 end
+
+task :default => [:test, :test_plugin]

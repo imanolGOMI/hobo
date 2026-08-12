@@ -1,3 +1,12 @@
+require 'hobo/undefined'
+require 'hobo/model/permissions'
+require 'hobo/model/lifecycles'
+require 'hobo/model/find_for'
+require 'hobo/model/accessible_associations'
+require 'hobo/model/include_in_save'
+require 'hobo/model/scopes'
+require 'hobo/model/view_hints'
+
 module Hobo
   module Model
     require 'will_paginate/active_record'
@@ -28,13 +37,7 @@ module Hobo
         include IncludeInSave
       end
 
-      class << base
-        alias_method_chain :belongs_to,    :creator_metadata
-        alias_method_chain :belongs_to,    :test_methods
-        alias_method_chain :attr_accessor, :creator_metadata
-
-        alias_method_chain :has_one, :new_method
-      end
+      base.singleton_class.prepend(ClassMethods::AssociationMacros)
 
       base.fields(false) # force hobo_fields to load
 
@@ -43,13 +46,19 @@ module Hobo
 
     def self.register_model(model)
       @model_names ||= Set.new
-      @model_names << model.name
+      # An anonymous class has no name, and the register is by name: there would
+      # be no way to look it up again. Layer 2 hit the same thing in the
+      # migration generator.
+      @model_names << model.name if model.name
     end
 
 
     def self.all_models
       # Load every model in app/models...
-      unless @models_loaded
+      # Outside a Rails application there is nothing to scan, and asking for
+      # Rails.root gives nil -- which used to send this looking in "/app/models".
+      # The same guard layer 2 had to put on the migration generator.
+      if !@models_loaded && defined?(Rails) && Rails.respond_to?(:root) && Rails.root
         Dir.entries("#{Rails.root}/app/models/").each do |f|
           f =~ /^[a-zA-Z_][a-zA-Z0-9_]*\.rb$/ and f.sub(/.rb$/, '').camelize.constantize
         end
@@ -128,33 +137,45 @@ module Hobo
 
       def attrib_names
         names = []
-        names += table_exists? ? content_columns.*.name : field_specs.keys
-        names += public_instance_methods.*.to_s
+        names += table_exists? ? content_columns.map(&:name) : field_specs.keys
+        names += public_instance_methods.map(&:to_s)
       end
 
-      def belongs_to_with_creator_metadata(name, *args, &block)
-        if args.size == 0 || (args.size == 1 && args[0].kind_of?(Proc))
-            options = {}
-            args.push(options)
-        elsif args.size == 1
-            options = args[0]
-        else
-            options = args[1]
-        end
-        self.creator_attribute = name.to_sym if options.delete(:creator)
-        belongs_to_without_creator_metadata(name, *args, &block)
-      end
+      # `belongs_to`, `attr_accessor` and `has_one` all grew extras here, and all
+      # of them were alias_method_chain.
+      #
+      # The two belongs_to wrappers also carried the same hack as
+      # accessible_associations: guess whether the second argument is a scope or
+      # an options hash, and when it looks like options, push it on as a
+      # *positional* argument. Since Rails 5 the signature is
+      # `(name, scope = nil, **options)`, so the guess is unnecessary and the
+      # push was an ArgumentError waiting to happen.
+      module AssociationMacros
 
-      def belongs_to_with_test_methods(name, *args, &block)
-        if args.size == 0 || (args.size == 1 && args[0].kind_of?(Proc))
-            options = {}
-            args.push(options)
-        elsif args.size == 1
-            options = args[0]
-        else
-            options = args[1]
+        def belongs_to(name, scope = nil, **options, &block)
+          self.creator_attribute = name.to_sym if options.delete(:creator)
+          super(name, scope, **options, &block)
+          define_belongs_to_test_methods(name, options)
         end
-        belongs_to_without_test_methods(name, *args, &block)
+
+        def attr_accessor(*names, **options)
+          if options.delete(:creator)
+            raise ArgumentError, "trying to set :creator => true on multiple attributes" if names.length != 1
+            self.creator_attribute = names.first.to_sym
+          end
+          super(*names)
+        end
+
+        def has_one(name, scope = nil, **options, &block)
+          super
+          class_eval "def new_#{name}(attributes={}); build_#{name}(attributes, false); end"
+        end
+
+        private
+
+        # `<name>_is?` and `<name>_changed?`, which the views and the permission
+        # code ask for.
+        def define_belongs_to_test_methods(name, options)
         refl = reflections[name.to_s]
         id_method = refl.options[:primary_key] || refl.klass.primary_key
         if options[:polymorphic]
@@ -183,21 +204,10 @@ module Hobo
             end
           }
         end
-      end
-
-
-      def attr_accessor_with_creator_metadata(*args)
-        options = args.extract_options!
-        if options.delete(:creator)
-          if args.length == 1
-            self.creator_attribute = args.first.to_sym
-          else
-            raise ArgumentError, "trying to set :creator => true on multiple attributes"
-          end
         end
-        args << options unless options.empty?
-        attr_accessor_without_creator_metadata(*args)
+
       end
+
 
 
       def has_one_with_new_method(name, options={}, &block)
@@ -213,14 +223,14 @@ module Hobo
 
       def never_show(*fields)
         @hobo_never_show ||= []
-        @hobo_never_show.concat(fields.*.to_sym)
+        @hobo_never_show.concat(fields.map(&:to_sym))
       end
 
 
       def set_search_columns(*columns)
         class_eval %{
           def self.search_columns
-            %w{#{columns.*.to_s * ' '}}
+            %w{#{columns.map(&:to_s) * ' '}}
           end
         }
       end
@@ -234,15 +244,13 @@ module Hobo
       end
 
 
-      def find(*args)
+      # `...` rather than `*args`: since Ruby 3 a splat turns the caller's
+      # keyword arguments into a positional Hash, and ActiveRecord's finders
+      # take keywords. `find_by_sql` used to be wrapped here too, purely to
+      # return what it was given -- it did nothing at all, so it is gone.
+      def find(...)
         result = super
         result.member_class = self if result.is_a?(Array)
-        result
-      end
-
-
-      def find_by_sql(*args)
-        result = super
         result
       end
 
@@ -253,7 +261,7 @@ module Hobo
 
 
       def search_columns
-        column_names = columns.*.name
+        column_names = columns.map(&:name)
         SEARCH_COLUMNS_GUESS.select{|c| c.in?(column_names) }
       end
 
@@ -304,19 +312,16 @@ module Hobo
       end
 
 
-      def method_missing(name, *args, &block)
-        name = name.to_s
-        if create_automatic_scope(name)
-          send(name.to_sym, *args, &block)
-        else
-          super(name.to_sym, *args, &block)
-        end
-      end
-
-
-      def respond_to?(method, include_private=false)
-        super || create_automatic_scope(method, true)
-      end
+      # The automatic scopes used to be conjured here, by `method_missing`
+      # answering to names like `title_contains` or `order_by`. They are
+      # delegated to Ransack now (piece 6 of PLAN.md): 429 lines for two live
+      # callers, both of them in controllers.
+      #
+      #   controller/model.rb:774   :query_scope => "#{attribute}_contains"
+      #   the sorting of <table-plus>   :order_by => parse_sort_param(...)
+      #
+      # Both are in code this layer still has to port, and both will raise
+      # NoMethodError out loud until they do.
 
 
       def to_url_path
@@ -326,6 +331,42 @@ module Hobo
 
       def typed_id
         HoboFields.to_name(self) || name.underscore.gsub("/", "__")
+      end
+
+
+      # Ransack 4 refuses to search a model that has not said which of its
+      # attributes may be searched, and rightly so. Hobo already knows: the
+      # columns it has, minus the ones it never shows.
+      #
+      # This is what replaces the automatic scopes of piece 6 -- `<attr>_contains`
+      # and friends -- for the two places that used them.
+      def ransackable_attributes(auth_object = nil)
+        column_names.reject { |name| never_show?(name) }
+      end
+
+      # Associations are not searchable unless a model says so: a search that
+      # walks into another table is a decision, not a default.
+      def ransackable_associations(auth_object = nil)
+        []
+      end
+
+
+      # The fields the user may never assign, whatever the permissions say: the
+      # lifecycle's state field, the authentication fields. It is the small part
+      # of the old protected_attributes gem that Hobo actually used, and it is
+      # asked about a *field*, by the form builder, before any parameters exist
+      # -- which is why strong parameters do not answer it.
+      def attr_protected(*names)
+        protected_attributes.merge(names.map(&:to_s))
+      end
+
+      def protected_attributes
+        @protected_attributes ||=
+          if superclass.respond_to?(:protected_attributes)
+            superclass.protected_attributes.dup
+          else
+            Set.new
+          end
       end
 
 
@@ -361,7 +402,7 @@ module Hobo
 
     def to_param
       name_attr = self.class.name_attribute and name = send(name_attr)
-      if name_attr && !name.blank? && id.is_a?(Fixnum)
+      if name_attr && !name.blank? && id.is_a?(Integer)
         readable = name.to_s.downcase.gsub(/[^a-z0-9]+/, '-').remove(/-+$/).remove(/^-+/).split('-')[0..5].join('-')
         @to_param ||= "#{id}-#{readable}"
       else
@@ -388,7 +429,7 @@ module Hobo
       if !attr_type.is_a?(Class)
         # attr_type is an instance - typically AssociationReflection for a polymorphic association
         self.send("#{attr}=", user)
-      elsif self.class.attr_type(attr)._? <= String
+      elsif (declared_type = self.class.attr_type(attr)) && declared_type <= String
         # Set it to the name of the current user
         self.send("#{attr}=", user.to_s) unless user.guest?
       else
@@ -418,3 +459,17 @@ module Hobo
   end
 
 end
+
+# `Guest` la carga el controlador, y eso bastaba mientras solo la usara él. Una
+# aplicación traída de Hobo 2 trae su `app/models/guest.rb` -- lo generaba
+# `hobo:assets` -- que dice `class Guest < Hobo::Model::Guest`, y ahí la clase
+# base todavía no existía: la aplicación no arrancaba. Se carga con el modelo,
+# que es de donde cuelga.
+require 'hobo/model/guest'
+
+# El autenticador de Hobo 2 -- `hobo_user_model` lo incluye -- y las contraseñas
+# heredadas. Los dos estaban en la gema y no los cargaba nadie, así que una
+# aplicación traída de Hobo 2 no arrancaba: su `guest.rb` y su `user.rb` no
+# encontraban su clase base.
+require 'hobo/model/user_base'
+require 'hobo/model/legacy_password'

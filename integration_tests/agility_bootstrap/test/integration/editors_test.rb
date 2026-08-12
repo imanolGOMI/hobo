@@ -21,6 +21,7 @@ class EditorsTest < ActionDispatch::IntegrationTest
     find("#{selector} .in-place-edit").click
     find("#{selector} input[type=text],#{selector} textarea").set(value)
     find("h2.heading").click # just to get a blur
+    sleep 1
     assert page.find("#{selector} .in-place-edit").has_text?(text_value)
     @verify_list << { :selector => selector, :value => text_value }
   end

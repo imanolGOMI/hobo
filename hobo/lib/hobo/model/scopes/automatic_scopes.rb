@@ -1,429 +1,229 @@
+# Los scopes que Hobo 2 fabricaba solo, por el nombre.
+#
+# `Expediente.created_between(enero, diciembre)`, `Factura.estado_is('emitida')`,
+# `Cliente.nombre_contains('perez')`. Nadie los escribe: el nombre dice la
+# columna y la pregunta, y el modelo sabe el resto. Un modelo de Hobo 2 los usa
+# como si fueran suyos, y el que los lee no distingue -- ni tiene por que -- cual
+# escribio el autor y cual salio de aqui.
+#
+# Se cayeron en el camino a Hobo 3 y `apply_scopes` se quedo, que es lo peor de
+# los dos mundos: el mecanismo que **manda** nombres de scope seguia ahi y lo que
+# los contestaba no. En amenti aparecio dentro de un `before_create`, tres capas
+# por debajo del alta:
+#
+#   scope :current_year, lambda { created_between(...) }
+#   NoMethodError: undefined method 'created_between'
+#
+# Y no es un caso raro: en las 115 aplicaciones del banco se cuentan `_is` por
+# docenas -- `estado_is`, `company_is`, `cliente_is` --, `_between`, `_before` y
+# `_after`.
+#
+# **Por `method_missing` y no por una lista**, igual que Hobo 2: las
+# combinaciones son el producto de las columnas por las preguntas, y declararlas
+# todas de antemano en un modelo de sesenta columnas es cargar cientos de metodos
+# que nadie va a llamar. Lo que si se hace es definir el metodo la primera vez
+# que se pregunta, para que la segunda ya no pase por aqui.
+#
+# Funciona igual sobre una relacion --`company.expedientes.current_year`-- sin
+# tener que hacer nada: `ActiveRecord::Relation` delega en la clase lo que la
+# clase dice saber contestar, y por eso `respond_to_missing?` es tan importante
+# como `method_missing`.
 module Hobo
   module Model
     module Scopes
-
       module AutomaticScopes
 
-        def create_automatic_scope(name, check_only=false)
-          ScopeBuilder.new(self, name).create_scope(check_only)
-        rescue ActiveRecord::StatementInvalid => e
-          # Problem with the database? Don't try to create automatic
-          # scopes
-          if ActiveRecord::Base.logger
-            ActiveRecord::Base.logger.warn "!! Database exception during hobo auto-scope creation -- continuing automatic scopes"
-            ActiveRecord::Base.logger.warn "!! #{e.to_s}"
+        # Un nombre puede casar con varios patrones, y **casar no es contestar**:
+        # `company_is` parece una columna y `company` no lo es -- es un
+        # `belongs_to` --, asi que ese patron no sabe construir nada y le toca al
+        # siguiente. Hobo 2 lo resolvia metiendo la busqueda de la columna dentro
+        # de la condicion del `when`; aqui se prueban en orden y gana el primero
+        # que devuelve algo.
+        def hobo_automatic_scope(name)
+          name = name.to_s
+
+          hobo_scope_patterns.each do |pattern, build|
+            match = pattern.is_a?(Regexp) ? pattern.match(name) : (name == pattern ? [name] : nil)
+            next unless match
+
+            scope = instance_exec(match[1], &build)
+            return scope if scope
           end
-          false
+
+          nil
+        end
+
+        # En orden. La columna antes que la asociacion, porque `estado_is` es una
+        # columna en casi todas las aplicaciones y la comprobacion es mas barata.
+        def hobo_scope_patterns
+          @hobo_scope_patterns ||= [
+            # --- una columna y una pregunta ------------------------------------
+            [/\A(.+)_is\z/,               ->(n) { hobo_scope_for_column(n) { |col, v| where(col.eq(v)) } }],
+            [/\A(.+)_is_not\z/,           ->(n) { hobo_scope_for_column(n) { |col, v| where(col.not_eq(v)) } }],
+            [/\A(.+)_contains\z/,         ->(n) { hobo_scope_for_column(n) { |col, v| where(col.matches("%#{v}%")) } }],
+            [/\A(.+)_does_not_contain\z/, ->(n) { hobo_scope_for_column(n) { |col, v| where(col.does_not_match("%#{v}%")) } }],
+            [/\A(.+)_starts\z/,           ->(n) { hobo_scope_for_column(n) { |col, v| where(col.matches("#{v}%")) } }],
+            [/\A(.+)_does_not_start\z/,   ->(n) { hobo_scope_for_column(n) { |col, v| where(col.does_not_match("#{v}%")) } }],
+            [/\A(.+)_ends\z/,             ->(n) { hobo_scope_for_column(n) { |col, v| where(col.matches("%#{v}")) } }],
+            [/\A(.+)_does_not_end\z/,     ->(n) { hobo_scope_for_column(n) { |col, v| where(col.does_not_match("%#{v}")) } }],
+
+            # --- la misma pregunta, sobre una asociacion -----------------------
+            #
+            # `company_is(empresa)`. Rails entiende la asociacion en un `where`,
+            # asi que aqui no hay que saber como se llama su clave.
+            [/\A(.+)_is\z/,     ->(n) { hobo_scope_for_belongs_to(n) { |assoc, v| where(assoc => v) } }],
+            [/\A(.+)_is_not\z/, ->(n) { hobo_scope_for_belongs_to(n) { |assoc, v| where.not(assoc => v) } }],
+
+            # --- una fecha -----------------------------------------------------
+            #
+            # `published_before` mira `published_at`, `published_date` o
+            # `published_on`, que es como se llaman las columnas de fecha en una
+            # aplicacion de Rails y lo que hacia Hobo 2.
+            [/\A(.+)_before\z/,  ->(n) { hobo_scope_for_time(n) { |col, time| where(col.lt(time)) } }],
+            [/\A(.+)_after\z/,   ->(n) { hobo_scope_for_time(n) { |col, time| where(col.gt(time)) } }],
+            [/\A(.+)_between\z/, ->(n) { hobo_scope_for_time(n) { |col, from, to| where(col.between(from..to)) } }],
+
+            # --- una asociacion ------------------------------------------------
+            [/\A(?:with|any_of)_(.+)\z/, ->(n) { hobo_scope_for_association(n, :with) }],
+            [/\Awithout_(.+)\z/,         ->(n) { hobo_scope_for_association(n, :without) }],
+
+            # --- el propio registro, y el orden --------------------------------
+            ["is",     ->(_) { ->(record) { where(primary_key => record) } }],
+            ["is_not", ->(_) { ->(record) { where.not(primary_key => record) } }],
+            ["by_most_recent", ->(_) { hobo_recency_scope { |relation| relation } }],
+            ["recent", ->(_) { hobo_recency_scope { |relation, count = 6| relation.limit(count) } }],
+            ["order_by", ->(_) { ->(field, direction = :asc) { hobo_order_by(field, direction) } }],
+
+            # --- el nombre **es** la respuesta ---------------------------------
+            [/\A(.+)\z/, ->(n) { hobo_flag_scope(n) }],
+          ].freeze
+        end
+
+        # `company_is(empresa)`: la asociacion, no la columna.
+        def hobo_scope_for_belongs_to(name, &query)
+          reflection = reflect_on_association(name.to_sym)
+          return nil unless reflection && %i[belongs_to has_one].include?(reflection.macro)
+          ->(value) { instance_exec(reflection.name, value, &query) }
+        end
+
+        # `<x>` a secas: una columna booleana --`published`-- o un estado del
+        # ciclo de vida --`active`--. Son los dos casos en que el nombre **es** la
+        # respuesta y no lleva pregunta detras.
+        def hobo_flag_scope(name)
+          if (column = hobo_scope_column(name)) && hobo_column_type(name) == :boolean
+            return -> { where(column.eq(true)) }
+          end
+
+          if name.start_with?("not_") && (column = hobo_scope_column(name.delete_prefix("not_"))) &&
+             hobo_column_type(name.delete_prefix("not_")) == :boolean
+            return -> { where(column.not_eq(true)) }
+          end
+
+          return nil unless respond_to?(:has_lifecycle?) && has_lifecycle?
+          return nil unless self::Lifecycle.state_names.map(&:to_s).include?(name)
+
+          field = self::Lifecycle.state_field
+          -> { where(field => name) }
+        end
+
+        # --- de que columna habla el nombre ---------------------------------------
+
+        def hobo_scope_column(name)
+          return nil unless columns_hash.key?(name.to_s)
+          arel_table[name.to_s]
+        end
+
+        def hobo_column_type(name) = columns_hash[name.to_s]&.type
+
+        def hobo_scope_for_column(name, &query)
+          column = hobo_scope_column(name)
+          return nil unless column
+          ->(value) { instance_exec(column, value, &query) }
+        end
+
+        # La columna de fecha que corresponde a `published`: `published_at`,
+        # `published_date` o `published_on`. Y **tiene que ser de fecha**: sin
+        # esto, `nombre_before` de un modelo con una columna `nombre_at` de texto
+        # contestaria una consulta que no significa nada.
+        TIME_SUFFIXES = %w[_at _date _on].freeze
+        TIME_TYPES = %i[date datetime time timestamp].freeze
+
+        def hobo_scope_for_time(name, &query)
+          found = TIME_SUFFIXES.map { |suffix| "#{name}#{suffix}" }
+                               .find { |candidate| TIME_TYPES.include?(hobo_column_type(candidate)) }
+          return nil unless found
+
+          column = arel_table[found]
+          ->(*args) { instance_exec(column, *args, &query) }
+        end
+
+        # `with_comments`, `without_comments`, `any_of_comments`.
+        #
+        # Con Rails 8 esto es una linea y en Hobo 2 eran cuarenta de SQL a mano
+        # con `EXISTS`: `joins` para «tiene alguno» y `where.missing` para «no
+        # tiene ninguno», que existe desde Rails 6.1 y hace exactamente eso.
+        #
+        # El `hobo_` de delante no es adorno: sin el, este metodo se llamaba
+        # `scope_for_association`, **que ya existe en ActiveRecord** -- lo llaman
+        # las asociaciones al cargarse -- y quedaba pisado con otra firma. Cada
+        # `company.user` moria con «wrong number of arguments», y el error salia
+        # dentro de Rails, a tres saltos de aqui. Todo lo que este modulo mete en
+        # una clase de modelo lleva el prefijo por eso.
+        def hobo_scope_for_association(name, kind)
+          reflection = reflect_on_association(name.to_sym) || reflect_on_association(name.pluralize.to_sym)
+          return nil unless reflection
+
+          association = reflection.name
+          if kind == :without
+            ->(*records) do
+              next where.missing(association) if records.empty?
+              where.not(id: unscoped.joins(association)
+                                    .where(reflection.klass.table_name => { reflection.klass.primary_key => records })
+                                    .select(primary_key))
+            end
+          else
+            ->(*records) do
+              relation = joins(association)
+              relation = relation.where(reflection.klass.table_name => { reflection.klass.primary_key => records }) if records.any?
+              relation.distinct
+            end
+          end
+        end
+
+        def hobo_recency_scope(&shape)
+          return nil unless columns_hash.key?("created_at")
+          ->(*args) { shape.call(order(:created_at => :desc), *args) }
+        end
+
+        def hobo_order_by(field, direction)
+          direction = direction.to_s.downcase.start_with?("d") ? :desc : :asc
+          return order(field.to_sym => direction) if columns_hash.key?(field.to_s)
+          order(Arel.sql("#{connection.quote_column_name(field)} #{direction.to_s.upcase}"))
+        end
+
+        # --- la costura ------------------------------------------------------------
+
+        def method_missing(name, *args, &block)
+          scope = hobo_automatic_scope(name)
+          return super if scope.nil?
+
+          # Definido para la proxima: el patron se resuelve una vez por modelo y
+          # por nombre, no una vez por llamada.
+          singleton_class.define_method(name) { |*call| instance_exec(*call, &scope) }
+          public_send(name, *args)
+        end
+
+        def respond_to_missing?(name, include_private = false)
+          # Sin tabla no hay columnas que mirar, y preguntar por ellas mientras
+          # se carga la clase --o con la base sin migrar-- levanta la conexion
+          # entera. Un modelo sin tabla simplemente no tiene estos scopes.
+          return super unless table_exists?
+          !hobo_automatic_scope(name).nil? || super
+        rescue StandardError
+          super
         end
 
       end
-
-      # The methods on this module add scopes to the given class
-      class ScopeBuilder
-
-        def initialize(klass, name)
-          @klass = klass
-          @name  = name.to_s
-        end
-
-        attr_reader :name
-
-        def create_scope(check_only=false)
-          matched_scope = true
-
-          like_operator = ActiveRecord::Base.connection.adapter_name =~ /postg/i ? 'ILIKE' : 'LIKE'
-
-          case
-          # --- Association Queries --- #
-
-          # with_players(player1, player2)
-          when name =~ /^with_(.*)/ && (refl = reflection($1))
-            return true if check_only
-
-            def_scope do |*records|
-              if records.empty?
-                @klass.where exists_sql_condition(refl, true)
-              else
-                records = records.flatten.compact.map {|r| find_if_named(refl, r) }
-                exists_sql = ([exists_sql_condition(refl)] * records.length).join(" AND ")
-                @klass.where *([exists_sql] + records)
-              end
-            end
-
-          # with_player(a_player)
-          when name =~ /^with_(.*)/ && (refl = reflection($1.pluralize))
-            return true if check_only
-
-            exists_sql = exists_sql_condition(refl)
-            def_scope do |record|
-              record = find_if_named(refl, record)
-              @klass.where exists_sql, record
-            end
-
-          # any_of_players(player1, player2)
-          when name =~ /^any_of_(.*)/ && (refl = reflection($1))
-            return true if check_only
-
-            def_scope do |*records|
-              if records.empty?
-                @klass.where exists_sql_condition(refl, true)
-              else
-                records = records.flatten.compact.map {|r| find_if_named(refl, r) }
-                exists_sql = ([exists_sql_condition(refl)] * records.length).join(" OR ")
-                @klass.where *([exists_sql] + records)
-              end
-            end
-
-          # without_players(player1, player2)
-          when name =~ /^without_(.*)/ && (refl = reflection($1))
-            return true if check_only
-
-            def_scope do |*records|
-              if records.empty?
-                @klass.where "NOT (#{exists_sql_condition(refl, true)})"
-              else
-                records = records.flatten.compact.map {|r| find_if_named(refl, r) }
-                exists_sql = ([exists_sql_condition(refl)] * records.length).join(" AND ")
-                @klass.where *(["NOT (#{exists_sql})"] + records)
-              end
-            end
-
-          # without_player(a_player)
-          when name =~ /^without_(.*)/ && (refl = reflection($1.pluralize))
-            return true if check_only
-
-            exists_sql = exists_sql_condition(refl)
-            def_scope do |record|
-              record = find_if_named(refl, record)
-              @klass.where "NOT #{exists_sql}", record
-            end
-
-          # team_is(a_team)
-          when name =~ /^(.*)_is$/ && (refl = reflection($1)) && refl.macro.in?([:has_one, :belongs_to])
-            return true if check_only
-
-            if refl.options[:polymorphic]
-              def_scope do |record|
-                record = find_if_named(refl, record)
-                @klass.where "#{foreign_key_column refl} = ? AND #{$1}_type = ?", record, record.class.name
-              end
-            else
-              def_scope do |record|
-                record = find_if_named(refl, record)
-                @klass.where "#{foreign_key_column refl} = ?", record
-              end
-            end
-
-          # team_is_not(a_team)
-          when name =~ /^(.*)_is_not$/ && (refl = reflection($1)) && refl.macro.in?([:has_one, :belongs_to])
-            return true if check_only
-
-            if refl.options[:polymorphic]
-              def_scope do |record|
-                record = find_if_named(refl, record)
-                @klass.where "#{foreign_key_column refl} <> ? OR #{name}_type <> ?", record, record.class.name
-              end
-            else
-              def_scope do |record|
-                record = find_if_named(refl, record)
-                @klass.where "#{foreign_key_column refl} <> ?", record
-              end
-            end
-
-
-          # --- Column Queries --- #
-
-          # name_is(str)
-          when name =~ /^(.*)_is$/ && (col = column($1))
-            return true if check_only
-
-            def_scope do |str|
-              @klass.where "#{column_sql(col)} = ?", str
-            end
-
-          # name_is_not(str)
-          when name =~ /^(.*)_is_not$/ && (col = column($1))
-            return true if check_only
-
-            def_scope do |str|
-              @klass.where "#{column_sql(col)} <> ?", str
-            end
-
-          # name_contains(str)
-          when name =~ /^(.*)_contains$/ && (col = column($1))
-            return true if check_only
-
-            def_scope do |str|
-              @klass.where "#{column_sql(col)} #{like_operator} ?", "%#{str}%"
-            end
-
-          # name_does_not_contain
-          when name =~ /^(.*)_does_not_contain$/ && (col = column($1))
-            return true if check_only
-
-            def_scope do |str|
-              @klass.where "#{column_sql(col)} NOT #{like_operator} ?", "%#{str}%"
-            end
-
-          # name_starts(str)
-          when name =~ /^(.*)_starts$/ && (col = column($1))
-            return true if check_only
-
-            def_scope do |str|
-              @klass.where "#{column_sql(col)} #{like_operator} ?", "#{str}%"
-            end
-
-          # name_does_not_start
-          when name =~ /^(.*)_does_not_start$/ && (col = column($1))
-            return true if check_only
-
-            def_scope do |str|
-              @klass.where "#{column_sql(col)} NOT #{like_operator} ?", "#{str}%"
-            end
-
-          # name_ends(str)
-          when name =~ /^(.*)_ends$/ && (col = column($1))
-            return true if check_only
-
-            def_scope do |str|
-              @klass.where "#{column_sql(col)} #{like_operator} ?", "%#{str}"
-            end
-
-          # name_does_not_end(str)
-          when name =~ /^(.*)_does_not_end$/ && (col = column($1))
-            return true if check_only
-
-            def_scope do |str|
-              @klass.where "#{column_sql(col)} NOT #{like_operator} ?", "%#{str}"
-            end
-
-          # published (a boolean column)
-          when (col = column(name)) && (col.type == :boolean)
-            return true if check_only
-
-            def_scope do
-              @klass.where "#{column_sql(col)} = ?", true
-            end
-
-          # not_published
-          when name =~ /^not_(.*)$/ && (col = column($1)) && (col.type == :boolean)
-            return true if check_only
-
-            def_scope do
-              @klass.where "#{column_sql(col)} <> ?", true
-            end
-
-          # published_before(time)
-          when name =~ /^(.*)_before$/ && (col = column("#{$1}_at") || column("#{$1}_date") || column("#{$1}_on")) && col.type.in?([:date, :datetime, :time, :timestamp])
-            return true if check_only
-
-            def_scope do |time|
-              @klass.where "#{column_sql(col)} < ?", time
-            end
-
-          # published_after(time)
-          when name =~ /^(.*)_after$/ && (col = column("#{$1}_at") || column("#{$1}_date") || column("#{$1}_on")) && col.type.in?([:date, :datetime, :time, :timestamp])
-            return true if check_only
-
-            def_scope do |time|
-              @klass.where "#{column_sql(col)} > ?", time
-            end
-
-          # published_between(time1, time2)
-          when name =~ /^(.*)_between$/ && (col = column("#{$1}_at") || column("#{$1}_date") || column("#{$1}_on")) && col.type.in?([:date, :datetime, :time, :timestamp])
-            return true if check_only
-
-            def_scope do |time1, time2|
-              @klass.where "#{column_sql(col)} >= ? AND #{column_sql(col)} <= ?", time1, time2
-            end
-
-           # active (a lifecycle state)
-          when @klass.has_lifecycle? && name.to_sym.in?(@klass::Lifecycle.state_names)
-            return true if check_only
-
-            if @klass::Lifecycle.state_names.length == 1
-              # nothing to check for - create a dummy scope
-              def_scope { @klass.scoped }
-              true
-            else
-              def_scope do
-                @klass.where "#{@klass.table_name}.#{@klass::Lifecycle.state_field} = ?", name
-              end
-            end
-
-          # self is / is not
-          when name == "is"
-            return true if check_only
-
-            def_scope do |record|
-              @klass.where "#{@klass.table_name}.#{@klass.primary_key} = ?", record
-            end
-
-          when name == "is_not"
-            return true if check_only
-
-            def_scope do |record|
-              @klass.where "#{@klass.table_name}.#{@klass.primary_key} <> ?", record
-            end
-
-
-          when name == "by_most_recent"
-            return true if check_only
-
-            def_scope do
-              @klass.order "#{@klass.table_name}.created_at DESC"
-            end
-
-          when name == "recent"
-            return true if check_only
-
-            if "created_at".in?(@klass.columns.*.name)
-              def_scope do |*args|
-                count = args.first || 6
-                @klass.order("#{@klass.table_name}.created_at DESC").limit(count)
-              end
-            else
-              def_scope do |*args|
-                count = args.first || 6
-                limit(count)
-              end
-            end
-
-          when name == "order_by"
-            return true if check_only
-
-            klass = @klass
-            def_scope do |*args|
-              field, asc = args
-              field ||= ""
-              type = klass.attr_type(field)
-              if type.nil? #a virtual attribute from an SQL alias, e.g., 'total' from 'COUNT(*) AS total'
-                colspec = "#{field}" # don't prepend the table name
-              elsif type.respond_to?(:name_attribute) && (name = type.name_attribute)
-                include = field
-                colspec = "#{type.table_name}.#{name}"
-              else
-                colspec = "#{klass.table_name}.#{field}"
-              end
-              @klass.includes(include).order("#{colspec} #{asc._?.upcase}")
-            end
-
-          when name == "include"
-            # DEPRECATED: it clashes with Module.include when called on an ActiveRecord::Relation
-            # after a scope chain, if you didn't call it on the class itself first
-            Rails.logger.warn "Automatic scope :include has been deprecated: use :includes instead."
-            return true if check_only
-
-            def_scope do |inclusions|
-              @klass.includes(inclusions)
-            end
-
-          when name == "search"
-            return true if check_only
-
-            def_scope do |query, *fields|
-              using_postgresql = %w(PostgreSQL PostGIS).include?(::ActiveRecord::Base.connection.adapter_name)
-              match_keyword = using_postgresql ? "ILIKE" : "LIKE"
-              words = (query || "").split
-              args = []
-              word_queries = words.map do |word|
-                field_query = '(' + fields.map { |field|
-                  if using_postgresql
-                    casted_field = "CAST(#{@klass.table_name}.#{field} AS TEXT)"
-                  else
-                    casted_field = "#{@klass.table_name}.#{field}"
-                  end
-                  field = "#{casted_field}" unless field =~ /\./
-                  "(#{field} #{match_keyword} ?)"
-                }.join(" OR ") + ')'
-                args += ["%#{word}%"] * fields.length
-                field_query
-              end
-
-              @klass.where *([word_queries.join(" AND ")] + args)
-            end
-
-          else
-            matched_scope = false
-          end
-
-          matched_scope
-        end
-
-
-        def column_sql(column)
-          "#{@klass.table_name}.#{column.name}"
-        end
-
-
-        def exists_sql_condition(reflection, any=false)
-          owner = @klass
-          owner_primary_key = "#{owner.table_name}.#{owner.primary_key}"
-
-          if reflection.options[:through]
-            join_table   = reflection.through_reflection.klass.table_name
-            owner_fkey   = reflection.through_reflection.foreign_key
-            conditions   = reflection.options[:conditions].blank? ? '' : " AND #{reflection.through_reflection.klass.send(:sanitize_sql_for_conditions, reflection.options[:conditions])}"
-
-            if any
-              "EXISTS (SELECT * FROM #{join_table} WHERE #{join_table}.#{owner_fkey} = #{owner_primary_key}#{conditions})"
-            else
-              source_fkey  = reflection.source_reflection.foreign_key
-              "EXISTS (SELECT * FROM #{join_table} " +
-                "WHERE #{join_table}.#{source_fkey} = ? AND #{join_table}.#{owner_fkey} = #{owner_primary_key}#{conditions})"
-            end
-          else
-            foreign_key = reflection.foreign_key
-            related     = reflection.klass
-            conditions = reflection.options[:conditions].blank? ? '' : " AND #{reflection.klass.send(:sanitize_sql_for_conditions, reflection.options[:conditions])}"
-
-            if any
-              "EXISTS (SELECT * FROM #{related.table_name} " +
-                "WHERE #{related.table_name}.#{foreign_key} = #{owner_primary_key}#{conditions})"
-            else
-              "EXISTS (SELECT * FROM #{related.table_name} " +
-                "WHERE #{related.table_name}.#{foreign_key} = #{owner_primary_key} AND " +
-                "#{related.table_name}.#{related.primary_key} = ?#{conditions})"
-            end
-          end
-        end
-
-        def find_if_named(reflection, string_or_record)
-          if string_or_record.is_a?(String)
-            name = string_or_record
-            reflection.klass.named(name)
-          else
-            string_or_record # a record
-          end
-        end
-
-
-        def column(name)
-          @klass.column(name)
-        end
-
-
-        def reflection(name)
-          @klass.reflections[name.to_s]
-        end
-
-
-        def def_scope(&block)
-          @klass.scope name.to_sym, (lambda &block)
-        end
-
-
-        def primary_key_column(refl)
-          "#{refl.klass.table_name}.#{refl.klass.primary_key}"
-        end
-
-
-        def foreign_key_column(refl)
-          "#{@klass.table_name}.#{refl.foreign_key}"
-        end
-
-      end
-
     end
   end
 end

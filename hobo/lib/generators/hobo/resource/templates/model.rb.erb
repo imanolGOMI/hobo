@@ -1,0 +1,18 @@
+class <%= class_name %> < ApplicationRecord
+
+  include Hobo::Model
+
+  # The fields live here, and nobody writes the migration by hand: change this
+  # and run `bin/rails generate hobo:migration`.
+  fields do
+<%= field_declarations %>
+    timestamps
+  end
+
+  # Conservative by default: say who may do what.
+  def create_permitted?  = acting_user.present?
+  def update_permitted?  = acting_user.present?
+  def destroy_permitted? = acting_user.present?
+  def view_permitted?(field) = true
+
+end

@@ -1,319 +1,566 @@
-require 'generators/hobo_support/thor_shell'
-require 'bundler/cli'
+require "rails/generators"
+require "generators/hobo/user_options"
+require "hobo/plugins"
+require "hobo_rapid/translation"
+require "fileutils"
+
 module Hobo
-  class SetupWizardGenerator < Rails::Generators::Base
+  module Generators
 
-    source_root File.expand_path('../templates', __FILE__)
+    # `rails generate hobo:setup_wizard`
+    #
+    # The questions, and doing what they say. **In an application that already
+    # exists**, which is the half that was missing: until now they were only
+    # asked while `hobo new` was building one, and the person who most needs
+    # them is somebody who has just added the gem to an application of their own.
+    #
+    # It is the same wizard Hobo 2 had, minus what made it tiring:
+    #
+    #   - it is **one place that asks**, and `hobo new` calls it too, so the
+    #     questions cannot drift apart from the answers
+    #   - every question is a flag, so a script never stops
+    #   - with no terminal to ask in, every question takes its default
+    #   - and it **does not redo what is already there**: run it twice and the
+    #     second time it says so instead of writing a second front page
+    #
+    # What it does not ask any more is what nothing can configure: the jQuery-UI
+    # themes (there is no jQuery UI), the DRYML-only templates (both kinds work
+    # at once), and whether git should ignore the generated files (nothing is
+    # generated).
+    #
+    # And the search box is not a question either, because it was not one in
+    # Hobo 2: every application got `/search` and the box in the bar without
+    # being asked. `--no-search` still takes it away.
+    class SetupWizardGenerator < Rails::Generators::Base
 
-    include Generators::HoboSupport::ThorShell
-    include Generators::Hobo::InviteOnly
-    include Generators::Hobo::ActivationEmail
-    include Generators::Hobo::Taglib
-    include Generators::Hobo::Plugin
+      include UserOptions
 
-    def self.banner
-      "rails generate hobo:setup_wizard [options]"
-    end
+      class_option :theme, :type => :string,
+                   :desc => "clean (el que viene dentro), none, o el de una gema instalada"
+      class_option :behaviour, :type => :string,
+                   :desc => "stimulus (el que viene dentro), o el de una gema instalada"
+      class_option :plugins, :type => :array,
+                   :desc => "Los demas plugins que quieres, p.ej. --plugins jquery_ui"
+      class_option :admin, :type => :boolean,
+                   :desc => "Un subsitio de administracion"
+      class_option :admin_name, :type => :string,
+                   :desc => "Como se llama el subsitio de administracion"
+      class_option :admin_theme, :type => :string,
+                   :desc => "El tema del subsitio, si quieres otro"
+      class_option :search, :type => :boolean,
+                   :desc => "La caja de busqueda de la barra (--no-search para quitarla)"
 
-    class_option :main_title, :type => :boolean,
-    :desc => "Shows the main title", :default => true
+      class_option :private, :type => :boolean,
+                   :desc => "Todo el sitio detras del login"
+      class_option :locales, :type => :array,
+                   :desc => "Los idiomas de la aplicacion, p.ej. --locales en es"
+      class_option :locale, :type => :string,
+                   :desc => "El idioma por defecto"
+      class_option :front, :type => :string,
+                   :desc => "Como se llama el controlador de la portada"
+      class_option :skip_migration, :type => :boolean,
+                   :desc => "No tocar la base de datos"
+      class_option :generate_migration, :type => :boolean,
+                   :desc => "Escribir la migracion inicial pero no aplicarla"
+      class_option :git, :type => :boolean,
+                   :desc => "Dejar el trabajo en un commit"
+      class_option :wizard, :type => :boolean,
+                   :desc => "Preguntar siempre (--no-wizard: no preguntar nunca)"
 
-    class_option :wizard, :type => :boolean,
-    :desc => "Ask instead using options", :default => true
+      # --- the questions --------------------------------------------------------
 
-    class_option :front_controller_name, :type => :string,
-    :desc => "Front Controller Name", :default => 'front'
+      def ask_the_questions
+        say "\nHobo\n", :green if interactive?
 
-    class_option :front_theme, :type => :string,
-    :desc => "Front Theme", :default => 'bootstrap'
+        @theme = choose_theme
+        @behaviour = choose_behaviour
+        @extras = choose_extras
+        @invite_only = yes_or_no?(:invite_only,
+                                  "Solo se entra por invitacion? (un administrador invita; no hay alta publica)", false)
+        @activation_email = @invite_only ? false : yes_or_no?(:activation_email, "El alta tiene que confirmarse por correo?", false)
+        @admin = yes_or_no?(:admin, "Quieres un subsitio de administracion?", false)
+        @admin_name = @admin ? named(:admin_name, "Como se llama el subsitio de administracion?", "admin") : "admin"
+        @private = yes_or_no?(:private, "Todo el sitio detras del login? (si no, cada modelo decide quien ve sus paginas)", false)
+        @front = named(:front, "Como se llama el controlador de la portada?", "front")
+        # En este orden porque es el de Hobo 2: la base de datos antes que los
+        # idiomas, y los idiomas antes que git. Se contesta aquí y se hace al
+        # final, que es lo que hacía aquel: la pregunta va con las preguntas y el
+        # trabajo con el trabajo.
+        @migration = choose_migration
+        @locales, @locale = choose_locales
+        @git = yes_or_no?(:git, "Dejo el trabajo en un commit de git?", false)
 
-    class_option :front_ui_theme, :type => :string,
-    :desc => "Front jQuery-UI Theme", :default => 'redmond'
-
-    class_option :add_admin_subsite, :type => :boolean,
-                 :desc => "Add an Admin Subsite"
-
-    class_option :admin_subsite_name, :type => :string,
-                 :desc => "Admin Subsite Name", :default => 'admin'
-
-    class_option :admin_theme, :type => :string,
-                 :desc => "Admin Theme", :default => 'clean'
-
-    class_option :admin_ui_theme, :type => :string,
-                 :desc => "Admin jQuery-UI Theme", :default => 'redmond'
-
-    class_option :invite_only, :type => :boolean,
-                 :desc => "Require invitation to join site"
-
-    class_option :private_site, :type => :boolean,
-                 :desc => "Make the site unaccessible to non-members"
-
-    class_option :migration_generate, :type => :boolean,
-    :desc => "Generate migration only"
-
-    class_option :migration_migrate, :type => :boolean,
-    :desc => "Generate migration and migrate", :default => true
-
-    class_option :default_locale, :type => :string,
-    :desc => "Sets the default locale"
-
-    class_option :locales, :type => :array,
-    :desc => "Choose the locales", :default => %w[en]
-
-    class_option :git_repo, :type => :boolean,
-    :desc => "Create the git repository with the initial commit"
-
-    class_option :gitignore_auto_generated_files, :type => :boolean,
-    :desc => "Add the auto-generated files to .gitignore", :default => true
-
-    class_option :dryml_only_templates, :type => :boolean,
-    :desc => "The application uses only dryml templates",
-    :default => Rails.application.config.hobo.dryml_only_templates
-
-    def startup
-      if wizard?
-        say_title options[:main_title] ? 'Hobo Setup Wizard' : 'Startup'
-        say 'Installing Hobo assets...'
+        # Not a question: Hobo 2 gave every application `/search` and the box in
+        # the bar without asking, and taking it away turned out to be a change
+        # nobody had asked for.
+        @search = options[:search] != false
       end
-      invoke 'hobo:assets'
-    end
 
-    def user_options
-      if wizard?
-        say_title 'User Resource'
-        @user_resource_name = ask("Choose a name for the user resource: [<enter>=user|<custom_name>]", 'user')
-        @activation_email = @invite_only ? false : yes_no?("Do you want to send an activation email to activate the user?")
-      else
-        @user_resource_name = options[:user_resource_name]
-        @activation_email = options[:activation_email]
-      end
-    end
+      # --- what the answers mean -------------------------------------------------
 
-    def site_options
-      if wizard?
-        say_title 'Invite Only Option'
-        return unless (@invite_only = yes_no?("Do you want to add the features for an invite only website?"))
-        private_site = yes_no?("Do you want to prevent all access to the site to non-members?\n(Choose 'y' only if ALL your site will be private, choose 'n' if at least one controller will be public)")
-        say( %( If you wish to prevent all access to some controller to non-members, add 'before_filter :login_required'
-to the relevant controllers:
+      # Lo que se ha elegido y no viene dentro **se instala**, que es lo que
+      # significa ser un plugin: la gema en el Gemfile es la instalacion
+      # (decision 22). Hobo 2 hacia esto mismo -- elegias bootstrap y te anadia
+      # `gem "hobo_bootstrap"`.
+      #
+      # `clean` y `stimulus` no pasan por aqui porque son los de Hobo y vienen
+      # dentro. Del resto, cada uno sabe de donde sale: del arbol de trabajo si
+      # se esta escribiendo, y de rubygems si no.
+      def the_plugin_gems
+        chosen_plugins.each do |plugin|
+          next say("  el Gemfile ya lleva #{plugin.gem_name}") if
+            File.read(File.join(destination_root, "Gemfile")).include?(plugin.gem_name)
 
-    include Hobo::Controller::AuthenticationSupport
-    before_filter :login_required
-
-(note that the include statement is not required for hobo_controllers)
-
-NOTE: You might want to sign up as the administrator before adding this!
-), Color::YELLOW) unless private_site
-      else
-        @invite_only = invite_only?
-        private_site = options[:private_site]
-      end
-      inject_into_file 'app/controllers/application_controller.rb', <<EOI, :after => "protect_from_forgery with: :exception\n" if private_site
-  include Hobo::Controller::AuthenticationSupport
-  before_filter :except => [:login, :forgot_password, :accept_invitation, :do_accept_invitation, :reset_password,
-:do_reset_password] do
-     login_required unless #{@user_resource_name.camelize}.count == 0
-  end
-EOI
-    end
-
-    def dryml_only_templates_option
-      if wizard?
-        say_title 'Templates Option'
-        dryml_only_templates = yes_no?("Will your application use only hobo/dryml web page templates?\n(Choose 'n' only if you also plan to use plain rails/erb web page templates)")
-      else
-        dryml_only_templates = options[:dryml_only_templates]
-      end
-      if dryml_only_templates
-        remove_file 'app/views/layouts/application.html.erb'
-        remove_file 'app/helpers/application_helper.rb'
-        environment "#"
-        environment "config.hobo.dryml_only_templates = true"
-        environment "# Hobo: remove support for ERB templates"
-      end
-    end
-
-    def dont_emit_deprecated_routes
-      environment "#"
-      environment "config.hobo.dont_emit_deprecated_routes = true"
-      environment "# Hobo: Named routes have changed in Hobo 2.0.   Set to false to emit both the 2.0 and 1.3 names."
-    end
-
-    def quiet_assets
-      say "Adding quiet_assets gem"
-      gem_with_comments('quiet_assets', :group => :development, :comments => "\n# Hobo has a lot of assets.   Stop cluttering the log in development mode.")
-    end
-
-    def will_paginate
-      say "Adding hobo_will_paginate gem"
-      gem_with_comments('hobo_will_paginate', :comments => "\n# Hobo's version of will_paginate is required.")
-    end
-
-    def front_controller
-      if wizard?
-        say_title 'Front Controller'
-        front_controller_name = ask("Choose a name for the front controller: [<enter>=front|<custom_name>]", 'front')
-        say "Installing #{front_controller_name} controller..."
-      else
-        front_controller_name = options[:front_controller_name]
-      end
-      invoke 'hobo:front_controller', [front_controller_name], :user_resource_name => @user_resource_name, :invite_only => @invite_only
-    end
-
-    def install_default_plugins
-      if wizard?
-        say_title 'Front Theme'
-        say "The currently available themes are clean, clean_admin, clean_sidemenu and bootstrap."
-        @front_theme = ask("Choose a theme for the front site: [<enter>=bootstrap|<custom_name>]", 'bootstrap')
-
-        say_title 'Front jQuery-UI Theme'
-        say "The currently available jQuery-UI themes are listed here: https://github.com/fatdude/jquery-ui-themes-rails/blob/master/README.markdown"
-        @front_ui_theme = ask("Choose a jQuery-UI theme for the front site: [<enter>=redmond|<custom_name>]", 'redmond')
-      else
-        @front_theme = options[:front_theme]
-        @front_ui_theme = options[:front_ui_theme]
-      end
-      invoke 'hobo:install_default_plugins', [], {:subsite => 'front', :theme => "hobo_#{@front_theme}", :ui_theme => @front_ui_theme, :skip_gem => false}
-    end
-
-    def admin_subsite
-      if wizard?
-        say_title 'Admin Subsite'
-        if @invite_only || (@add_admin_subsite = yes_no?("Do you want an admin subsite?"))
-          @admin_subsite_name = ask("Choose a name for the admin subsite: [<enter>=admin|<custom_name>]", 'admin')
-
-          say "The currently available themes are clean, clean_admin, clean_sidemenu and bootstrap."
-          @admin_theme = ask("Choose a theme for the #{@admin_subsite_name} site: [<enter>=clean_admin|<custom_name>]", 'clean_admin')
-
-          say "The currently available jQuery-UI themes are listed here: https://github.com/fatdude/jquery-ui-themes-rails/blob/master/README.markdown"
-          @admin_ui_theme = ask("Choose a jQuery-UI theme for the admin site: [<enter>=flick|<custom_name>]", 'flick')
-        end
-      else
-        if @invite_only || (@add_admin_subsite = options[:add_admin_subsite])
-          @admin_subsite_name = options[:admin_subsite_name]
-          @admin_theme = options[:front_theme]
-          @admin_ui_theme = options[:front_ui_theme]
+          say_step "El plugin #{plugin.name}"
+          plugin.path ? gem(plugin.gem_name, :path => plugin.path) : gem(plugin.gem_name)
+          @installed_something = true
         end
       end
-    end
 
-    def invoking_user_and_admin
-      say "Installing '#{@user_resource_name}' resources..."
-      invoke 'hobo:user_resource', [@user_resource_name],
-                                   :invite_only => @invite_only,
-                                   :activation_email => @activation_email,
-                                   :admin_subsite_name => @admin_subsite_name
-      if @invite_only || @add_admin_subsite
-        say "Installing admin subsite..."
-        invoke 'hobo:admin_subsite', [@admin_subsite_name],
-                                     :user_resource_name => @user_resource_name,
-                                     :invite_only => @invite_only,
-                                     :theme => @admin_theme,
-                                     :ui_theme => @admin_ui_theme
+      # Y se instala aqui mismo, no al final.
+      #
+      # Todo lo que viene despues arranca `bin/rails` en otro proceso -- la
+      # migracion, la portada -- y un Gemfile con una gema que no esta instalada
+      # hace que Bundler pare ese proceso antes de empezar. Lo que se veia era el
+      # asistente quejandose de la base de datos por una gema que acababa de
+      # anadir el mismo.
+      def the_bundle
+        return unless @installed_something
+
+        inside(destination_root) { run "bundle install" }
       end
-    end
 
-    def active_reload_dryml
-      environment "#", :env => :development
-      environment "config.watchable_dirs[File.join(config.root, 'app/views')] = ['dryml']", :env => :development
-      environment "# Hobo: tell ActiveReload about dryml", :env => :development
-    end
-
-    def generate_migration
-      if wizard?
-        say_title 'DB Migration'
-        action = choose("Initial Migration: [s]kip, [g]enerate migration file only, generate and [m]igrate: [s|g|m]", /^(s|g|m)$/)
-        opt = case action
-              when 's'
-                return say('Migration skipped!')
-              when 'g'
-                {:generate => true}
-              when 'm'
-                {:migrate => true}
-              end
-        say action == 'g' ? 'Generating Migration...' : 'Migrating...'
-      else
-        return if !options[:migration_generate] && !options[:migration_migrate]
-        opt = options[:migration_migrate] ? {:migrate => true} : {:generate => true}
+      def write_the_configuration
+        say_step "La configuracion"
+        add_to_configuration "config.hobo.theme = #{@theme == "none" ? "false" : ":#{@theme}"}"
+        add_to_configuration "config.hobo.private_site = true" if @private
+        add_to_configuration "config.i18n.default_locale = :#{@locale}" unless @locale == "en"
+        # Rails only loads the default language unless it is told the others
+        # exist, and `I18n.locale = :es` on an application that never declared
+        # :es raises. A second language is only a second language once this says
+        # so.
+        add_to_configuration "config.i18n.available_locales = #{@locales.map(&:to_sym).inspect}" if @locales.size > 1
       end
-      rake 'db:setup'
-      invoke 'hobo:migration', ['initial_migration'], opt
-    end
 
-    def i18n
-      if wizard?
-        say_title 'I18n'
-        i18n_templates = File.expand_path('../../i18n/templates', __FILE__)
-        supported_locales = Dir.glob("#{i18n_templates}/hobo.*.yml").map do |l|
-          l =~ /([^\/.]+)\.yml$/
-          $1
+      # The pages Rails renders -- its session form, its password pages -- go
+      # through the application's own layout, and that layout knows nothing
+      # about the theme. Without this half the application looks like two
+      # applications.
+      def dress_the_layout
+        return if @theme == "none"
+        layout = "app/views/layouts/application.html.erb"
+        return say("  (no hay #{layout}: el tema solo vestira las paginas de Hobo)", :yellow) unless
+          File.exist?(File.join(destination_root, layout))
+
+        # Que hojas de estilo pide el tema **lo dice el tema**, en su gemspec:
+        #
+        #   s.metadata["hobo_plugin_stylesheets"] = "bootstrap hobo"
+        #
+        # Aqui habia `@theme == "bootstrap" ? %w[bootstrap hobo] : %w[clean]`, y
+        # era el ultimo sitio de Hobo donde estaba escrito el nombre de un tema.
+        sheets = theme_plugin&.stylesheets || [@theme]
+        return say("  el layout ya lleva el tema") if File.read(File.join(destination_root, layout)).include?(%(stylesheet_link_tag "#{sheets.first}"))
+
+        links = sheets.map { |s| %(<%= stylesheet_link_tag "#{s}" %>) }.join("\n\\1")
+        gsub_file layout, /^(\s*)<%= stylesheet_link_tag :app.*%>$/, "\\1#{links}\n\\0"
+        gsub_file layout, /<%= yield %>/, "<div class=\"container\">\n      <%= yield %>\n    </div>"
+      end
+
+      # One file per language, which is what having more than one language means.
+      def a_place_for_your_own_words
+        @locales.each do |locale|
+          next if File.exist?(File.join(destination_root, "config/locales/app.#{locale}.yml"))
+
+          create_file "config/locales/app.#{locale}.yml", <<~YAML
+            # The names your application uses for its own things. Rails looks here for
+            # them, and Hobo's pages ask Rails -- so a model called `Story` becomes
+            # "Relato" everywhere by saying it once, here.
+            #
+            # Hobo's own strings are in the gem; to change one, write the same key in
+            # a file of yours (config/locales/hobo.#{locale}.yml).
+            #{locale}:
+            #  activerecord:
+            #    models:
+            #      story:
+            #        one: Story
+            #        other: Stories
+          YAML
         end
-        say "The Hobo supported locales are #{supported_locales * ' '} (please, contribute to more translations)"
-        locales = ask("Type the locales (space separated) you want to add to your application or <enter> for 'en':", 'en').split(/\s/)
-        unless locales.size == 1 && locales.first == 'en'
-          default_locale = ask "Do you want to set a default locale? Type the locale or <enter> to skip:"
+
+        # Hobo ships its own words in English and Spanish. Any other language is
+        # the application's to write, and saying so now is cheaper than a page
+        # that comes out half translated.
+        untranslated = @locales - HoboRapid::TRANSLATED_LOCALES
+        say("  Hobo no habla #{untranslated.join(', ')}: sus botones saldran en ingles hasta que escribas " \
+            "config/locales/hobo.#{untranslated.first}.yml", :yellow) if untranslated.any?
+      end
+
+      def draw_the_routes
+        return if routes.include?("hobo_routes")
+        route "hobo_routes"
+      end
+
+      def the_front_page
+        say_step "La portada"
+        return say("  ya hay una portada (root)") if routes.match?(/^\s*root /)
+        invoke "hobo:front_controller", [@front]
+      end
+
+      def the_accounts
+        say_step "Las cuentas"
+        return say("  no hay modelo de usuario: corre `bin/rails generate authentication`", :yellow) unless user_exists?
+        return say("  ya hay alta") if routes.match?(/signup|invite/)
+
+        invoke "hobo:user_resource", ["User"],
+               :activation_email => @activation_email, :invite_only => @invite_only
+      end
+
+      # Run again and it picks up the models that appeared since: a subsite is a
+      # controller per resource, and resources arrive over time. Thor says
+      # "identical" for the ones already there.
+      def the_search
+        return unless @search
+        say_step "La busqueda"
+        return say("  ya hay busqueda") if routes.include?("site_search")
+        invoke "hobo:search"
+      end
+
+      def the_admin_subsite
+        return unless @admin
+        say_step "El subsitio de administracion"
+        invoke "hobo:admin_subsite", [@admin_name], :theme => options[:admin_theme]
+      end
+
+      # La base de datos, **entera y en una sola pregunta**.
+      #
+      # Hobo 2 preguntaba por la migración inicial y era la pregunta correcta:
+      # lo que el asistente acaba de escribir -- un lifecycle, la columna de
+      # administrador -- son columnas que la base no tiene, y una aplicación que
+      # arranca sin ellas falla en su primera página.
+      #
+      # Lo que costó tres intentos es *cuándo* y *sobre qué*:
+      #
+      #   - preguntarlo con el resto de las preguntas era preguntar antes de
+      #     saber si haría falta: en una aplicación sin banderas no hace falta,
+      #     y la respuesta se ganaba un «nada que cambiar» inmediato
+      #   - y no era la única cosa que tocaba la base: `hobo new` aplicaba por su
+      #     cuenta las dos migraciones del generador de autenticación de Rails,
+      #     así que lo que se veía era una migración ejecutándose sola y, detrás,
+      #     una pregunta sobre otra que ya no tenía nada que hacer
+      #
+      # Así que es una sola: lo que falta -- lo de Rails y lo de Hobo -- y qué
+      # hacer con ello. Y cuando lo de Hobo se escribe, se escribe con el `up` y
+      # el `down` delante, porque nadie decide sobre algo que no ha visto.
+      def the_migration
+        return say_how_to_do_it_later if @migration == :skip
+
+        the_migrations_rails_wrote
+
+        return say("\n  La base de datos ya esta al dia.\n") unless anything_to_migrate?
+
+        say_step "La migracion"
+
+        # In another process, and this is the whole reason `hobo new` used to
+        # call it from the template: **the models this wizard has just written
+        # are on disk, not in memory**. `User` was loaded before the wizard
+        # taught it a lifecycle, so an `invoke` from here reads the class as it
+        # was and reports "nothing to change" about columns that are missing.
+        # A new process reads the files -- and it is also what lets the
+        # generator have the terminal to ask its own question.
+        inside(destination_root) { run "bin/rails generate hobo:migration #{migration_flags}".strip }
+      end
+
+      # The other question Hobo 2 asked at the end. `rails new` leaves a
+      # repository behind, but everything this wizard wrote came after it, so
+      # without this the first commit of the application does not contain the
+      # application.
+      def the_git_repository
+        return unless @git
+        say_step "El repositorio"
+
+        inside(destination_root) do
+          run "git init -q", :capture => true unless File.directory?(File.join(destination_root, ".git"))
+          run "git add -A", :capture => true
+          # `--no-verify` and no author: whatever the machine is set up with. A
+          # generator that signs commits with a name nobody chose is a generator
+          # that gets uninstalled.
+          run %(git commit -q --no-verify -m "Aplicacion creada con Hobo"), :capture => true
         end
-      else
-        default_locale = options[:default_locale]
-        locales = options[:locales]
       end
-      unless default_locale.blank?
-        default_locale.gsub!(/\:/, '')
-        environment "#"
-        environment "config.i18n.default_locale = #{default_locale.to_sym.inspect}"
-        environment "#"
+
+      private
+
+      # Los plugins que hay que instalar: los elegidos que no vienen dentro.
+      # `clean`, `stimulus` y `none` no son gemas.
+      def chosen_plugins
+        ([@theme, @behaviour] + Array(@extras)).compact.filter_map do |name|
+          Hobo::Plugins.all.find { |plugin| plugin.name == name }
+        end
       end
-      ls = (locales - %w[en]).map {|l| ":#{l}" }
-      lstr = ls.to_sentence
-      invoke 'hobo:i18n', locales
-      say(<<STR , Color::YELLOW) unless ls.empty?
-NOTICE: You should manually install in 'config/locales' also the official Rails locale #{ls.size==1 ? 'file' : 'files'} for #{lstr} that your application will use.
-Official rails I18n URLs:
-  - Readme:     https://github.com/svenfuchs/rails-i18n/blob/master/README.md
-  - locale dir: https://github.com/svenfuchs/rails-i18n/tree/master/rails/locale/
-STR
+
+      # El Gemfile, o nada: el asistente tiene que poder responder sus preguntas
+      # tambien donde no hay aplicacion, que es como lo prueban sus pruebas.
+      def gemfile
+        @gemfile ||= File.read(File.join(destination_root, "Gemfile"))
+      rescue StandardError
+        ""
+      end
+
+      def theme_plugin = Hobo::Plugins.of(:theme).find { |plugin| plugin.name == @theme }
+
+      def interactive?
+        return true if options[:wizard]
+        return false if options[:wizard] == false
+        $stdin.tty?
+      end
+
+      # The parentheses matter: in an endless method `def x = y if z` the `if`
+      # applies to the **definition**, so this ran `interactive?` at class level
+      # and the generator would not even load.
+      def say_step(title) = (say("\n#{title}", :green) if interactive?)
+
+      # Thor's `yes?` reads a bare Enter as "no", which makes a question whose
+      # default is yes impossible to answer the easy way. This reads the Enter
+      # as the default, which is what the brackets promise.
+      def yes_or_no?(flag, text, default)
+        given = options[flag]
+        return given unless given.nil?
+        return default unless interactive?
+
+        said = ask("#{text} [#{default ? 'S/n' : 's/N'}]").to_s.strip.downcase
+        said.empty? ? default : said.start_with?("s", "y")
+      end
+
+      def named(flag, text, default)
+        given = options[flag]
+        return given if given.present?
+        return default unless interactive?
+
+        said = ask("#{text} [#{default}]").to_s.strip
+        said.empty? ? default : said
+      end
+
+      # El tema, y **la lista no esta escrita aqui**.
+      #
+      # Estaba: `[c]lean, [b]ootstrap, [n]inguno`, con lo que un tema que no
+      # fuera de Hobo no existia para el asistente por muy instalado que
+      # estuviera. Ahora las respuestas son las gemas que se han encontrado
+      # (Hobo::Plugins), mas `clean`, que viene dentro, y `none`, que no es un
+      # tema sino la respuesta de quien tiene su propio layout.
+      def choose_theme
+        answers = [["clean", "el que trae Hobo"]] +
+                  Hobo::Plugins.of(:theme).map { |plugin| [plugin.name, plugin.describe] } +
+                  [["none", "ninguno: tu layout, tus hojas de estilo"]]
+
+        choose(:theme, "El tema:", answers, "clean")
+      end
+
+      # Y quien ejecuta el comportamiento que las paginas describen -- el `+` de
+      # un formulario, el desplegable que abre un campo nuevo.
+      #
+      # No se pregunto nunca hasta ahora porque no habia nada que elegir. La
+      # pregunta aparece **sola** el dia que hay una gema que se ofrece: con
+      # solo Stimulus no se pregunta, porque una pregunta con una respuesta no
+      # es una pregunta, es un tramite.
+      #
+      # Y no hay opcion de "ninguno", igual que en Hobo 2: un formulario sin
+      # comportamiento es un formulario al que le faltan la mitad de las cosas,
+      # y eso no es una eleccion, es una averia.
+      def choose_behaviour
+        answers = [["stimulus", "el que trae Rails, y viene dentro de Hobo"]] +
+                  Hobo::Plugins.of(:behaviour).map { |plugin| [plugin.name, plugin.describe] }
+
+        choose(:behaviour, "Quien ejecuta el comportamiento de las paginas:", answers, "stimulus")
+      end
+
+      # Y los demas plugins que haya instalados: los que no compiten por nada.
+      #
+      # El tema es uno y quien ejecuta el comportamiento tambien, asi que son
+      # preguntas de elegir. Un plugin que solo trae tags -- `hobo_jquery_ui`,
+      # con su calendario -- no compite con ninguno, asi que es un si o un no
+      # por cada uno, y por defecto no: tener una gema instalada no es haberla
+      # pedido, y muchas veces es solo una dependencia de otra.
+      def choose_extras
+        # `--plugins jquery_ui timeago` y `--plugins=jquery_ui,timeago` son la
+        # misma respuesta, como en los idiomas.
+        given = Array(options[:plugins]).flat_map { |p| p.to_s.split(/[\s,]+/) }.reject(&:empty?)
+        return given if given.any?
+        return [] if options[:plugins]
+
+        Hobo::Plugins.of(:tags).filter_map do |plugin|
+          next if gemfile.include?(plugin.gem_name)
+          plugin.name if yes_or_no?(:"plugin_#{plugin.name}",
+                                    "Instalar #{plugin.gem_name}? (#{plugin.describe})", false)
+        end
+      end
+
+      # Una pregunta cuyas respuestas se saben al preguntarla y no al escribirla.
+      #
+      # Numerada y no por letras: `[c]lean, [b]ootstrap` funcionaba porque la
+      # lista era fija, y con dos gemas que empiecen por la misma letra deja de
+      # funcionar. Vale el numero o el nombre entero.
+      def choose(flag, title, answers, default)
+        given = options[flag]
+        return given if given.present?
+        # Una sola respuesta no se pregunta.
+        return default if answers.size == 1 || !interactive?
+
+        say "\n#{title}"
+        answers.each_with_index do |(name, describe), i|
+          say "  #{i + 1}. #{name}#{" -- #{describe}" if describe.present?}"
+        end
+
+        said = ask("Cual? [#{default}]").to_s.strip.downcase
+        return default if said.empty?
+
+        names = answers.map(&:first)
+        return names[said.to_i - 1] if said.to_i.between?(1, names.size)
+        names.include?(said) ? said : default
+      end
+
+      # The languages, and which of them is the default -- one question when
+      # there is one answer, two when there are more, which is how Hobo 2 asked
+      # it. `--locale=es` on its own still means "Spanish and only Spanish".
+      def choose_locales
+        # `--locales en es` and `--locales=en,es` are the same answer.
+        given = Array(options[:locales]).flat_map { |l| l.to_s.split(/[\s,]+/) }.reject(&:empty?)
+        given = [options[:locale].to_s] if given.empty? && options[:locale].present?
+
+        if given.empty? && interactive?
+          said = ask("Idiomas de la aplicacion, separados por espacios? " \
+                     "(Hobo habla #{HoboRapid::TRANSLATED_LOCALES.join(' y ')}) [en]").to_s
+          given = said.split(/[\s,]+/).reject(&:empty?)
+        end
+        given = ["en"] if given.empty?
+
+        [given, choose_default_locale(given)]
+      end
+
+      def choose_default_locale(locales)
+        return locales.first if locales.size == 1
+        given = options[:locale]
+        return given if given.present? && locales.include?(given.to_s)
+        return locales.first unless interactive?
+
+        said = ask("Cual es el idioma por defecto? [#{locales.first}]").to_s.strip
+        locales.include?(said) ? said : locales.first
+      end
+
+      # Hobo 2's `[s]kip, [g]enerate, [m]igrate`, in its own place: after the
+      # front page and before the languages, which is where that wizard asked
+      # it. The three answers are also flags, so a script never stops.
+      def choose_migration
+        return :skip if options[:skip_migration]
+        return :generate if options[:generate_migration]
+        return :migrate unless interactive?
+
+        said = ask("La migracion inicial: [s]altarla, solo [e]scribirla, escribirla y [a]plicarla? [a]").to_s.strip.downcase
+        { "s" => :skip, "e" => :generate }.fetch(said[0].to_s, :migrate)
+      end
+
+      # Ya está contestado arriba, así que el generador no vuelve a preguntar:
+      # enseña la migración -- que es lo que había que ver -- y hace lo que se le
+      # dijo. Es exactamente lo que hacía el asistente de Hobo 2.
+      def migration_flags = @migration == :generate ? "-n -g" : "-n -m"
+
+      # Whether the database and the models differ at all. It is the same
+      # question `hobo:migration` answers with "Database and models match --
+      # nothing to change", asked before bothering anybody with it.
+      #
+      # If it cannot be answered -- no models loaded, no connection -- the
+      # answer is yes: better one question too many than a column that never
+      # gets created.
+      # Las migraciones que escribió Rails y nadie ha aplicado -- las de `users`
+      # y `sessions`, casi siempre.
+      #
+      # No se pregunta por ellas: la pregunta ya está hecha, y `hobo new` no
+      # tocaba la base de datos hasta aquí. Se enseñan por su nombre antes de
+      # aplicarlas, que es lo que faltaba: lo que se veía era una migración
+      # ejecutándose sola, sin haber preguntado nada.
+      #
+      # Y van primero porque **`hobo:migration` se niega a trabajar mientras
+      # haya migraciones sin aplicar**: sin esto lo que salía era una aplicación
+      # cuya primera página contestaba 500 con «no such table».
+      def the_migrations_rails_wrote
+        pending = pending_migrations
+        return if pending.empty?
+
+        say_step "La base de datos"
+        say "\n  Aplicando lo que escribio Rails:"
+        pending.each { |name| say "    #{name}" }
+        say ""
+
+        inside(destination_root) { run "bin/rails db:migrate" }
+      end
+
+      def say_how_to_do_it_later
+        say [
+          "",
+          "  Sin tocar la base de datos. Cuando quieras:",
+          "",
+          "    bin/rails db:migrate",
+          "    bin/rails generate hobo:migration",
+          "",
+        ].join("\n"), :yellow
+      end
+
+      # Los nombres de las migraciones sin aplicar. En otro proceso, como todo lo
+      # que pregunta por el estado de la base: la de dentro es la que había al
+      # arrancar el generador.
+      #
+      # Si no se puede preguntar -- no hay base de datos todavía, que es lo
+      # normal en una aplicación recién creada -- son los ficheros de
+      # `db/migrate`, que es la misma respuesta por otro camino.
+      def pending_migrations
+        probe = File.join(destination_root, "tmp", "hobo_pending_probe.rb")
+        FileUtils.mkdir_p(File.dirname(probe))
+        File.write(probe, <<~RUBY)
+          print ActiveRecord::Base.connection_pool.migration_context.open.pending_migrations.map(&:name).join(" ")
+        RUBY
+
+        said = `cd #{destination_root} && bin/rails runner #{probe} 2>/dev/null`.strip
+        return said.split if $?.success?
+
+        Dir[File.join(destination_root, "db", "migrate", "*.rb")]
+          .map { |file| File.basename(file, ".rb").sub(/\A\d+_/, "").camelize }
+      ensure
+        FileUtils.rm_f(probe)
+      end
+
+      # Asked in another process, for the same reason the migration is written
+      # in one: the models on disk are not the ones in memory.
+      #
+      # The lambda is not optional in practice -- the migrator calls it to ask
+      # whether a column that went away was dropped or renamed, and its default,
+      # an empty Hash, does not answer to `call`. This one is only looking, so
+      # nothing is ever renamed.
+      def anything_to_migrate?
+        probe = File.join(destination_root, "tmp", "hobo_migration_probe.rb")
+        FileUtils.mkdir_p(File.dirname(probe))
+        File.write(probe, <<~RUBY)
+          require "generators/hobo/migration/migrator"
+          up, = ::Generators::Hobo::Migration::Migrator.new(lambda { |_c, _d, _k, _p| {} }).generate
+          print up.to_s.strip.empty? ? "NADA" : "ALGO"
+        RUBY
+
+        said = `cd #{destination_root} && bin/rails runner #{probe} 2>&1`
+        # If it could not be asked, ask the person: one question too many beats
+        # a column that never gets created.
+        !said.include?("NADA")
+      ensure
+        FileUtils.rm_f(probe)
+      end
+
+      def routes = @routes ||= File.read(File.join(destination_root, "config", "routes.rb"))
+
+      # `application` appends inside the Application class, and running the
+      # wizard twice must not say the same thing twice.
+      def add_to_configuration(line)
+        return say("  ya estaba: #{line}") if File.read(File.join(destination_root, "config", "application.rb")).include?(line)
+        application "    #{line}"
+      end
+
     end
-
-    def git_repo
-      if wizard?
-        say_title 'Git Repository'
-        return unless yes_no?("Do you want to initialize a git repository now?")
-        gitignore_auto_generated = yes_no? "Do you want git to ignore the auto-generated files?\n(Choose 'n' only if you are planning to deploy on a read-only File System like Heroku)"
-        say 'Initializing git repository...'
-      else
-        return unless options[:git_repo]
-        gitignore_auto_generated = options[:gitignore_auto_generated_files]
-      end
-      if gitignore_auto_generated
-        hobo_routes_rel_path = Hobo::Engine.config.hobo.routes_path.relative_path_from Rails.root
-        append_file '.gitignore', "app/views/taglibs/auto/**/*\n#{hobo_routes_rel_path}\n"
-      end
-      git :init
-      git :add => '.'
-      git :commit => '-m "initial commit"'
-      say("NOTICE: If you change the config.hobo.routes_path, you should update the .gitignore file accordingly.", Color::YELLOW) if gitignore_auto_generated
-    end
-
-    def finalize
-      return unless wizard?
-      say_title 'Process completed!'
-      say %(You can start your application with `rails server`
-(run with --help for options). Then point your browser to
-http://localhost:3000/
-
-Follow the guidelines to start developing your application.
-You can find the following resources handy:
-
-* The Getting Started Guide: http://guides.rubyonrails.org/getting_started.html
-* Ruby on Rails Tutorial Book: http://www.railstutorial.org/
-)
-end
-
-private
-
-  def wizard?
-    options[:wizard]
-  end
 
   end
 end

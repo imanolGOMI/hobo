@@ -5,17 +5,27 @@ module Hobo
     class << self
       def included(base)
         base.class_eval do
-          extend ClassMethods
+          singleton_class.prepend(UserActions)
 
-          class << self
-            alias_method_chain :available_auto_actions, :user_actions
-            alias_method_chain :def_auto_actions, :user_actions
+          # Las puertas de entrada: las paginas que **tienen** que verse sin
+          # haber entrado, porque son las que dejan entrar.
+          puertas = [:login, :signup, :do_signup, :forgot_password, :reset_password,
+                     :do_reset_password, :accept_invitation, :do_accept_invitation]
+
+          # `:raise => false` porque `login_required` es el filtro de Hobo 2 y
+          # una aplicacion que use la autenticacion de Rails 8 no lo tiene: sin
+          # esto, un `hobo_user_controller` traido de Hobo 2 tumbaba la
+          # aplicacion entera con «Before process_action callback
+          # :login_required has not been defined». Visto portando Amenti.
+          skip_before_action :login_required, :only => puertas, :raise => false
+
+          # Y lo mismo para el de Rails 8, que es el que pide login en una
+          # aplicacion de hoy. Una de las dos existira.
+          if respond_to?(:allow_unauthenticated_access)
+            allow_unauthenticated_access :only => puertas, :raise => false
           end
 
-          skip_before_filter :login_required, :only => [:login, :signup, :do_signup, :forgot_password, :reset_password, :do_reset_password,
-                                                        :accept_invitation, :do_accept_invitation]
-
-          alias_method_chain :hobo_update, :account_flash
+          prepend AccountFlash
         end
 
       end
@@ -23,16 +33,16 @@ module Hobo
 
     end
 
-    module ClassMethods
+    # The actions a user controller adds on top of the seven usual ones. It was
+    # alias_method_chain on the singleton class; a prepended module composes.
+    module UserActions
 
-      def available_auto_actions_with_user_actions
-        available_auto_actions_without_user_actions +
-          [:login, :logout, :forgot_password, :reset_password, :account]
+      def available_auto_actions
+        super + [:login, :logout, :forgot_password, :reset_password, :account]
       end
 
-
-      def def_auto_actions_with_user_actions
-        def_auto_actions_without_user_actions
+      def def_auto_actions
+        super
 
         class_eval do
           def login; hobo_login;                         end if include_action?(:login)
@@ -54,7 +64,6 @@ module Hobo
       if logged_in?
         respond_to do |wants|
           wants.html { redirect_to home_page }
-          wants.js { hobo_ajax_response }
         end
         return
       end
@@ -66,11 +75,26 @@ module Hobo
         user = model.authenticate(params[:login], params[:password])
         if user.nil?
           flash[:error] = options[:failure_notice]
-          hobo_ajax_response if request.xhr? && !performed?
         else
           self.sign_user_in(user, options, &block)
         end
       end
+
+      # Y pintar algo, que es lo que faltaba.
+      #
+      # Esta accion no renderizaba nunca: dejaba que Rails encontrase
+      # `users/login.dryml`, que en Hobo 2 era el `<login-page>` del catalogo
+      # --`hobo_rapid/taglibs/pages/login.dryml`, un fichero de la gema-- y en
+      # las aplicaciones que lo retocaban, el suyo. Un `hobo update` no se trae
+      # el de la gema, asi que en amenti `/login` contestaba **406**
+      # `MissingExactTemplate`: la aplicacion arrancaba, la portada se veia y no
+      # se podia entrar. Su `login` sigue estando --comprueba las cuentas
+      # caducadas-- y ahora tiene pagina.
+      #
+      # Si la aplicacion escribio la suya, esa manda: solo se pinta cuando no
+      # hay plantilla y nadie ha contestado ya (un `post` bueno redirige).
+      return if performed? || template_exists_for_this_action?
+      render_rapid_page(:login_page)
     end
 
     def hobo_signup(&b)
@@ -90,7 +114,6 @@ module Hobo
                                 self.current_user = this if this.account_active?
                                 respond_to do |wants|
                                   wants.html { redirect_back_or_default(home_page) }
-                                  wants.js { hobo_ajax_response }
                                 end
                               end
       end
@@ -116,7 +139,6 @@ module Hobo
         end
         respond_to do |wants|
           wants.html { render :forgot_password_email_sent }
-          wants.js { hobo_ajax_response}
         end
       end
     end
@@ -129,17 +151,21 @@ module Hobo
                                 flash[:notice] = ht(:"#{model.to_s.underscore}.messages.reset_password", :default=>["Your password has been reset"])
                                 respond_to do |wants|
                                   wants.html { redirect_to(home_page) }
-                                  wants.js { hobo_ajax_response }
                                 end
                               end
       end
     end
 
 
-    def hobo_update_with_account_flash(*args)
-      hobo_update_without_account_flash(*args) do
-        flash[:notice] = ht(:"#{model.to_s.underscore}.messages.update.success", :default=>["Changes to your account were saved"]) if valid? && @this == current_user
-        yield if block_given?
+    module AccountFlash
+      def hobo_update(*args)
+        super(*args) do
+          if valid? && @this == current_user
+            flash[:notice] = ht(:"#{model.to_s.underscore}.messages.update.success",
+                                :default => ["Changes to your account were saved"])
+          end
+          yield if block_given?
+        end
       end
     end
 
@@ -179,7 +205,6 @@ module Hobo
         unless performed?
           respond_to do |wants|
             wants.html {render :action => :account_disabled}
-            wants.js {hobo_ajax_response}
           end
         end
       else
@@ -191,7 +216,6 @@ module Hobo
         unless performed?
           respond_to do |wants|
             wants.html {redirect_back_or_default(options[:redirect_to] || home_page) }
-            wants.js {hobo_ajax_response}
           end
         end
       end

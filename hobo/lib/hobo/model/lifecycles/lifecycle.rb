@@ -58,15 +58,15 @@ module Hobo
         end
 
         def self.publishable_creators
-          creators.values.where.publishable?
+          creators.values.select(&:publishable?)
         end
 
         def self.publishable_transitions
-          transitions.where.publishable?
+          transitions.select(&:publishable?)
         end
 
         def self.step_names
-          (creators.keys | transitions.*.name).uniq
+          (creators.keys | transitions.map(&:name)).uniq
         end
 
 
@@ -88,6 +88,23 @@ module Hobo
 
         def self.state_field
           options[:state_field]
+        end
+
+        # What signs the keys. An application's own secret, and nothing else:
+        # a key signed with a blank secret is not a key.
+        #
+        # Outside Rails -- the piece tests of this file -- there is no
+        # application to ask, so the environment can say. Refusing loudly beats
+        # signing with nil, which is what the old line effectively did wherever
+        # `secret_token` happened to be unset.
+        def self.key_secret
+          secret = if defined?(::Rails) && ::Rails.respond_to?(:application) && ::Rails.application
+                     ::Rails.application.secret_key_base
+                   end
+          secret ||= ENV["HOBO_LIFECYCLE_SECRET"]
+          secret.presence or
+            raise LifecycleError, "a lifecycle key needs a secret to sign it: set the application's " \
+                                  "secret_key_base, or HOBO_LIFECYCLE_SECRET outside Rails"
         end
 
         def self.key_timeout
@@ -188,21 +205,32 @@ module Hobo
         end
 
         def generate_key
-          if Time.zone.nil?
-            raise RuntimeError, "Cannot generate lifecycle key timestamp if the time-zone is not configured. Please add, e.g. config.time_zone = 'UTC' to environment.rb"
-          end
+          # There used to be a `raise unless Time.zone` here, and it guarded
+          # nothing: the next line is `Time.now.utc`, which does not use the
+          # zone. In an application `Time.zone` is always set, so the check only
+          # ever fired outside Rails -- which is to say, in the one place that
+          # wanted to test this without booting an application.
           key_timestamp = Time.now.utc
           record.send :write_attribute, key_timestamp_field, key_timestamp
           key
         end
 
 
+        # The one-use key that travels in an activation or an invitation mail.
+        #
+        # It used to be signed with `Rails.application.config.secret_token`, and
+        # **Rails removed that in 5.2**: on Rails 8 the line raises NoMethodError,
+        # so every key-bearing step of every lifecycle was broken -- activation
+        # mails, invitations, anything with `:new_key => true`. Nothing in the
+        # suite failed, because nothing in the suite had ever asked for a key:
+        # the piece was tested for its states and its transitions, and keys are
+        # the part that only an application uses.
         def key
           require 'digest/sha1'
           timestamp = record.read_attribute(key_timestamp_field)
           if timestamp
             timestamp = timestamp.getutc
-            Digest::SHA1.hexdigest("#{record.id}-#{state_name}-#{timestamp}-#{Rails.application.config.secret_token}")
+            Digest::SHA1.hexdigest("#{record.id}-#{state_name}-#{timestamp}-#{Lifecycle.key_secret}")
           end
         end
 

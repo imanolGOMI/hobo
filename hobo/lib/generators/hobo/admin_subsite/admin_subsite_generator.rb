@@ -1,31 +1,24 @@
+require "generators/hobo/subsite/subsite_generator"
+
 module Hobo
-  class AdminSubsiteGenerator < Rails::Generators::NamedBase
-    source_root File.expand_path('../templates', __FILE__)
+  module Generators
 
-    # overrides the default
-    argument :name, :type => :string, :default => 'admin', :optional => true
+    # `rails generate hobo:admin_subsite [name]`
+    #
+    # The subsite Hobo 2 asked about by name: a part of the application for
+    # administrators. It is `hobo:subsite --administrators-only` with the name
+    # already filled in -- one implementation, two doors.
+    class AdminSubsiteGenerator < SubsiteGenerator
 
-    class_option :theme, :type => :string, :desc => "Theme", :default => 'clean_admin'
-    class_option :ui_theme, :type => :string, :desc => "jQuery-UI Theme", :default => 'flick'
+      source_root File.expand_path("../subsite/templates", __dir__)
 
-    include Generators::Hobo::InviteOnly
-    include Generators::HoboSupport::EvalTemplate
+      argument :subsite, :type => :string, :default => "admin",
+               :desc => "Nombre del subsitio (por defecto: admin)"
 
-    def self.banner
-      "rails generate hobo:admin_subsite [NAME=admin] [options]"
-    end
+      private
 
-    def generate_admin_user_controller
-      fixed_options = {:subsite_controller_is_being_created => 1}
-      options.each{|k,v| fixed_options[k] = v}
-      invoke "hobo:controller", ["#{file_name}/#{options[:user_resource_name].pluralize.underscore}"], fixed_options
-      template "users_index.dryml", "app/views/#{file_name}/#{options[:user_resource_name].pluralize.underscore}/index.dryml" if invite_only?
-    end
+      def administrators_only? = true
 
-    include Generators::Hobo::Subsite
-
-    def generate_site_taglib
-      invoke 'hobo:subsite_taglib', [name], options.merge(:admin => true)
     end
 
   end

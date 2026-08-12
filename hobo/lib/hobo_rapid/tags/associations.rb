@@ -1,0 +1,350 @@
+# The inputs that talk to associations.
+#
+# These are the ones that have to ask the database what the options are, and
+# they are where "a form builds itself" stops being a slogan: `<input:author/>`
+# on a belongs_to becomes a select of the authors this user is allowed to see.
+
+require "rapid"
+require "hobo_rapid/translation"
+require "hobo_rapid/tags/inputs"
+require "hobo_rapid/derivation"
+
+module HoboRapid
+
+  # The option value that means "I am not choosing one of these, I am making a
+  # new one". It never reaches the server: the browser takes the select's name
+  # away while it is selected, so nothing is submitted under it.
+  NEW_RECORD_OPTION = "__new__".freeze
+
+  module Tags
+
+    module AssociationSupport
+
+      # The association behind the field being painted, or nil.
+      def this_reflection
+        return nil unless this_parent && this_field && this_parent.class.respond_to?(:reflections)
+        this_parent.class.reflections[this_field.to_s]
+      end
+
+      # The records a user may choose from. Capped, because a select with ten
+      # thousand options is not a user interface -- the old code capped at 100
+      # too, and it is kept as an attribute so a caller can say otherwise.
+      def choices_for(reflection, limit)
+        return [] unless reflection
+        reflection.klass.limit(limit).select { |record| viewable?(record) }
+      end
+
+      def viewable?(record)
+        !record.respond_to?(:viewable_by?) || record.viewable_by?(acting_user)
+      end
+
+      # What to show for a record in a list of choices.
+      def choice_label(record, method = nil)
+        return method.to_s.split(".").inject(record) { |value, m| value.send(m) } if method
+        return record.name if record.respond_to?(:name)
+        record.to_s
+      end
+
+    end
+
+    class << self
+
+      # What a row of an <input-many> is made of: the member's own fields, minus
+      # the way back to its owner. `MovieGenre` belongs to a movie and to a
+      # genre; inside the movie's form only the genre is a question, and asking
+      # again which movie it is would be asking the user to repeat the page
+      # they are on.
+      def fields_of_member(member_class, owner_class)
+        return [] unless member_class
+        fields = HoboRapid::Derivation.summary_fields(member_class)
+        back = back_reference(member_class, owner_class)
+        back ? fields - [back] : fields
+      end
+
+      def back_reference(member_class, owner_class)
+        return nil unless owner_class && member_class.respond_to?(:reflections)
+        reflection = member_class.reflections.values.find do |r|
+          r.macro == :belongs_to && !r.options[:polymorphic] && r.klass == owner_class
+        end
+        reflection&.name&.to_s
+      rescue StandardError
+        nil
+      end
+
+      # `movie[movie_genres][0][genre_id]`. A belongs_to is sent as its foreign
+      # key -- the row names the record it points at, not the record itself.
+      def member_field_name(prefix, index, member_class, field)
+        column = foreign_key_for(member_class, field) || field
+        "#{prefix}[#{index}][#{column}]"
+      end
+
+      # What a record you are creating right here is asked for: its name and
+      # whatever else it summarises with. The same list the derived form uses,
+      # so the two never drift.
+      def new_record_fields(member_class)
+        return [] unless member_class
+        name = HoboRapid::Derivation.name_attribute_of(member_class)
+        ([name] + HoboRapid::Derivation.summary_fields(member_class)).compact.uniq
+      rescue StandardError
+        []
+      end
+
+      def foreign_key_for(member_class, field)
+        return nil unless member_class.respond_to?(:reflections)
+        reflection = member_class.reflections[field.to_s]
+        return nil unless reflection && reflection.macro == :belongs_to
+        reflection.foreign_key.to_s
+      rescue StandardError
+        nil
+      end
+
+    end
+
+  end
+end
+
+Rapid::Tag.include(HoboRapid::Tags::AssociationSupport)
+
+# A belongs_to: one choice out of many.
+Rapid.define(:select_one, :attrs => [:include_none, :blank_message, :options, :sort, :limit, :text_method, :disabled, :name]) do
+  unless attributes[:disabled] || can_edit?
+    raise HoboRapid::PermissionDenied, "the field '#{this_field}' cannot be edited"
+  end
+
+  reflection = this_reflection
+  records = attributes[:options] || choices_for(reflection, attributes[:limit] || 100)
+  choices = records.map { |record| [choice_label(record, attributes[:text_method]), record.id.to_s] }
+  choices = choices.sort_by(&:first) if attributes[:sort]
+
+  # A blank option appears when asked for, and when nothing is chosen yet: a
+  # select with no empty option quietly picks the first record for you.
+  if attributes[:include_none] || (this.nil? && attributes[:include_none] != false)
+    choices.unshift([attributes[:blank_message] || "", ""])
+  end
+
+  chosen = this&.id&.to_s
+  name = attributes[:name] || (this_parent && reflection ? "#{this_parent.class.name.demodulize.underscore}[#{reflection.foreign_key}]" : nil)
+
+  tag("select", { :name => name, :class => "input belongs-to" }, :select) do
+    choices.each do |label, value|
+      selected = { :selected => true } if value == chosen
+      tag("option", { :value => value }.merge(selected || {})) { text label }
+    end
+    # Room for one more, which is what <select-one-or-new> hangs off. A param
+    # rather than an attribute because what goes there is markup.
+    param(:extra_options)
+  end
+end
+
+# A has_many: many choices, as tick boxes.
+Rapid.define(:check_many, :attrs => [:options, :disabled, :limit, :text_method, :name]) do
+  chosen = Array(this).map { |record| record.id.to_s }
+  reflection = this_reflection
+  records = attributes[:options] || choices_for(reflection, attributes[:limit] || 100)
+  name = attributes[:name] || "#{param_name_for_this}[]"
+
+  tag("ul", { :class => "check-many" }, :default) do
+    # Without this, unticking everything sends nothing at all and the model
+    # never learns the collection was emptied. Same trick as the checkbox.
+    tag("input", { :type => "hidden", :name => name, :value => "" })
+
+    records.each do |record|
+      with_this(record) do
+        tag("li", {}, :item) do
+          ticked = { :checked => true } if chosen.include?(record.id.to_s)
+          tag("input", { :type => "checkbox", :name => name, :value => record.id.to_s,
+                         :disabled => attributes[:disabled] }.merge(ticked || {}))
+          tag("label", {}, :label) { text choice_label(record, attributes[:text_method]) }
+        end
+      end
+    end
+  end
+end
+
+# `<input-many>`: a collection you can grow and shrink inside the form of its
+# owner. It is the signature interactive tag of Hobo -- creating a genre from
+# inside the film, without leaving the page -- and it is two halves that have to
+# agree on a DOM:
+#
+#   - this tag, which paints the rows and, crucially, **one hidden template
+#     row** at index -1;
+#   - `rapid_input_many_controller.js`, which clones that template on "add",
+#     renumbers everything from zero after any change, and enables or disables
+#     what gets submitted.
+#
+# The names are Hobo's, not Rails': `movie[movie_genres][0][genre_id]`, without
+# `_attributes`. That is what `:accessible => true` reads (see
+# `Hobo::Model::AccessibleAssociations`), and it is what lets a row name a
+# record that does not exist yet.
+Rapid.define(:input_many, :attrs => [:minimum, :prefix, :fields, :add_label, :remove_label]) do
+  reflection = this_reflection
+  owner = this_parent
+  prefix = attributes[:prefix] ||
+           (owner && this_field ? "#{owner.class.name.demodulize.underscore}[#{this_field}]" : nil)
+  members = Array(this)
+  member_class = reflection.respond_to?(:klass) && reflection.klass || members.first&.class
+  fields = attributes[:fields] || HoboRapid::Tags.fields_of_member(member_class, owner&.class)
+  minimum = attributes[:minimum].to_i
+
+  # The row a new one is cloned from. It is painted from a blank record, so an
+  # empty collection still gives the user something to add -- an <input-many>
+  # that only works once there is already a row is an <input-many> that never
+  # starts.
+  blank = begin
+            member_class&.new
+          rescue StandardError
+            nil
+          end
+
+  row = lambda do |record, index, target|
+    attrs = { :class => "input-many-item", **HoboRapid::Behaviour.target("input-many", target) }
+    attrs[:hidden] = true if target == "template"
+
+    tag("div", attrs, :"item_#{index}") do
+      # The id of an existing record travels with its row, or the server cannot
+      # tell "change this one" from "make another".
+      if record.respond_to?(:id) && record.id
+        tag("input", { :type => "hidden", :name => "#{prefix}[#{index}][id]", :value => record.id.to_s })
+      end
+
+      fields.each do |field|
+        with_field(field, record) do
+          # Named, like every other call the catalogue makes: a theme has to be
+          # able to reach inside a row, and the param sweep of layer 3 is what
+          # said so -- it failed the moment this call went out unexposed.
+          call_tag(:input, { :name => HoboRapid::Tags.member_field_name(prefix, index, member_class, field) },
+                   :as => :"#{field}_input")
+        end
+      end
+
+      # `btn btn-sm btn-outline-secondary` is what keeps these small and grey.
+      # Without the `btn` they are just buttons inside a form, and the rule that
+      # styles the plain forms Rails paints turned them into big blue primary
+      # buttons -- the same rule that was eating the delete glyph.
+      tag("button", { :type => "button", :class => "action small add-item",
+                      **HoboRapid::Behaviour.action("input-many", "add") }, :add) do
+        text(attributes[:add_label] || "+")
+      end
+      tag("button", { :type => "button", :class => "action small remove-item",
+                      **HoboRapid::Behaviour.action("input-many", "remove") }, :remove) do
+        text(attributes[:remove_label] || "−")
+      end
+    end
+  end
+
+  tag("div", { :class => "input-many",
+               **HoboRapid::Behaviour.declare("input-many", :prefix => prefix, :minimum => minimum) },
+      :input_many) do
+    row.call(blank, -1, "template") if blank
+
+    if members.any?
+      members.each_with_index { |member, index| row.call(member, index, "item") }
+    elsif blank
+      # **Una fila para empezar.**
+      #
+      # Sin esto, una colección vacía -- que es el caso de cualquier formulario
+      # de alta -- pintaba la plantilla (oculta) y nada más: no había ni un
+      # campo que rellenar ni un botón que pulsar, porque el `+` vive dentro de
+      # cada fila y la única fila estaba escondida. Desde fuera se veía como
+      # «no me deja añadir etiquetas», y era exactamente eso.
+      #
+      # Hobo 2 pintaba siempre una fila vacía por la misma razón. Si no se
+      # rellena no pasa nada: una fila sin elegir nada no crea registro.
+      row.call(blank, 0, "item")
+    end
+
+    # Removing the last row has to *say* so. Without this the parameters simply
+    # lack the key, which reads as "leave the collection alone", and the rows
+    # the user deleted come back on the next page. The controller enables it
+    # only while there are none.
+    tag("div", { **HoboRapid::Behaviour.target("input-many", "empty"), :hidden => true }, :empty) do
+      tag("input", { :type => "hidden", :class => "empty-input", :name => prefix, :value => "" })
+
+      # Y un boton para volver a empezar, que **faltaba**: el `+` vive en la
+      # ultima fila, asi que al quitar la ultima no quedaba ninguno y el control
+      # desaparecia de la pagina. Quitabas la unica etiqueta de un libro y ya no
+      # podias ponerle otra sin recargar.
+      tag("button", { :type => "button", :class => "action small add-item",
+                      **HoboRapid::Behaviour.action("input-many", "add") }, :add) do
+        text(attributes[:add_label] || "+")
+      end
+    end
+  end
+end
+
+# `<select-one-or-new>`: choose one of the records that exist, or make one here.
+#
+# This is what gave Hobo its reputation for forms: you are filling in a film,
+# the genre you want does not exist yet, and you do not have to go away and come
+# back. Hobo 2 did it with a modal, and its own documentation admitted the
+# price -- you had to patch the controller's `create` action for xhr and inject
+# JavaScript to re-select the record afterwards.
+#
+# None of that is needed once the new record's fields ride in the parent form:
+# `:accessible => true` creates it on save, the same road <input-many> takes.
+# So this is a select with one more option and a block of fields, and the only
+# thing the browser has to do is make sure **exactly one of the two is sent** --
+# both would reach `attributes=` and the second would quietly win.
+Rapid.define(:select_one_or_new, :attrs => [:name, :new_label, :fields, :limit, :text_method,
+                                            :include_none, :blank_message, :sort]) do
+  reflection = this_reflection
+  member_class = reflection.respond_to?(:klass) && reflection.klass
+
+  select_name = attributes[:name] ||
+                (this_parent && reflection ? "#{this_parent.class.name.demodulize.underscore}[#{reflection.foreign_key}]" : nil)
+
+  # The new record travels under the *association* name, not the foreign key:
+  # `movie[category][name]` is a record to build, `movie[category_id]` is one to
+  # find. Same shape one level down, inside an <input-many> row.
+  fields_prefix = if select_name && reflection
+                    select_name.sub(/\[#{Regexp.escape(reflection.foreign_key.to_s)}\]\z/,
+                                    "[#{reflection.name}]")
+                  end
+
+  fields = attributes[:fields] || HoboRapid::Tags.new_record_fields(member_class)
+  blank = begin
+            member_class&.new
+          rescue StandardError
+            nil
+          end
+
+  # Nothing to build, nothing to offer: it degrades to a plain select rather
+  # than to a broken one.
+  next call_tag(:select_one, attributes.slice(:name, :limit, :text_method, :include_none,
+                                              :blank_message, :sort), :as => :select) if blank.nil? || fields.empty? || fields_prefix.nil?
+
+  tag("div", { :class => "select-one-or-new",
+               **HoboRapid::Behaviour.declare("select-one-or-new") }, :select_one_or_new) do
+    new_label = attributes[:new_label] ||
+                t(:"associations.new_option", "New %{name}\u2026",
+                  :name => HoboRapid::Derivation.title_of(member_class).downcase)
+
+    call_tag(:select_one,
+             attributes.slice(:limit, :text_method, :include_none, :blank_message, :sort)
+                       .merge(:name => select_name),
+             :as => :select,
+             # The select is the tag's own; what this adds is the extra option
+             # and the two data attributes that hand it to Stimulus.
+             # `change->` no se escribe: el evento natural de un <select> es
+             # cambiar, que es lo que se supone cuando no se dice otra cosa.
+             :select => Rapid.parameter(
+               :attributes => HoboRapid::Behaviour.target("select-one-or-new", "select")
+                                .merge(HoboRapid::Behaviour.action("select-one-or-new", "change"))),
+             :extra_options => Rapid.markup do
+               tag("option", { :value => HoboRapid::NEW_RECORD_OPTION }, :new_option) { text new_label }
+             end)
+
+    tag("div", { :class => "new-record",
+                 **HoboRapid::Behaviour.target("select-one-or-new", "fields"),
+                 :hidden => true }, :fields) do
+      fields.each do |field|
+        with_field(field, blank) do
+          tag("div", { :class => "field" }, :"#{field}_field") do
+            tag("label", {}, :"#{field}_label") { text HoboRapid::Derivation.label_for(member_class, field) }
+            call_tag(:input, { :name => "#{fields_prefix}[#{field}]" }, :as => :"#{field}_input")
+          end
+        end
+      end
+    end
+  end
+end

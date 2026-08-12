@@ -1,0 +1,10 @@
+class <%= subsite.camelize %>::<%= plural_class_name %>Controller < <%= subsite.camelize %>::<%= subsite.camelize %>Controller
+
+  include Hobo::Controller::Model
+
+  # The same model, seen from the <%= subsite %> subsite. The pages are the same
+  # derived ones: what changes is who is looking, and the model's permissions
+  # decide the rest.
+  auto_actions :all
+
+end

@@ -1,19 +1,4 @@
-source "http://rubygems.org"
+source "https://rubygems.org"
 
-gem 'rubydoctest', :git => 'git://github.com/bryanlarsen/rubydoctest.git'
-gem 'rails', '4.2.7.1'
-gem 'responders', '2.1.0'
-gem 'protected_attributes'
-gemspec :path => "../dryml"
-gemspec :path => "../hobo_support"
-gemspec :path => "../hobo_fields"
+
 gemspec
-gem 'hobo_will_paginate'
-platform :ruby do
-  gem 'sqlite3'
-end
-platform :jruby do
-  gem 'activerecord-jdbcsqlite3-adapter'
-end
-
-gem "irt"

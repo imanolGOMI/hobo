@@ -1,0 +1,7 @@
+/* A relative date says less than an exact one, so it says where the exact one
+   is: the element carries it in `title`, and the underline is the hint that
+   hovering is worth it. */
+time.timeago {
+  border-bottom: 1px dotted currentColor;
+  cursor: help;
+}

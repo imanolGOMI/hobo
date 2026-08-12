@@ -1,10 +1,18 @@
+# Bundler only requires the gems an application lists itself, not the ones its
+# gems depend on -- so a gem has to require what it uses. `respond_to` and
+# `respond_with` at class level came out of Rails core in 5.0.
+require 'responders'
+require 'hobo/controller'
+require 'hobo/controller/layout'
+
 module Hobo
   module Controller
     module Model
 
     include Hobo::Controller
 
-    DONT_PAGINATE_FORMATS = [ Mime::CSV, Mime::YAML, Mime::JSON, Mime::XML, Mime::ATOM, Mime::RSS ]
+    # `Mime::CSV` and friends went away in Rails 5; formats are symbols now.
+    DONT_PAGINATE_FORMATS = %i[csv yaml json xml atom rss].freeze
 
     WILL_PAGINATE_OPTIONS = [ :page, :per_page, :total_entries, :count, :finder ]
 
@@ -24,17 +32,87 @@ module Hobo
           extend ClassMethods
 
 
-          helper_method :model, :current_user
-          before_filter :set_no_cache_headers
+          # `this` tambien, y no es un detalle: es **el registro de la pagina**.
+          #
+          # Una plantilla `.dryml` se compila a `rapid_tag(:x_page, defined?(this)
+          # ? this : nil)`, y sin exponerlo aqui ese `defined?` es falso siempre:
+          # todas las paginas que escribe una aplicacion de Hobo 2 se pintaban
+          # **sin registro**. Se veia como cosas sueltas -- el alta de amenti
+          # salia con los campos del registro de Rails 8 en vez de los suyos,
+          # porque sin `this` no hay modelo al que preguntarle nada -- y era una
+          # sola causa. En Hobo 2 `this` estaba en la vista desde el primer dia.
+          helper_method :model, :current_user, :this
+          before_action :set_no_cache_headers
+
+          # Con un tema puesto, las paginas de Hobo **son el documento entero**
+          # -- `<html>`, `<head>`, la barra --, asi que el layout de la
+          # aplicacion no las envuelve.
+          #
+          # La pagina derivada ya lo resolvia mirando lo que habia pintado. Lo
+          # que no: **la vista que escribe la aplicacion**. Poner tres lineas en
+          # `app/views/books/index.html.erb` para anadir unos filtros --que es lo
+          # que dice el manual-- devolvia dos documentos anidados, con dos
+          # `<head>` y por tanto dos import maps: Stimulus registrado dos veces,
+          # y el `+` de un formulario anadiendo dos filas.
+          #
+          # Se decide aqui y no despues de pintar porque Rails elige el layout
+          # **antes** de renderizar la plantilla. Y una aplicacion que quiera el
+          # suyo lo dice como en cualquier controlador de Rails:
+          #
+          #   layout "application"
+          # `Hobo::Controller::Layout` asks the template instead of deciding by
+          # the controller: a `.dryml` page brings its own document, an
+          # `.html.erb` view still wants the layout.
+          include Hobo::Controller::Layout
 
           rescue_from ActiveRecord::RecordNotFound, :with => :not_found unless Rails.env.development?
 
           rescue_from Hobo::PermissionDeniedError,         :with => :permission_denied
           rescue_from Hobo::Model::Lifecycles::LifecycleKeyError, :with => :permission_denied
 
+          # The catalogue raises **its own** permission error -- `<view>` asks
+          # `viewable_by?` before painting a field, and the tag runtime has to be
+          # loadable without the whole of Hobo, so it cannot name
+          # `Hobo::PermissionDeniedError`.
+          #
+          # Nothing rescued it, and the two never met until an application had a
+          # model that says no: a page a visitor may not see came out as a **500**
+          # instead of sending them to the login. Hobo's own generated
+          # applications let everybody view everything, so it took porting one
+          # with real permissions to see it.
+          rescue_from HoboRapid::PermissionDenied, :with => :permission_denied if defined?(HoboRapid::PermissionDenied)
+
           respond_to :html
 
-          alias_method_chain :render, :hobo_model
+          # Rails 8's authentication generator puts `require_authentication` on
+          # every controller, and that fights Hobo: with it, **no request ever
+          # reaches the permission check**, so `view_permitted?` never gets to
+          # say anything and a public index becomes a login wall.
+          #
+          # In Hobo the model decides who sees what, so a Hobo controller lets
+          # the request through and asks the record.
+          #
+          # Unless the application says the whole site is private -- the setup
+          # wizard's old "prevent all access to non-members" question, which is
+          # now `config.hobo.private_site = true` (or `hobo new --private`).
+          # Then the filter Rails put there stays, and a stranger is sent to the
+          # login before any of this is asked. The pages that let somebody *in*
+          # -- the front page, the session, the signup -- allow anonymous access
+          # themselves, so the door still works.
+          allow_unauthenticated_access if respond_to?(:allow_unauthenticated_access) && !Hobo.private_site?
+
+          # And the other half of that decision, which was missing: Rails 8
+          # resumes the session **inside** `require_authentication`, the very
+          # filter that was just skipped. So nobody ever read the cookie,
+          # `Current.session` stayed nil, and a signed-in person was painted as
+          # a guest -- read-only forms, no actions column, and not one test
+          # failed because every piece was asked what it does for a guest.
+          #
+          # Reading the cookie is not requiring a login: it is finding out who
+          # is asking before asking the record.
+          before_action :resume_session_if_any if respond_to?(:allow_unauthenticated_access)
+
+          prepend HoboModelRender
 
         end
         register_controller(base)
@@ -91,8 +169,22 @@ module Hobo
         model.name.underscore
       end
 
+      # The model this controller is about.
+      #
+      # The name is a **guess**, made with the English inflector, and English is
+      # not the only language people name models in: `NotasController` asks for
+      # `Notum`, `CategoriasController` for `Categorium`. So when the guess is
+      # not a class that exists, the name as it was written gets a turn --
+      # `Nota` -- and only then does it give up.
+      #
+      # A controller can also say it outright, and the generated ones do:
+      # `self.model = Nota`.
       def model
-        @model ||= controller_name.camelcase.singularize.constantize
+        @model ||= begin
+          guess = controller_name.camelcase
+          guess.singularize.safe_constantize || guess.safe_constantize ||
+            raise(NameError, "#{name}: no encuentro el modelo. Dilo con `self.model = ...`")
+        end
       end
 
 
@@ -125,7 +217,7 @@ module Hobo
             @this.send(method)
           end
 
-          hobo_ajax_response unless performed?
+          head(:ok) unless performed?
         end
       end
 
@@ -322,7 +414,7 @@ module Hobo
         # would be routed to POST /users/signup)
         if model.has_lifecycle?
           (model::Lifecycle.publishable_creators.map { |c| [c.name, "do_#{c.name}"] } +
-           model::Lifecycle.publishable_transitions.map { |t| [t.name, "do_#{t.name}"] }).flatten.*.to_sym
+           model::Lifecycle.publishable_transitions.map { |t| [t.name, "do_#{t.name}"] }).flatten.map(&:to_sym)
         else
           []
         end
@@ -335,7 +427,7 @@ module Hobo
 
 
     def parse_sort_param(*args)
-      _, desc, field = *params[:sort]._?.match(/^(-)?([a-z0-9_]+(?:\.[a-z0-9_]+)?)$/)
+      _, desc, field = *params[:sort]&.match(/^(-)?([a-z0-9_]+(?:\.[a-z0-9_]+)?)$/)
 
       if field
         hash = args.extract_options!
@@ -349,7 +441,12 @@ module Hobo
           @sort_field = field
           @sort_direction = desc ? "desc" : "asc"
 
-          "#{db_sort_field} #{@sort_direction}"
+          # Marked safe here because this is the one place that holds the
+          # whitelist: a sort field that is not among the ones the caller listed
+          # never gets this far. Rails 6 and 7 required the mark, Rails 8 allows
+          # a raw string again -- saying it explicitly means not depending on
+          # which way Rails leans this year.
+          Arel.sql("#{db_sort_field} #{@sort_direction}")
         end
       end
     end
@@ -443,24 +540,75 @@ module Hobo
 
 
     def request_requires_pagination?
-      request.format.not_in?(DONT_PAGINATE_FORMATS) && model.view_hints.paginate?
+      request.format.symbol.not_in?(DONT_PAGINATE_FORMATS) && model.view_hints.paginate?
     end
 
 
+    # `:order_by` is what the pages pass, straight from parse_sort_param, and it
+    # used to go nowhere: it stayed in the options hash and was handed to
+    # will_paginate, which does not know it. The ordering came from the
+    # automatic `order_by` scope instead, and that scope is gone (piece 6). It
+    # is applied here now, with the relation's own `order`.
     def find_or_paginate(finder, options)
-      options = options.reverse_merge(:paginate => request_requires_pagination?)
+      # Only ask the request when the caller has not already decided: this is
+      # otherwise the one line that makes the method need a live request.
+      options[:paginate] = request_requires_pagination? unless options.key?(:paginate)
       do_pagination = options.delete(:paginate) && finder.respond_to?(:paginate)
       finder = Array.wrap(options.delete(:scope)).inject(finder) { |a, v| a.send(*Array.wrap(v).flatten) }
 
-      options[:order] = finder.default_order unless options[:order] || finder.try.order_values.present?
+      finder = apply_search(finder)
+
+      order = options.delete(:order_by) || options.delete(:order)
+      # `?sort=title` and `?sort=-title`, which is what a heading with a link
+      # asks for. Honoured here and not in each action, because otherwise a sort
+      # link only works on the lists whose controller remembered to call
+      # `parse_sort_param`, and a link that does not sort is worse than no link
+      # at all. The whitelist is the table's real columns, so the parameter
+      # cannot name anything that is not one.
+      order ||= parse_sort_param(*sortable_fields_of(finder)) if params[:sort].present?
+      order = finder.default_order if order.blank? && finder.try(:order_values).blank?
+      finder = finder.order(order) if order.present?
 
       if do_pagination
-        options.reverse_merge!(:page => params[:page] || 1)
-        finder.paginate(options)
+        finder.paginate(:page => options[:page] || params[:page] || 1,
+                        :per_page => options[:per_page])
       else
         # Equivalent to the old finder.scoped (http://stackoverflow.com/a/18199294)
         finder.where(nil)
       end
+    end
+
+
+    # Which columns may be sorted by: the ones the table has. No associations
+    # and no methods, neither of which can be handed to an ORDER BY.
+    def sortable_fields_of(finder)
+      klass = finder.respond_to?(:klass) ? finder.klass : model
+      return [] unless klass.respond_to?(:column_names)
+      klass.column_names
+    rescue ActiveRecord::ActiveRecordError
+      []
+    end
+
+
+    # The filters of a list, which are Ransack's (piece 6). The application
+    # writes `<search-filter>` or `<filter-menu>` in its page, the browser sends
+    # `q[title_cont]=blade`, and this is where it lands. Nothing to configure:
+    # the model already said which of its attributes may be searched.
+    #
+    # Only when `q` is a hash. `hobo_completions` reads `params[:q]` too, as a
+    # plain string, because that is what jQuery Tokeninput sent -- the two never
+    # meet in one action, but reading a string as a search would be a puzzling
+    # way to find that out.
+    #
+    # It goes *before* the ordering and the pagination, so a filtered list is
+    # paginated by what it has left rather than by what it started with.
+    def apply_search(finder)
+      query = params[:q]
+      return finder unless query.is_a?(Hash) || query.respond_to?(:to_unsafe_h)
+      return finder unless finder.respond_to?(:ransack)
+
+      query = query.to_unsafe_h if query.respond_to?(:to_unsafe_h)
+      finder.ransack(query).result
     end
 
 
@@ -517,22 +665,28 @@ module Hobo
       response_block(&b) || show_response
     end
 
+    # An ajax request used to take a different road here, into the parts
+    # protocol. With Turbo it does not: the page is rendered as always and Turbo
+    # takes the frame it asked for out of it.
     def show_response
-      if request.xhr? && params[:render]
-        hobo_ajax_response
-        render :nothing => true unless performed?
-      else
-        respond_with(self.this)
+      # `new` and `edit` want a form, not a read-only page. Which one it is is
+      # something the action already knows.
+      if action_name.in?(%w[new edit])
+        # And a form nobody may send is not a form: it used to come out as a
+        # page of labels with no inputs, because <input> falls back to showing
+        # the value when the field cannot be edited. Refusing says what is
+        # actually going on.
+        allowed = action_name == "new" ? this.try(:creatable_by?, current_user) : this.try(:editable_by?, current_user)
+        raise Hobo::PermissionDeniedError, "#{this.class.name}##{action_name}" if allowed == false
+
+        return render_derived_or(:form_page) { respond_with(self.this) }
       end
+
+      render_derived_or(:show_page) { respond_with(self.this) }
     end
 
     def index_response
-      if request.xhr? && params[:render]
-        hobo_ajax_response(:page => :blah)
-        render :nothing => true unless performed?
-      else
-        respond_with(self.this)
-      end
+      render_derived_or(:index_page) { respond_with(self.this) }
     end
 
     def hobo_new_for(owner, record=nil, &b)
@@ -551,7 +705,7 @@ module Hobo
         self.this = new_for_create(attributes)
         this.user_save(current_user)
       end
-      flash_notice (ht( :"#{@this.class.to_s.underscore}.messages.create.success", :default=>["The #{@this.class.model_name.human} was created successfully"])) if valid?
+      flash_notice(created_message) if valid?
       response_block(&b) || create_response(:new, options)
     end
 
@@ -566,13 +720,30 @@ module Hobo
         self.this = association.new(attributes)
         this.save
       end
-      flash_notice (ht( :"#{@this.class.to_s.underscore}.messages.create.success", :default=>["The #{@this.class.model_name.human} was created successfully"])) if valid?
+      flash_notice(created_message) if valid?
       response_block(&b) || create_response(:"new_for_#{name_of_auto_action_for(owner_association)}", options)
     end
 
 
+    # Strong parameters and Hobo's permissions answer different questions, and
+    # Rails' answer is not the one Hobo needs.
+    #
+    # Rails asks "which keys may be assigned", once, in the controller. Hobo asks
+    # the *model*, at save time: `update_permitted?` looks at what actually
+    # changed -- that is what `only_changed?`, `none_changed?` and `any_changed?`
+    # are for -- and `attr_protected` names the fields nobody may ever assign,
+    # the lifecycle state among them.
+    #
+    # So the allowlist is built from what Hobo already knows: everything except
+    # the protected fields, and then the model decides. Handing the parameters
+    # over raw is not an option either -- Rails has refused that since 4.
     def attribute_parameters
-      params[(this ? this.class : model).name.underscore]
+      klass = this ? this.class : model
+      parms = params[klass.name.underscore]
+      return parms unless parms.respond_to?(:permit)
+
+      protected_names = klass.try(:protected_attributes).to_a.map(&:to_s)
+      parms.except(*protected_names).permit!
     end
 
 
@@ -584,7 +755,7 @@ module Hobo
 
 
     def subtype_for_create
-      model.has_inheritance_column? && (t = params['type']) && t.in?(model.send(:descendants).*.name) and
+      model.has_inheritance_column? && (t = params['type']) && t.in?(model.send(:descendants).map(&:name)) and
         t
     end
 
@@ -592,15 +763,39 @@ module Hobo
       flash[:notice] = message unless request.xhr?
     end
 
+    # Lo que el flash dice después de guardar o borrar.
+    #
+    # El texto se armaba interpolando el nombre del modelo -- que **sí** está
+    # traducido -- dentro de una frase en inglés, así que una aplicación en
+    # castellano enseñaba «The Libro was created successfully». Ahora la frase
+    # entera pasa por I18n, y la aplicación puede seguir pisándola por modelo
+    # con `libro.messages.create.success`, que es lo que hacía Hobo 2.
+    #
+    # Y la forma es impersonal a propósito: «Se ha creado: Libro» vale para
+    # cualquier género, que desde aquí no se puede saber.
+    def created_message
+      ht(:"#{@this.class.to_s.underscore}.messages.create.success",
+         :default => [HoboRapid.translate(:"messages.created", "%{name} created",
+                                          :name => @this.class.model_name.human)])
+    end
+
+    def updated_message
+      ht(:"#{@this.class.to_s.underscore}.messages.update.success",
+         :default => [HoboRapid.translate(:"messages.updated", "Changes saved")])
+    end
+
+    def destroyed_message
+      ht(:"#{model.to_s.underscore}.messages.destroy.success",
+         :default => [HoboRapid.translate(:"messages.destroyed", "%{name} deleted",
+                                          :name => model.model_name.human)])
+    end
+
 
     def create_response(new_action=:new, options={})
       valid = valid?  # valid? can be expensive
       if params[:render]
         if (params[:render_options] && params[:render_options][:errors_ok]) || valid
-          hobo_ajax_response
-
-          # Maybe no ajax requests were made
-          render :nothing => true unless performed?
+          head(:ok) unless performed?
         else
           errors = @this.errors.full_messages.join('\n')
           message = ht( :"#{this.class.to_s.underscore}.messages.create.error", :errors=>errors,:default=>["Couldn't create the #{this.class.name.titleize.downcase}.\n #{errors}"])
@@ -655,10 +850,7 @@ module Hobo
       valid = valid? if valid.nil?
       if params[:render]
         if (params[:render_options] && params[:render_options][:errors_ok]) || valid
-          hobo_ajax_response
-
-          # Maybe no ajax requests were made
-          render :nothing => true unless performed?
+          head(:ok) unless performed?
         else
           errors = @this.errors.full_messages.join('\n')
           message = ht(:"#{@this.class.to_s.underscore}.messages.update.error", :default=>["There was a problem with that change\\n#{errors}"], :errors=>errors)
@@ -670,7 +862,7 @@ module Hobo
         respond_with(self.this, :location => location) do |format|
           format.html do
             if valid
-              flash_notice (ht(:"#{@this.class.to_s.underscore}.messages.update.success", :default=>["Changes to the #{@this.class.model_name.human} were saved"]))
+              flash_notice(updated_message)
               redirect_to location
             else
               re_render_form(:edit)
@@ -684,14 +876,14 @@ module Hobo
       options = args.extract_options!
       self.this ||= args.first || find_instance
       this.user_destroy(current_user)
-      flash_notice ht( :"#{model.to_s.underscore}.messages.destroy.success", :default=>["The #{model.name.titleize.downcase} was deleted"])
+      flash_notice(destroyed_message)
       response_block(&b) || destroy_response(options, &b)
     end
 
 
     def destroy_response(options={})
       if params[:render]
-        hobo_ajax_response || render(:nothing => true)
+        head(:ok)
       else
         redirect_to destination_after_submit(this, true, options)
       end
@@ -718,7 +910,7 @@ module Hobo
     def do_creator_response(name, options)
       if valid?
         if params[:render]
-          hobo_ajax_response || render(:nothing => true)
+          head(:ok)
         else
           location = destination_after_submit(options)
           respond_with(self.this) do |wants|
@@ -728,8 +920,7 @@ module Hobo
       else
         this.exempt_from_edit_checks = true
         if params[:render] && params[:render_options] && params[:render_options][:errors_ok]
-          hobo_ajax_response
-          render :nothing => true unless performed?
+          head(:ok) unless performed?
         else
           # errors is used by the translation helper, ht, below.
           errors = this.errors.full_messages.join("\n")
@@ -771,20 +962,18 @@ module Hobo
     # Hobo 1.3's name one uses params[:query], jQuery-UI's autocomplete
     # uses params[:term] and jQuery Tokeninput uses params[:q]
     def hobo_completions(attribute, finder, options={})
-      options = options.reverse_merge(:limit => 10, :query_scope => "#{attribute}_contains")
-      options[:param] ||= [:term, :q, :query].find{|k| !params[k].nil?}
-      finder = finder.limit(options[:limit]) unless finder.try.limit_value
+      options = options.reverse_merge(:limit => 10)
+      options[:param] ||= [:term, :q, :query].find { |k| !params[k].nil? }
 
-      begin
-        finder = finder.send(options[:query_scope], params[options[:param]])
-        items = finder.select { |r| r.viewable_by?(current_user) }
-      rescue TypeError  # must be a list of methods instead
-        items = []
-        options[:query_scope].each do |qscope|
-          finder2 = finder.send(qscope, params[options[:param]])
-          items += finder2.all.select { |r| r.viewable_by?(current_user) }
-        end
-      end
+      # Ransack, in place of the automatic `<attribute>_contains` scope that
+      # piece 6 removed. Several attributes at once are `a_or_b_cont`, which is
+      # Ransack's own spelling of the same idea -- so the list of scope names
+      # the option used to take becomes a list of attribute names.
+      attributes = Array.wrap(options[:query_attributes] || attribute)
+      finder = finder.ransack("#{attributes.join('_or_')}_cont" => params[options[:param]]).result
+      finder = finder.limit(options[:limit]) unless finder.try(:limit_value)
+      items = finder.select { |r| r.viewable_by?(current_user) }
+
       if request.xhr?
         if options[:param] == :q
           render :json => items.map {|i| {:id => "@#{i.send(i.class.primary_key)}", :name => i.send(attribute)}}
@@ -792,7 +981,7 @@ module Hobo
           render :json => items.map {|i| i.send(attribute)}
         end
       else
-        render :text => "<ul>\n" + items.map {|i| "<li>#{i.send(attribute)}</li>\n"}.join + "</ul>"
+        render :plain => "<ul>\n" + items.map {|i| "<li>#{i.send(attribute)}</li>\n"}.join + "</ul>"
       end
     end
 
@@ -804,9 +993,9 @@ module Hobo
           object = model.find(id)
           object.user_update_attributes!(current_user, object.position_column => position+1)
         end
-        hobo_ajax_response || render(:nothing => true)
+        head(:ok)
       else
-        render :nothing => true
+        head :ok
       end
     end
 
@@ -823,14 +1012,18 @@ module Hobo
       else
         respond_to do |wants|
           wants.html do
-            if render :permission_denied, :status => 403
-              # job done
-            else
-              render :text => t("hobo.messages.permission_denied", :default=>["Permission Denied"]), :status => 403
+            # `render` raises when the template is missing, it does not return
+            # something falsy, so the fallback below was unreachable: an
+            # application without a permission_denied template got a 500 where
+            # it should have got a 403.
+            begin
+              render :permission_denied, :status => 403
+            rescue ActionView::MissingTemplate
+              render :plain => t("hobo.messages.permission_denied", :default=>["Permission Denied"]), :status => 403
             end
           end
           wants.js do
-            render :text => t("hobo.messages.permission_denied", :default=>["Permission Denied"]), :status => 403
+            render :plain => t("hobo.messages.permission_denied", :default=>["Permission Denied"]), :status => 403
           end
         end
       end
@@ -845,7 +1038,7 @@ module Hobo
 
     def this=(object)
       ivar = if object.is_a?(Array) || object.respond_to?(:member_class)
-               (object.try.member_class || model).name.demodulize.underscore.pluralize
+               (object.try(:member_class) || model).name.demodulize.underscore.pluralize
              else
                object.class.name.demodulize.underscore
              end
@@ -858,12 +1051,96 @@ module Hobo
     end
 
 
-    def render_with_hobo_model(*args, &block)
-      options = args.extract_options!
-      self.this = options[:object] if options[:object]
-      # this causes more problems than it solves, and Tom says it's not supposed to be here
-      # this.user_view(current_user) if this && this.respond_to?(:user_view)
-      render_without_hobo_model(*args + [options], &block)
+    # An application that has written a template gets its template. One that has
+    # not gets the page the derivation engine builds from its model -- which is
+    # the whole promise of Hobo: declare the model, and the pages are there.
+    #
+    # Falling back rather than taking over on purpose: the moment a page needs
+    # to be different, you write it, and nothing argues with you.
+    def render_derived_or(tag_name)
+      return yield unless derived_tag?(tag_name)
+
+      # Hobo 2's rule: **if the view only declares params, the page is still the
+      # derived one**; if it writes markup, the view wins and replaces it, which
+      # is what happened when you wrote an `index.dryml`.
+      #
+      # The template is painted first because there is no other way to tell
+      # which of the two it is: what it declares stays on the controller, and
+      # what it writes comes out in the text.
+      if template_exists_for_this_action?
+        wrote = view_wrote_markup?(render_to_string(action_name, :layout => false))
+        declared = @hobo_declared_params || {}
+
+        if !wrote && declared.any?
+          # Params only: the derived page, with them.
+        elsif !wrote
+          return yield
+        elsif declared.any?
+          raise Hobo::Error, <<~ERROR
+            #{controller_path}/#{action_name} declares params (#{declared.keys.join(", ")}) and also
+            writes markup. It has to be one or the other: params retouch the
+            derived page, and markup replaces it.
+
+            If you meant both, open the page yourself and put the markup inside:
+                <%= #{tag_name} this, :#{declared.keys.first} => "..." %>
+          ERROR
+        else
+          return yield
+        end
+      end
+
+      render_rapid_page(tag_name)
+    end
+
+    # Paint a tag and answer with it.
+    #
+    # Through the bridge, not straight to the runtime: `rapid_tag` is what hands
+    # the acting user, the forgery token and the flash to the tags. Calling
+    # Rapid.render directly skipped all three, so every derived page was painted
+    # as if nobody were logged in -- a form with no inputs, and no actions
+    # anywhere.
+    def render_rapid_page(tag_name)
+      painted = rapid_tag(tag_name, this, **(@hobo_declared_params || {}))
+
+      # A theme paints the whole document -- `<html>`, `<head>`, the lot -- so
+      # wrapping it in the application layout as well gives a page with two of
+      # everything. Without a theme what comes back is a fragment, and then the
+      # layout is exactly what it needs.
+      whole_document = painted.lstrip.start_with?("<!DOCTYPE", "<html")
+
+      render :html => painted.html_safe, :layout => !whole_document
+    end
+
+    # Whether what the template painted is real markup or nothing at all.
+    #
+    # Comments do not count, and that is not a nicety: in development Rails
+    # wraps every template in `<!-- BEGIN app/views/... -->` with
+    # `annotate_rendered_view_with_filenames`, so a view that only declared
+    # params painted two comments and was classified as a view that writes
+    # markup. It failed in development and not in production, which is the worst
+    # way to fail.
+    def view_wrote_markup?(pintado)
+      !pintado.to_s.gsub(/<!--.*?-->/m, "").strip.empty?
+    end
+
+    def template_exists_for_this_action?
+      lookup_context.exists?(action_name, lookup_context.prefixes, false)
+    end
+
+    def derived_tag?(tag_name)
+      defined?(Rapid) && Rapid.polymorphic?(tag_name, this)
+    end
+
+
+    # `render :object => record` sets the context the templates render against.
+    # It was an alias_method_chain; a prepended module composes with the rest of
+    # Rails' own render chain instead of renaming it.
+    module HoboModelRender
+      def render(*args, &block)
+        options = args.extract_options!
+        self.this = options[:object] if options[:object]
+        super(*args, options, &block)
+      end
     end
 
     # --- filters --- #
@@ -874,6 +1151,17 @@ module Hobo
       #headers["Cache-Control"] = "no-cache"
       headers["Cache-Control"] = "no-store"
       headers["Expires"] ='0'
+    end
+
+    # Rails 8's `resume_session` is private and idempotent (`Current.session
+    # ||=`), so calling it costs one query per request at most and never
+    # redirects: that is `require_authentication`'s job, and Hobo does not want
+    # it. An application without the generator's concern simply has no such
+    # method, and this does nothing.
+    def resume_session_if_any
+      send(:resume_session) if respond_to?(:resume_session, true)
+    rescue StandardError
+      nil
     end
 
     # --- end filters --- #

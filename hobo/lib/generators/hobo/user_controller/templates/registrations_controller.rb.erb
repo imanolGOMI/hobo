@@ -1,0 +1,170 @@
+class RegistrationsController < ApplicationController
+
+<% if invite_only? -%>
+  # Accepting an invitation is done by somebody who cannot be logged in yet --
+  # that is the whole point -- so those two actions skip the filter and the rest
+  # keep it. Inviting is the opposite: it is for somebody already in.
+  #
+  # Letting `require_authentication` do its job on the other actions matters for
+  # more than the redirect: **it is what resumes the session**, and with it
+  # skipped `Current.user` is nil even for somebody perfectly well logged in.
+  allow_unauthenticated_access :only => [:accept, :take_invitation] if respond_to?(:allow_unauthenticated_access)
+
+  # And only an administrator invites. The lifecycle says so too
+  # (`:available_to => "acting_user if acting_user.try(:administrator?)"`); this
+  # is the same rule said where the request arrives.
+  before_action :only_administrators, :only => [:invite, :send_invitation]
+<% else -%>
+  # Somebody signing up cannot be logged in yet, and Rails 8's generator puts a
+  # `require_authentication` filter on every controller.
+  allow_unauthenticated_access if respond_to?(:allow_unauthenticated_access)
+<% end -%>
+<% unless invite_only? -%>
+
+  def new
+    render :html => rapid_tag(:signup_form, nil, :action => create_signup_path), :layout => false
+  end
+<% end -%>
+<% if activation_email? && !invite_only? -%>
+
+  # The account is made **inactive**, and the mail carries the key that turns it
+  # on. The step is the lifecycle's -- `create :signup ... :new_key => true` in
+  # the user model -- so the rules live with the model, not here.
+  def create
+    @user = User.lifecycle.signup(current_user_or_nobody, user_params)
+
+    if @user.persisted?
+      redirect_to root_path, :notice => "Check your email: there is a link there to activate your account."
+    else
+      flash.now[:error] = @user.errors.full_messages.to_sentence
+      render :html => rapid_tag(:signup_form, nil, :action => create_signup_path),
+             :layout => false, :status => :unprocessable_entity
+    end
+  end
+
+  # Coming back with the key. Whoever holds it may take the step -- that is what
+  # `:available_to => :key_holder` means -- and nobody else can, because the key
+  # is signed with the application's secret.
+  def activate
+    @user = User.find(params[:id])
+    @user.lifecycle.provided_key = params[:key]
+
+    if @user.lifecycle.can_activate?(nil)
+      @user.lifecycle.activate!(nil)
+      start_new_session_for(@user) if respond_to?(:start_new_session_for, true)
+      redirect_to root_path, :notice => "Your account is active. Welcome."
+    else
+      redirect_to new_session_path, :alert => "That link is no longer valid. Ask for another one."
+    end
+  end
+<% elsif !invite_only? -%>
+
+  def create
+    @user = User.new(user_params)
+
+    if @user.save
+      # `, true`: Rails 8's Authentication concern keeps `start_new_session_for`
+      # **private**, so the plain `respond_to?` answered false and the guard
+      # skipped it -- the user was created and then not logged in, quietly.
+      start_new_session_for(@user) if respond_to?(:start_new_session_for, true)
+      redirect_to root_path, :notice => "Welcome"
+    else
+      flash.now[:error] = @user.errors.full_messages.to_sentence
+      render :html => rapid_tag(:signup_form, nil, :action => create_signup_path),
+             :layout => false, :status => :unprocessable_entity
+    end
+  end
+<% end -%>
+<% if invite_only? -%>
+
+  # Only the address: the person invited chooses their own password.
+  def invite
+    render :html => rapid_tag(:signup_form, nil, :action => send_invitation_path,
+                              :fields => "login",
+                              :heading => "Invite somebody",
+                              :blurb => "They will get a mail with a link to choose a password.",
+                              :button_label => "Send the invitation"),
+           :layout => false
+  end
+
+  def send_invitation
+    @user = User.lifecycle.invite(Current.user, user_params)
+
+    if @user.persisted?
+      redirect_to root_path, :notice => "Invitation sent to #{@user.email_address}."
+    else
+      flash.now[:error] = @user.errors.full_messages.to_sentence
+      render :html => rapid_tag(:signup_form, nil, :action => send_invitation_path, :fields => "login"),
+             :layout => false, :status => :unprocessable_entity
+    end
+  end
+
+  # The other end of the invitation: the key comes in the link, and the only
+  # thing left to ask for is a password.
+  def accept
+    @user = User.find(params[:id])
+    @user.lifecycle.provided_key = params[:key]
+    return redirect_to(new_session_path, :alert => "That link is no longer valid.") unless @user.lifecycle.can_accept_invitation?(nil)
+
+    render :html => rapid_tag(:signup_form, nil,
+                              :action => accept_path(@user, :key => params[:key]),
+                              :fields => "password",
+                              :heading => "Choose a password",
+                              :blurb => "And you are in.",
+                              :button_label => "Enter"),
+           :layout => false
+  end
+
+  def take_invitation
+    @user = User.find(params[:id])
+    @user.lifecycle.provided_key = params[:key]
+    return redirect_to(new_session_path, :alert => "That link is no longer valid.") unless @user.lifecycle.can_accept_invitation?(nil)
+
+    @user.lifecycle.accept_invitation!(nil, user_params.slice("password", "password_confirmation"))
+
+    # **Ask the record, not the return value.** A transition answers with
+    # whatever its own `do ... end` block answered, and a step without one
+    # answers nil -- so `if transition!` reads as failure on a move that went
+    # perfectly. Whether it worked is a fact about the record.
+    if @user.reload.state.to_s == "active"
+      start_new_session_for(@user) if respond_to?(:start_new_session_for, true)
+      redirect_to root_path, :notice => "Welcome."
+    else
+      flash.now[:error] = @user.errors.full_messages.to_sentence
+      render :html => rapid_tag(:signup_form, nil,
+                                :action => accept_path(@user, :key => params[:key]),
+                                :fields => "password", :heading => "Choose a password"),
+             :layout => false, :status => :unprocessable_entity
+    end
+  end
+<% end -%>
+
+  private
+<% if invite_only? -%>
+
+  # `Current.user` and not `current_user`: this is a plain
+  # `ApplicationController`, and Hobo's `current_user` lives in the views, not
+  # here. Rails 8 puts the session on `Current`, and the filter above is what
+  # fills it in.
+  def only_administrators
+    return if Current.user.try(:administrator?)
+    redirect_to root_path, :alert => "Only an administrator can invite people."
+  end
+<% end -%>
+<% if activation_email? && !invite_only? -%>
+
+  # The lifecycle asks who is acting. Nobody is: that is the whole point of a
+  # signup, and `:available_to => :all` on the step says so.
+  def current_user_or_nobody
+    respond_to?(:current_user, true) ? current_user : nil
+  end
+<% end -%>
+
+  # The columns the user model actually has, plus the two that are never
+  # columns. Written from the model rather than listed by hand, so adding a
+  # field to the user does not mean remembering this file.
+  def user_params
+    params.require(:user).permit(*User.column_names, :password, :password_confirmation)
+  end
+
+end

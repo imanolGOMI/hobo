@@ -1,0 +1,135 @@
+# Las palabras del catálogo, en español.
+#
+# El inglés no está aquí: va escrito en el sitio donde se usa la cadena, como
+# `:default` (ver lib/hobo_rapid/translation.rb). Añadir un idioma es escribir
+# **un** fichero como este, y una aplicación que quiera otras palabras en
+# cualquiera de los dos escribe su propio `hobo.<idioma>.yml`, que es como se
+# pisan las traducciones de una gema en Rails de toda la vida.
+#
+# El género no se puede resolver desde aquí: «Nuevo %{name}» sale mal con
+# «película». Una aplicación arregla el suyo con `view_hints`, o pisando estas
+# claves.
+es:
+  # Los formatos de fecha, que **no** son decoración: `l(fecha)` sin ellos
+  # levanta «translation missing: es.date.formats.default», y con eso se cae
+  # cualquier listado que enseñe una fecha. Rails solo trae los del inglés; el
+  # resto vive en la gema `rails-i18n`, que una aplicación puede no tener.
+  #
+  # Si la tiene, gana ella: sus ficheros se cargan después de los de las gemas.
+  # Esto es el suelo, para que elegir español no deje la aplicación rota.
+  date:
+    formats:
+      default: "%d/%m/%Y"
+      short: "%d de %b"
+      long: "%d de %B de %Y"
+    day_names: [domingo, lunes, martes, miércoles, jueves, viernes, sábado]
+    abbr_day_names: [dom, lun, mar, mié, jue, vie, sáb]
+    # El primer hueco es el mes cero, que no existe: I18n indexa por número de
+    # mes. En linea no se puede escribir, porque `[~, enero]` no es YAML valido.
+    month_names:
+      -
+      - enero
+      - febrero
+      - marzo
+      - abril
+      - mayo
+      - junio
+      - julio
+      - agosto
+      - septiembre
+      - octubre
+      - noviembre
+      - diciembre
+    abbr_month_names:
+      -
+      - ene
+      - feb
+      - mar
+      - abr
+      - may
+      - jun
+      - jul
+      - ago
+      - sep
+      - oct
+      - nov
+      - dic
+    order:
+      - :day
+      - :month
+      - :year
+  time:
+    formats:
+      default: "%d/%m/%Y %H:%M"
+      short: "%d %b %H:%M"
+      long: "%d de %B de %Y %H:%M"
+    am: "am"
+    pm: "pm"
+  support:
+    array:
+      words_connector: ", "
+      two_words_connector: " y "
+      last_word_connector: " y "
+
+  hobo:
+    actions:
+      create: "Crear"
+      save: "Guardar"
+      edit: "Editar"
+      delete: "Borrar"
+      confirm_delete: "¿Seguro?"
+      dismiss: "Cerrar"
+      cancel: "Cancelar"
+    # Impersonal a propósito: «Se ha creado: Libro» vale para cualquier género,
+    # y el género de lo que venga en %{name} no se sabe desde aquí.
+    messages:
+      created: "Se ha creado: %{name}"
+      updated: "Se han guardado los cambios"
+      destroyed: "Se ha borrado: %{name}"
+    index:
+      count_one: "1 %{name}"
+      count: "%{count} %{name}"
+      new_link: "Nuevo %{name}"
+      actions_heading: "Acciones"
+      empty: "Nada por aquí todavía."
+    forms:
+      new_title: "Nuevo %{name}"
+      edit_title: "Editar %{name}"
+    filters:
+      search: "Buscar"
+      search_in: "Buscar en %{name}"
+      clear: "Limpiar"
+      all: "Todos"
+      filter: "Filtrar"
+    session:
+      log_in: "Entrar"
+      log_out: "Salir"
+      logged_in_as: "Has entrado como %{name}"
+      guest: "Invitado"
+      change_user: "Cambiar de usuario"
+      sign_up: "Darse de alta"
+    front:
+      title: "Inicio"
+      welcome: "Bienvenido"
+      blurb: "Ya puedes entrar y empezar."
+      no_users: "Todavía no hay nadie. Crea el primer usuario y serás el administrador."
+      password: "Contraseña"
+      password_confirmation: "Repite la contraseña"
+      register: "Crear administrador"
+      signup: "Crear una cuenta"
+      signup_blurb: "Elige un correo y una contraseña."
+      signup_button: "Darse de alta"
+    search:
+      label: "Buscar"
+      placeholder: "Buscar en el sitio"
+      button: "Buscar"
+      heading: "Busqueda: %{query}"
+      nothing: "No hay nada que coincida."
+    errors:
+      one: "1 error impidió guardar %{name}"
+      many: "%{count} errores impidieron guardar %{name}"
+    associations:
+      # «Añadir» y no «Nuevo»: el género del nombre no se sabe desde aquí, y
+      # salía «Nuevo etiqueta…» y «Nuevo categoría…» en el selector de cada
+      # formulario. Un verbo lo esquiva sin tener que resolverlo.
+      new_option: "Añadir %{name}…"

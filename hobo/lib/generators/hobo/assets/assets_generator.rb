@@ -1,33 +1,60 @@
+require "rails/generators"
+
 module Hobo
-  class AssetsGenerator < Rails::Generators::Base
-    source_root File.expand_path('../templates', __FILE__)
+  module Generators
 
-    def self.banner
-      "rails generate hobo:assets"
-    end
+    # `rails generate hobo:assets [--theme=clean]`
+    #
+    # Brings the theme's stylesheet **into your application**, so you can change
+    # it. From then on it is yours: the application's own assets come before the
+    # gem's, so the copy is what gets served and nothing of Hobo's overrides it.
+    #
+    # In Hobo 2 this copied `application.dryml`, `front_site.dryml`,
+    # `dryml-support.js` and a `Guest` model, because a Hobo application needed
+    # all of that to exist before it could run. None of those exist now -- the
+    # tags are Ruby, the JavaScript is in the import map and the guest is an
+    # object in the gem -- and what is left of the idea is the useful half:
+    # **the css is yours if you want it**.
+    class AssetsGenerator < Rails::Generators::Base
 
-    def copy_rapid_files
-      template  'application.dryml.erb',        'app/views/taglibs/application.dryml'
-      template  'front_site.dryml.erb',         'app/views/taglibs/front_site.dryml'
-      #copy_file 'dryml-support.js',             'public/javascripts/dryml-support.js'
-      copy_file 'dryml_taglibs_initializer.rb', 'config/initializers/dryml_taglibs.rb'
-      copy_file 'guest.rb',                     'app/models/guest.rb'
+      class_option :theme, :type => :string,
+                   :desc => "De que tema (por defecto: el que lleve la aplicacion)"
 
-      FileUtils.mv 'app/assets/stylesheets/application.css', 'app/assets/stylesheets/application.css.orig'
-      copy_file 'application.scss',                        'app/assets/stylesheets/application.scss'
-      copy_file 'gitkeep',                                'app/assets/stylesheets/application/.gitkeep'
-      copy_file 'front.scss',                              'app/assets/stylesheets/front.scss'
-      copy_file 'gitkeep',                                'app/assets/stylesheets/front/.gitkeep'
+      def copy_the_stylesheets
+        sheets.each do |sheet|
+          source = File.join(Hobo.root, "app", "assets", "stylesheets", "#{sheet}.css")
+          next say("  no encuentro #{sheet}.css en la gema", :red) unless File.exist?(source)
+          create_file "app/assets/stylesheets/#{sheet}.css", File.read(source)
+        end
+      end
 
-      FileUtils.mv 'app/assets/javascripts/application.js', 'app/assets/javascripts/application.js.orig'
-      copy_file 'application.js',                        'app/assets/javascripts/application.js'
-      copy_file 'gitkeep',                               'app/assets/javascripts/application/.gitkeep'
-      copy_file 'front.js',                              'app/assets/javascripts/front.js'
-      copy_file 'gitkeep',                               'app/assets/javascripts/front/.gitkeep'
+      def say_what_happened
+        say [
+          "",
+          "Las hojas del tema estan ahora en app/assets/stylesheets, y son tuyas:",
+          "lo que hay en la aplicacion se sirve antes que lo que trae la gema.",
+          "",
+          "Para volver atras, borra el fichero.",
+          "",
+        ].join("\n"), :green
+      end
 
-      application "#"
-      application "config.assets.precompile += %w(front.css front.js ajax-loader.gif)"
-      application "# Hobo: the front subsite loads front.css & front.js"
+      private
+
+      # Only the theme's own. `bootstrap.css` is Bootstrap itself -- 228 KB of
+      # somebody else's library -- and copying that into an application is not
+      # editing a theme, it is forking Bootstrap.
+      def sheets
+        theme = options[:theme].presence || current_theme
+        theme == "bootstrap" ? %w[hobo] : %w[clean]
+      end
+
+      def current_theme
+        config = File.join(destination_root, "config", "application.rb")
+        return "clean" unless File.exist?(config)
+        File.read(config)[/config\.hobo\.theme\s*=\s*[:"]?(\w+)/, 1] || "clean"
+      end
+
     end
 
   end

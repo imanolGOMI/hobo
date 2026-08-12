@@ -1,0 +1,46 @@
+class <%= controller_class_name %> < ApplicationController
+
+  # Rails 8's authentication generator puts a `require_authentication` filter on
+  # every controller. This page has to be reachable by somebody who cannot
+  # possibly be logged in yet.
+  allow_unauthenticated_access if respond_to?(:allow_unauthenticated_access)
+
+  def index
+    render :html => rapid_tag(:front_page, nil,
+                              :app_name => Rails.application.class.module_parent_name.titleize,
+                              :action => create_first_user_path),
+           :layout => false
+  end
+
+  # The first person to arrive owns the application. After that this does
+  # nothing: there is already somebody, and anybody else signs up normally.
+  def create_first_user
+    return redirect_to(root_path) unless User.count.zero?
+
+    @user = User.new(user_params)
+
+    if @user.save
+      # `, true`: Rails 8's Authentication concern keeps `start_new_session_for`
+      # **private**, so the plain `respond_to?` answered false and the guard
+      # skipped it -- the user was created and then not logged in, quietly.
+      start_new_session_for(@user) if respond_to?(:start_new_session_for, true)
+      # A través de I18n: la aplicación puede estar en cualquier idioma, y este
+      # es el primer mensaje que enseña. El inglés va como `:default`, que es
+      # como Hobo escribe sus cadenas (ver hobo_rapid/translation.rb).
+      redirect_to root_path,
+                  :notice => I18n.t("hobo.front.you_are_the_administrator",
+                                    :default => "You are now the site administrator")
+    else
+      flash.now[:error] = @user.errors.full_messages.to_sentence
+      render :html => rapid_tag(:front_page, nil, :action => create_first_user_path),
+             :layout => false, :status => :unprocessable_entity
+    end
+  end
+
+  private
+
+  def user_params
+    params.require(:user).permit(*User.column_names, :password, :password_confirmation)
+  end
+
+end

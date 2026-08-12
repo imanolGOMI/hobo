@@ -36,7 +36,7 @@ module Hobo
               allowed << refl.options[:foreign_type] if refl.options[:polymorphic]
             end
           end
-          attributes & allowed
+          attributes.slice(*allowed)
         end
 
 

@@ -1,17 +1,15 @@
-I18n.module_eval do
-  class << self
-
-    def translate_with_show_keys(key, options = {})
-      translation = translate_without_show_keys(key, options)
+# `config.hobo.show_translation_keys`: every translated string comes out with
+# its key in front, so a translator can see which key produced what.
+module Hobo
+  module ShowTranslationKeys
+    def translate(key = nil, throw: false, raise: false, locale: nil, **options)
+      translation = super
       return translation unless translation.is_a?(String)
-      keys = normalize_keys(locale, key, options[:scope]).join('.')
-      "[#{keys}]" + translation
+      keys = I18n.normalize_keys(locale || I18n.locale, key, options[:scope]).join(".")
+      "[#{keys}]#{translation}"
     end
-    alias_method_chain :translate, :show_keys
-
-    alias_method :t_without_show_keys, :t
-    alias_method :t, :translate_with_show_keys
-
+    alias_method :t, :translate
   end
 end
 
+I18n.singleton_class.prepend(Hobo::ShowTranslationKeys)
