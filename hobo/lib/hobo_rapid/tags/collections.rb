@@ -174,3 +174,50 @@ Rapid.define(:hidden_fields, :attrs => [:fields]) do
                    :value => record.send(field).to_s })
   end
 end
+
+# `<sortable-collection>`: la lista que se ordena arrastrando.
+#
+# De Hobo 2, donde vivia en `hobo_jquery_ui` y era jQuery UI Sortable. Se porta
+# porque **las aplicaciones lo escriben** -- amenti ordena asi los conceptos de
+# una factura -- y porque en 2026 no hace falta jQuery para esto: arrastrar y
+# soltar es HTML desde hace anos.
+#
+# Es `<collection>` con dos cosas encima: un asa por fila y la url a la que
+# contar el orden nuevo. Lo demas -- que el arrastre funcione -- es del
+# controlador de Stimulus, igual que en Hobo 2 era del plugin.
+#
+# La url y el nombre del parametro son los de Hobo 2 (`reorder_libros_url`,
+# `libro_ordering`), porque **el controlador de la aplicacion ya los espera**:
+# `acts_as_list` le pone la accion `reorder` y esa lee ese parametro.
+Rapid.define(:sortable_collection, :attrs => [:reorder_url]) do
+  model = this.respond_to?(:klass) ? this.klass : Array(this).first&.class
+  singular = model&.name&.underscore
+
+  url = attributes[:reorder_url] || (singular && path_for(model)&.+("/reorder"))
+  rest = all_attributes.except(:reorder_url, "reorder_url")
+
+  behaviour = if url && singular
+                HoboRapid::Behaviour.declare("sortable",
+                                             :url => url,
+                                             :parameter => "#{singular}_ordering")
+              else
+                {}
+              end
+
+  call_tag(:collection, rest.merge(behaviour)
+                            .merge("class" => ["sortable", rest["class"]].compact.join(" ")),
+           :as => :collection, :merge_params => true,
+           :item => lambda do
+             # El asa **solo si se puede reordenar**. Una lista que invita a
+             # arrastrar y luego contesta que no es peor que una lista quieta.
+             # El asa **solo si el modelo se ordena**: `acts_as_list` le pone
+             # `position_column`, y es lo que la accion `reorder` va a mover.
+             if this.respond_to?(:position_column)
+               tag("div", { "class" => "ordering-handle", "draggable" => "true",
+                            **HoboRapid::Behaviour.target("sortable", "handle") }, :handle) do
+                 raw "&uarr;<br>&darr;"
+               end
+             end
+             param(:default) { call_tag(:card, {}, :as => :card) }
+           end)
+end

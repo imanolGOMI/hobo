@@ -162,6 +162,7 @@ class CatalogueCensusTest < Minitest::Test
     :after_submit => [:nothing, { :go_to => "/" }],
     # --- los de collections/, portados de Hobo 2 el 2026-08-11 --------------------
     :collection => [:collection, {}],
+    :sortable_collection => [:collection, {}],
     :empty_collection_message => [:nothing, {}],
     :count => [:collection, { :label => "historias" }],
     :page_nav => [:collection, {}],
