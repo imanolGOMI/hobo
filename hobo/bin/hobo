@@ -57,6 +57,11 @@ when "new"
 when "update"
   # `hobo update` -- traer una aplicacion de Hobo 2 a esta. Sin `--write` mira y
   # cuenta, que es lo primero que hace falta saber.
+  #
+  # `update.rb` pide `hobo/bootstrap_migration` por su nombre, no por su ruta:
+  # ejecutado desde el arbol de trabajo no hay gema instalada que lo ponga en el
+  # camino, asi que lo pone este.
+  $LOAD_PATH.unshift(File.expand_path("../lib", __dir__))
   require_relative "../lib/hobo/update"
 
   source = ARGV.find { |argument| !argument.start_with?("-") } || Dir.pwd
