@@ -176,6 +176,7 @@ class CatalogueCensusTest < Minitest::Test
     :field_list => [:record, { :fields => "title, body" }],
     :form => [:record, {}],
     :formlet => [:record, {}],
+    :one_line_form => [:record, {}],
     :submit => [:nothing, { :label => "Guardar" }],
     :or_cancel => [:record, {}],
     # --- los de html/, portados de Hobo 2 el 2026-08-11 ---------------------------

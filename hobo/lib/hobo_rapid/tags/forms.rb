@@ -87,6 +87,33 @@ Rapid.define(:formlet) do
   end
 end
 
+# `<one-line-form fields="titulo, autor">`: crear sin cambiar de pagina.
+#
+# El formulario de alta puesto **encima de su propio listado**, en una linea: se
+# escribe y se anade, y lo que se acaba de crear aparece debajo. Es de las cosas
+# que mas se agradecen de una aplicacion de gestion, y por eso las plantillas lo
+# usan tanto.
+#
+# En Hobo 2 vivia en el tema, que era una gema con `<page>` dentro y podia
+# pintar. El tema de Hobo 3 **no pinta**: es una tabla de nombres de clase. Asi
+# que la forma es del catalogo -- una fila de campos y un boton -- y como se
+# viste lo dice el tema, que es el reparto de siempre.
+#
+# `fields` va al `<field-list>` y no al `<form>`: escrito en el `<form>` sale
+# como un atributo html llamado `fields`, que es lo que pasaba, y ademas no
+# pinta ningun campo.
+Rapid.define(:one_line_form, :attrs => [:fields]) do
+  rest = all_attributes.except(:fields, "fields")
+  classes = ["one-line-form", rest[:class] || rest["class"]].compact.join(" ")
+
+  call_tag(:form, rest.merge(:class => classes), :as => :form) do
+    fields = attributes[:fields]
+    call_tag(:field_list, fields ? { :fields => fields, :mode => "input" } : { :mode => "input" },
+             :as => :field_list)
+    call_tag(:submit, { :label => t(:"actions.create", "Create") }, :as => :submit)
+  end
+end
+
 # `<submit label="Guardar"/>`
 Rapid.define(:submit, :attrs => [:label, :image]) do
   image = attributes[:image]
