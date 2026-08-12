@@ -110,7 +110,31 @@ Rapid.define(:table, :attrs => [:fields, :field_tag, :empty]) do
               if field == "this"
                 tag("td", {}, :this_cell) { call_tag(painter, {}, :as => :this_view) }
               else
-                with_field(field) { tag("td", {}, :"#{field}_cell") { call_tag(painter, {}, :as => :"#{field}_view") } }
+                with_field(field) do
+                  tag("td", {}, :"#{field}_cell") do
+                    # Lo que la plantilla pone en la celda **es la celda**.
+                    #
+                    # Pasandolo como contenido del `<view>`, ese pinta ademas su
+                    # `<span class="view">` alrededor. Un `<span>` es en linea, y
+                    # las plantillas de Hobo 2 meten ahi enlaces que se pintan en
+                    # bloque y con altura -- amenti tiene
+                    # `td a.enlace-tabla{display:block;padding:8px;height:20px}` --:
+                    # con el span en medio la celda no crece con el enlace y el
+                    # texto se sale de la fila.
+                    #
+                    # Con atributos y sin contenido --`<codigo-view: class="x"/>`--
+                    # no hay nada que sustituir y se le pasan al `<view>`, que es
+                    # lo que quiere decir eso.
+                    supplied = all_parameters[:"#{field}_view"]
+                    supplied = Rapid::Parameter.wrap(supplied) if supplied
+
+                    if supplied&.content?
+                      param(:"#{field}_view")
+                    else
+                      call_tag(painter, {}, :as => :"#{field}_view")
+                    end
+                  end
+                end
               end
             end
             # Y si nadie dijo que poner ahi, las acciones del registro, que es
