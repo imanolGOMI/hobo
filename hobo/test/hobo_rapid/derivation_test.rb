@@ -165,7 +165,10 @@ class DerivationTest < Minitest::Test
 
     assert_includes html, %(<table class="collection-table">)
     assert_includes html, "<th>Body</th>"
-    assert_equal 2, html.scan("<tr>").length - 1, "una fila por registro, mas la de cabeceras"
+    # `<tr class="even">`: la lista de una pagina derivada **es el `<table>` del
+    # catalogo** desde que se dejo de escribir una tabla a mano aqui, y esa pinta
+    # las filas alternas para que el tema pueda rayarlas.
+    assert_equal 2, html.scan("<tr class=").length, "una fila por registro"
     assert_includes html, "Primera historia"
     assert_includes html, "Segunda"
   end
@@ -175,8 +178,10 @@ class DerivationTest < Minitest::Test
   def test_an_index_offers_the_actions
     html = render(:index_page, collection_of([story]))
 
-    assert_includes html, %(<th class="actions">Actions</th>)
-    assert_includes html, %(<td class="actions">)
+    # `controls` y no `actions`: es como llama el `<table>` a esa columna, y es
+    # tambien el nombre que usan las hojas que vienen de Hobo 2 (`td.controls`).
+    assert_includes html, %(<th class="controls">Actions</th>)
+    assert_includes html, %(<td class="controls">)
   end
 
   def test_an_empty_index_says_so

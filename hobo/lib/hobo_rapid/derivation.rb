@@ -425,43 +425,46 @@ module HoboRapid
                 if records.empty?
                   tag("p", { :class => "empty" }, :empty) { text t(:"index.empty", "Nothing here yet.") }
                 else
-                  tag("table", { :class => "collection-table" }, :collection) do
-                    tag("thead", {}, :headings) do
-                      tag("tr") do
-                        columns.each do |field|
-                          tag("th", {}, :"#{field}_heading") { text HoboRapid::Derivation.label_for(model, field) }
-                        end
-                        tag("th", { :class => "actions" }, :actions_heading) { text t(:"index.actions_heading", "Actions") } if with_actions
-                      end
-                    end
+                  # La lista **es una llamada a `<table>`**, no una tabla escrita
+                  # aqui otra vez.
+                  #
+                  # Escrita aqui, `collection` era un elemento, y un param que es
+                  # un elemento no admite params dentro. Una plantilla que dice
+                  # lo mas natural del mundo --
+                  #
+                  #     <collection: fields="nombre, codigo, logo">
+                  #       <logo-view:><img src="&this"/></logo-view:>
+                  #
+                  # -- se llevaba un `ArgumentError` en la cara: «no es una
+                  # llamada a otro tag, asi que no lleva params anidados». Era
+                  # verdad y era culpa nuestra. En Hobo 2 la lista de una pagina
+                  # derivada tambien era un tag, y por eso aquello se podia
+                  # retocar columna a columna.
+                  #
+                  # Ademas la tabla ya sabia hacer todo esto -- cabeceras con su
+                  # nombre traducido, una celda por campo, cada una su param --,
+                  # asi que esto eran cuarenta lineas diciendo por segunda vez lo
+                  # que dice `tables.rb`, con el riesgo de que las dos versiones
+                  # se fueran separando.
+                  first = columns.first
+                  linked = if first && !all_parameters.key?(:"#{first}_view")
+                             # La primera columna lleva al registro, que es como
+                             # se entra en una ficha desde un listado. Si la
+                             # plantilla dice otra cosa para esa columna, manda
+                             # ella.
+                             { :"#{first}_view" => lambda do
+                               path = path_for(this)
+                               next call_tag(:name_view, {}, :as => :name_view) unless path
+                               tag("a", { :href => path }, :name_link) { call_tag(:name_view, {}, :as => :name_view) }
+                             end }
+                           else
+                             {}
+                           end
 
-                    tag("tbody", {}, :rows) do
-                      records.each do |record|
-                        with_this(record) do
-                          tag("tr", {}, :row) do
-                            columns.each_with_index do |field, index|
-                              tag("td", {}, :"#{field}_cell") do
-                                if index.zero?
-                                  path = path_for(this)
-                                  if path
-                                    tag("a", { :href => path }, :name_link) { call_tag(:name_view, {}, :as => :name_view) }
-                                  else
-                                    call_tag(:name_view, {}, :as => :name_view)
-                                  end
-                                else
-                                  with_field(field) { call_tag(:view, {}, :as => :"#{field}_view") }
-                                end
-                              end
-                            end
+                  controls = with_actions ? { :controls => -> { call_tag(:record_actions, {}, :as => :record_actions) } } : {}
 
-                            if with_actions
-                              tag("td", { :class => "actions" }, :actions) { call_tag(:record_actions, {}, :as => :record_actions) }
-                            end
-                          end
-                        end
-                      end
-                    end
-                  end
+                  call_tag(:table, { :fields => columns.join(", ") },
+                           :as => :collection, :merge_params => true, **linked, **controls)
                 end
               end
             end

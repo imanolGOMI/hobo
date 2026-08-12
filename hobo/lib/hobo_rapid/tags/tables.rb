@@ -27,6 +27,34 @@ require "rapid"
 require "hobo_rapid/tags/structure"
 require "hobo_rapid/sorting"
 
+module HoboRapid
+  module Tags
+    # Los dos nombres que en una lista de campos **no son campos**: `this` es el
+    # registro entero y `actions` es la columna de acciones. Son de Hobo 2 y las
+    # plantillas los escriben tal cual, mezclados con los demas:
+    #
+    #     <collection: fields="this, email_address, cuenta_demo, actions"/>
+    module TableSupport
+
+      def self.heading_for(model, field)
+        return model_heading(model) if field.to_s == "this"
+        return field.to_s.humanize unless model
+        HoboRapid::Derivation.label_for(model, field)
+      end
+
+      # La cabecera de `this` es la del campo que da nombre al registro --
+      # «Nombre», «Titulo» -- y si el modelo no tiene ninguno, el del modelo.
+      def self.model_heading(model)
+        return "" unless model
+        name = HoboRapid::Derivation.respond_to?(:name_attribute_of) ? HoboRapid::Derivation.name_attribute_of(model) : nil
+        return HoboRapid::Derivation.label_for(model, name) if name
+        model.respond_to?(:model_name) ? model.model_name.human : model.to_s
+      end
+
+    end
+  end
+end
+
 # `<table fields="title, year">`: a row per record, a column per field.
 #
 # With no `fields` it takes the ones the model would show, which is the same
@@ -42,6 +70,15 @@ Rapid.define(:table, :attrs => [:fields, :field_tag, :empty]) do
   columns = model ? HoboRapid::Derivation.index_columns(model) : [] if columns.empty?
   painter = (attributes[:field_tag] || "view").to_sym
 
+  # `fields="nombre, nif, actions"`: **`actions` no es un campo**.
+  #
+  # Es la convencion de Hobo 2 para pedir la columna de acciones -- editar,
+  # borrar -- sin tener que decirlo por otro lado, y las plantillas la escriben
+  # tal cual. Sin entenderla, la tabla le pedia `actions` al registro y la
+  # pagina moria con «undefined method 'actions' for an instance of Cliente»,
+  # que no se parece en nada a lo que pedia la plantilla.
+  wants_actions = !columns.delete("actions").nil? || all_parameters.key?(:controls)
+
   rest = all_attributes.except(:fields, "fields", :field_tag, "field_tag", :empty, "empty")
 
   tag("table", rest.merge("class" => ["collection-table", rest["class"]].compact.join(" "))) do
@@ -52,10 +89,14 @@ Rapid.define(:table, :attrs => [:fields, :field_tag, :empty]) do
           # lets a page or a taglib change one column and leave the rest --
           # `sortable_headings` is exactly that, done to all of them at once.
           tag("th", {}, :"#{field}_heading") do
-            text(model ? HoboRapid::Derivation.label_for(model, field) : field.to_s.humanize)
+            text(HoboRapid::Tags::TableSupport.heading_for(model, field))
           end
         end
-        tag("th", { "class" => "controls" }, :controls_heading) if all_parameters.key?(:controls)
+        if wants_actions
+          tag("th", { "class" => "controls" }, :controls_heading) do
+            text t(:"index.actions_heading", "Actions")
+          end
+        end
       end
     end
 
@@ -64,9 +105,21 @@ Rapid.define(:table, :attrs => [:fields, :field_tag, :empty]) do
         with_this(record) do
           tag("tr", { "class" => index.even? ? "even" : "odd" }, :tr) do
             columns.each do |field|
-              with_field(field) { tag("td", {}, :"#{field}_cell") { call_tag(painter, {}, :as => :"#{field}_view") } }
+              # `this` es **el registro**, no un campo suyo: pintarlo con
+              # `with_field` acababa preguntandole al User por su metodo `this`.
+              if field == "this"
+                tag("td", {}, :this_cell) { call_tag(painter, {}, :as => :this_view) }
+              else
+                with_field(field) { tag("td", {}, :"#{field}_cell") { call_tag(painter, {}, :as => :"#{field}_view") } }
+              end
             end
-            tag("td", { "class" => "controls" }, :controls) if all_parameters.key?(:controls)
+            # Y si nadie dijo que poner ahi, las acciones del registro, que es
+            # lo que la columna significa.
+            if wants_actions
+              tag("td", { "class" => "controls" }, :controls) do
+                call_tag(:record_actions, {}, :as => :record_actions) unless all_parameters.key?(:controls)
+              end
+            end
           end
         end
       end
@@ -80,9 +133,26 @@ end
 # and the filters itself; here both are pieces that already exist and are tested
 # on their own, so what is left is saying where they go.
 Rapid.define(:table_plus, :attrs => [:fields, :sort_columns]) do
-  rest = all_attributes.except(:sort_columns, "sort_columns")
+  # Lo que el que llama escribe **es del `<div>`**, no de la `<table>`.
+  #
+  # Hobo 2 repartia: el div se quedaba `attributes - attrs_for(:table)` y la
+  # tabla solo lo suyo. Aqui iba todo a la tabla, y una hoja escrita contra
+  # aquello deja de casar. En amenti es literal:
+  #
+  #     <table-plus class="table-hover tabla-enlazada">
+  #     div.tabla-enlazada td a.enlace-tabla { color: inherit }
+  #
+  # Con la clase en la `<table>` ese selector --que dice **div**-- no casa con
+  # nada, y las siete columnas del listado se veian azules y subrayadas en vez
+  # de como texto. Es un `div.` de mas en un css de 2013, y decide toda la
+  # pinta de la pagina.
+  #
+  # `fields` si es de la tabla: es lo que pinta.
+  declared = %i[sort_columns fields].flat_map { |name| [name, name.to_s] }
+  mine = all_attributes.except(*declared)
+  for_table = all_attributes.slice(:fields, "fields")
 
-  tag("div", { "class" => "table-plus" }, :table_plus) do
+  tag("div", merge_attributes({ "class" => "table-plus" }, mine), :table_plus) do
     tag("div", { "class" => "header" }, :header) do
       tag("div", { "class" => "search" }) do
         call_tag(:search_filter, {}, :as => :search_filter)
@@ -105,7 +175,7 @@ Rapid.define(:table_plus, :attrs => [:fields, :sort_columns]) do
     # con su pintor por defecto: el listado de expedientes de amenti perdia los
     # enlaces de todas sus columnas. Es la forma corriente de retocar un listado,
     # asi que sin esto `<table-plus>` no se puede usar para lo que se usa.
-    call_tag(:table, rest.merge(:empty => true), :as => :table, :merge_params => true, **headings)
+    call_tag(:table, for_table.merge(:empty => true), :as => :table, :merge_params => true, **headings)
 
     # Y las dos cosas que hacen que esto sea el «plus» y no una tabla.
     #
