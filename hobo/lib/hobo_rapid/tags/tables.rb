@@ -96,7 +96,16 @@ Rapid.define(:table_plus, :attrs => [:fields, :sort_columns]) do
     model = HoboRapid::Sorting.model_of(this)
     headings = model ? HoboRapid::Sorting.headings_for(model, Array(attributes[:sort_columns])) : {}
 
-    call_tag(:table, rest.merge(:empty => true), :as => :table, **headings)
+    # `merge_params`, que es lo que ponia Hobo 2 (`<table merge-params>`) y
+    # faltaba aqui.
+    #
+    # Los params de columna --`<codigo-view:>`, `<estado-view:>`-- se los pasa la
+    # plantilla a **este** tag, y quien los reclama es el `<table>` de dentro. Sin
+    # reenviarlos se quedaban a medio camino, sin decir nada, y cada celda salia
+    # con su pintor por defecto: el listado de expedientes de amenti perdia los
+    # enlaces de todas sus columnas. Es la forma corriente de retocar un listado,
+    # asi que sin esto `<table-plus>` no se puede usar para lo que se usa.
+    call_tag(:table, rest.merge(:empty => true), :as => :table, :merge_params => true, **headings)
 
     # Y las dos cosas que hacen que esto sea el «plus» y no una tabla.
     #
