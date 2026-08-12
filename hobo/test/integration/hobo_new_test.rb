@@ -93,7 +93,8 @@ class HoboNewTest < Minitest::Test
         assert_includes jefe.get("/"), "user[password_confirmation]",
                         "una aplicacion vacia tiene que ofrecer crear el primer usuario"
 
-        jefe.post("/first-user", "user[email_address]" => "jefe@example.com",
+        jefe.post("/first-user", "user[name]" => "Jefe",
+                                 "user[email_address]" => "jefe@example.com",
                                  "user[password]" => "test1234",
                                  "user[password_confirmation]" => "test1234")
 
@@ -111,7 +112,8 @@ class HoboNewTest < Minitest::Test
         assert_includes otra.get("/signup"), "user[password_confirmation]",
                         "tiene que haber una pagina de alta"
 
-        otra.post("/signup", "user[email_address]" => "otra@example.com",
+        otra.post("/signup", "user[name]" => "Otra",
+                             "user[email_address]" => "otra@example.com",
                              "user[password]" => "test1234",
                              "user[password_confirmation]" => "test1234")
 
@@ -194,13 +196,15 @@ class HoboNewTest < Minitest::Test
         # exception.
         jefa = Browser.new(http)
         jefa.get("/")
-        jefa.post("/first-user", "user[email_address]" => "jefa@example.com",
+        jefa.post("/first-user", "user[name]" => "Jefa",
+                                 "user[email_address]" => "jefa@example.com",
                                  "user[password]" => "test1234",
                                  "user[password_confirmation]" => "test1234")
 
         nueva = Browser.new(http)
         nueva.get("/signup")
-        nueva.post("/signup", "user[email_address]" => "nueva@example.com",
+        nueva.post("/signup", "user[name]" => "Nueva",
+                              "user[email_address]" => "nueva@example.com",
                               "user[password]" => "test1234",
                               "user[password_confirmation]" => "test1234")
 
@@ -264,7 +268,8 @@ class HoboNewTest < Minitest::Test
       with_server(app, 3096) do |http|
         jefa = Browser.new(http)
         jefa.get("/")
-        jefa.post("/first-user", "user[email_address]" => "jefa@example.com",
+        jefa.post("/first-user", "user[name]" => "Jefa",
+                                 "user[email_address]" => "jefa@example.com",
                                  "user[password]" => "test1234",
                                  "user[password_confirmation]" => "test1234")
 
@@ -320,7 +325,8 @@ class HoboNewTest < Minitest::Test
       with_server(app, 3095) do |http|
         jefa = Browser.new(http)
         jefa.get("/")
-        jefa.post("/first-user", "user[email_address]" => "jefa@example.com",
+        jefa.post("/first-user", "user[name]" => "Jefa",
+                                 "user[email_address]" => "jefa@example.com",
                                  "user[password]" => "test1234",
                                  "user[password_confirmation]" => "test1234")
 
@@ -330,7 +336,8 @@ class HoboNewTest < Minitest::Test
         # Somebody else does not, and still has the rest of the application.
         otra = Browser.new(http)
         otra.get("/signup")
-        otra.post("/signup", "user[email_address]" => "otra@example.com",
+        otra.post("/signup", "user[name]" => "Otra",
+                             "user[email_address]" => "otra@example.com",
                              "user[password]" => "test1234",
                              "user[password_confirmation]" => "test1234")
 
@@ -373,7 +380,8 @@ class HoboNewTest < Minitest::Test
         # Asked last on purpose: the token this browser sends is the one of the
         # page it is standing on.
         assert_includes stranger.get("/"), "user[password_confirmation]", "la portada tiene que dejar crear el primer usuario"
-        stranger.post("/first-user", "user[email_address]" => "jefa@example.com",
+        stranger.post("/first-user", "user[name]" => "Jefa",
+                                     "user[email_address]" => "jefa@example.com",
                                      "user[password]" => "test1234",
                                      "user[password_confirmation]" => "test1234")
 

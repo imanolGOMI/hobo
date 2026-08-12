@@ -36,7 +36,33 @@ module Hobo
       # generated one.
       def teach_the_model
         return complain_about_the_missing_model unless user_exists?
-        return say("#{user_file} ya es un modelo de Hobo.", :yellow) if already_taught?
+
+        # Ya es de Hobo, **pero puede faltarle el ciclo de vida**.
+        #
+        # `hobo new` deja el modelo con `include Hobo::Model` puesto, asi que
+        # este generador se daba por hecho y se iba. Consecuencia: en una
+        # aplicacion recien creada, `hobo:signup --activation-email` escribia las
+        # rutas, el controlador y el mailer, y **el ciclo de vida no llegaba
+        # nunca al modelo**. La activacion por correo no se podia anadir a una
+        # aplicacion de Hobo: solo a un modelo que no fuera de Hobo todavia.
+        #
+        # No daba error -- decia «ya es un modelo de Hobo» en amarillo y seguia
+        # --, y lo que fallaba despues era la migracion, que no encontraba las
+        # columnas `state` y `key_timestamp` de un ciclo de vida que no existe.
+        if already_taught?
+          return say("#{user_file} ya es un modelo de Hobo.", :yellow) if lifecycle_lines.empty? || lifecycle_written?
+
+          say "#{user_file} ya es un modelo de Hobo: se le anade el ciclo de vida.", :green
+          # **Detras del `include`**, y no con `inject_into_class`, que escribe
+          # al principio de la clase: el ciclo de vida se declara con un metodo
+          # que trae `Hobo::Model`, asi que puesto encima se ejecuta antes de
+          # que exista y el modelo no carga -- «undefined method 'lifecycle'».
+          #
+          # Y una cadena, no un array: `indent` trabaja con texto, y con un
+          # array devolvia algo que se escribia sin poner nada.
+          return inject_into_file(user_file, indent((["", *lifecycle_lines].join("\n") + "\n"), 2),
+                                  :after => /include Hobo::Model\n/)
+        end
 
         # `indent`: `inject_into_class` puts the text in as it comes, and a
         # model with everything flush against the margin reads like a mistake.
@@ -57,6 +83,12 @@ module Hobo
 
       def already_taught?
         File.read(File.join(destination_root, user_file)).include?("include Hobo::Model")
+      end
+
+      # Si el ciclo de vida ya esta escrito, para no ponerlo dos veces al
+      # repetir el generador.
+      def lifecycle_written?
+        File.read(File.join(destination_root, user_file)).include?("lifecycle do")
       end
 
       def model_lines
