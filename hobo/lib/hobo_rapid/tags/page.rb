@@ -166,11 +166,24 @@ Rapid.define(:page, :attrs => [:title, :full_title, :nav_location, :aside_locati
         tag("div", { :class => "columns" }, :main_row) do
           aside.call if has_aside && aside_location == "left"
 
+          # Cada hueco con el nombre de su papel puesto.
+          #
+          # Estos cuatro se pintaban sin clase ninguna, y el nombre del papel se
+          # quedaba dentro: sólo lo sabía quien leyera el código del tema. Desde
+          # fuera es lo contrario de lo que hace falta -- una aplicación
+          # **escribe css contra estos sitios**, que son los cuatro huecos donde
+          # va todo, y `<header>` a secas no se puede seleccionar sin alcanzar
+          # también las cabeceras de dentro.
+          #
+          # Son los mismos nombres que ponía Hobo 2, y por eso una hoja traída
+          # de allí --`.content-header h2 {margin:0}` de amenti-- vuelve a
+          # aplicar sin tocarla. Que coincidan no es nostalgia: el papel es el
+          # mismo y el nombre ya estaba elegido.
           tag("div", { :class => "content content-#{content_size}" }, :main_column) do
-            tag("section", {}, :content) do
-              tag("section", {}, :main_content) do
-                tag("header", {}, :content_header)
-                tag("section", {}, :content_body)
+            tag("section", { :class => "content-inner" }, :content) do
+              tag("section", { :class => "main-content" }, :main_content) do
+                tag("header", { :class => "content-header" }, :content_header)
+                tag("section", { :class => "content-body" }, :content_body)
               end
             end
           end

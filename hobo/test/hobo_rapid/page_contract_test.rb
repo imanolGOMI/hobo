@@ -118,7 +118,10 @@ class PageContractTest < Minitest::Test
     html = Rapid.render(:page, { :title => "x" },
                         :content_body => Rapid.markup { tag("div", { :class => "wrap" }) { old } })
 
-    assert_includes html, %(<section><div class="wrap"></div></section>)
+    # Con su clase de papel: el hueco se llama `content-body` en el html, para
+    # que una hoja pueda apuntarle. Lo que esta prueba mira es que el `<div>`
+    # entra **dentro** del hueco y no en lugar de el.
+    assert_includes html, %(<section class="content-body"><div class="wrap"></div></section>)
   end
 
 end
