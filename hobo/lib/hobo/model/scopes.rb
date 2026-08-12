@@ -1,4 +1,5 @@
 require 'hobo/model/scopes/apply_scopes'
+require 'hobo/model/scopes/automatic_scopes'
 
 module Hobo
   module Model
@@ -21,6 +22,9 @@ module Hobo
       module ClassMethods
 
         include ApplyScopes
+        # `apply_scopes` **manda** nombres de scope; esto es lo que los contesta.
+        # Estaban el uno sin el otro.
+        include AutomaticScopes
 
       end
 
