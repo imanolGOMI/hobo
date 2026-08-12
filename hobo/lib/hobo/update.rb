@@ -100,6 +100,33 @@ module Hobo
       "listen" => "ya viene",
     }.freeze
 
+    # Tags que la aplicacion escribe y traia una gema que ya no existe.
+    #
+    # De la misma especie que `MOVED`, un piso mas arriba: no es una constante en
+    # el codigo sino un nombre en una plantilla, y falla igual de tarde -- al
+    # pintar la pagina, con «no hay ningun tag llamado». Se nombra y no se
+    # inventa: **no son tags de Hobo**, son de un plugin de otro, y escribir aqui
+    # una version parecida seria adivinar que hacia la suya.
+    #
+    # `hobo-metasearch` envolvia el `<table-plus>` de Hobo con los filtros de
+    # metasearch, que tampoco existe: su relevo es ransack. La tabla, el orden
+    # por columna, el buscador y la paginacion **son de Hobo y estan**; lo que se
+    # pierde es la caja de busqueda avanzada de aquel plugin.
+    TAGS_FROM_DEAD_GEMS = {
+      "table-plus-with-filters" => "hobo-metasearch",
+      "mini-search-box" => "hobo-metasearch",
+      "advanced-search-box" => "hobo-metasearch",
+      "super-filter" => "hobo-metasearch",
+      "sorting-row" => "hobo-metasearch",
+      "result-counter" => "hobo-metasearch",
+    }.freeze
+
+    DEAD_GEM_ADVICE = {
+      "hobo-metasearch" => "su repositorio se borro, y metasearch --sobre la que estaba escrita-- " \
+                           "la releva ransack. `<table-plus>` es de Hobo y hace la tabla, el orden " \
+                           "por columna, el buscador y la paginacion.",
+    }.freeze
+
     # Gems that are still alive but that **moved a piece out of themselves**.
     #
     # These are worse than a retired gem, because nothing complains: the gem
@@ -175,6 +202,7 @@ module Hobo
       write_stylesheets
       write_stylesheet_selectors
       write_asset_urls
+      write_javascript_shadowing
       write_attachments
       write_gemfile
       say ""
@@ -271,6 +299,17 @@ module Hobo
           end
       end
 
+      note :dead_tags, tags_from_dead_gems.length, "tags de una gema que ya no existe" do
+        ["Los escriben tus plantillas y no los define nadie. Esto no sale en el",
+         "Gemfile ni al arrancar: sale al pintar la pagina, con «no hay ningun tag",
+         "llamado». **No son tags de Hobo** -- eran de un plugin --, asi que aqui se",
+         "nombran y no se inventan: escribir una version parecida seria adivinar."] +
+          tags_from_dead_gems.group_by { |tag, _| TAGS_FROM_DEAD_GEMS[tag] }.flat_map do |gem, entries|
+            ["  #{gem}: #{DEAD_GEM_ADVICE[gem]}"] +
+              entries.map { |tag, files| "    <#{tag}> en #{files.map { |file| relative(file) }.join(", ")}" }
+          end
+      end
+
       note :examples, orphan_examples.length, "ficheros de ejemplo sin su pareja" do
         ["La aplicacion trae un `.example` y no el fichero de verdad, casi siempre",
          "porque el de verdad esta en .gitignore: lleva claves.",
@@ -349,6 +388,26 @@ module Hobo
     # Longest first, because one of them is inside another:
     # `…Integrations::ActionViewHelper` also matches `…Integrations`, and the
     # line to write is not the same one.
+    # Los tags de `TAGS_FROM_DEAD_GEMS` que las plantillas escriben de verdad.
+    # Solo la llamada -- `<mini-search-box`--, no la definicion, porque una
+    # aplicacion que se lo copio a mano ya lo tiene y no le falta nada.
+    def tags_from_dead_gems
+      @tags_from_dead_gems ||= begin
+        found = Hash.new { |hash, key| hash[key] = [] }
+
+        Dir[File.join(@source, "app", "views", "**", "*.{dryml,erb}")].each do |file|
+          text = File.read(file)
+          next if text.include?("<def tag=")  && TAGS_FROM_DEAD_GEMS.keys.any? { |tag| text.include?(%(<def tag="#{tag}")) }
+
+          TAGS_FROM_DEAD_GEMS.each_key do |tag|
+            found[tag] << file if text.match?(/<#{Regexp.escape(tag)}[\s>\/]/)
+          end
+        end
+
+        found
+      end
+    end
+
     def moved_constants
       @moved_constants ||= begin
         found = Hash.new { |hash, key| hash[key] = [] }
@@ -624,6 +683,38 @@ module Hobo
 
       say "  #{missing.uniq.length} imagenes que una hoja pide y no estan; se dejan como estaban:"
       missing.uniq.first(5).each { |path| say "    /assets/#{path}" }
+    end
+
+    # El `application.js` de la aplicacion vieja tapaba el de Rails 8.
+    #
+    # Y con el, **todo el JavaScript**. Rails 8 arranca con `import "application"`,
+    # y ese nombre lo resuelve el importmap por ruta logica: `app/javascript` y
+    # `app/assets/javascripts` son las dos raices, las dos tienen un
+    # `application.js` y gana el de la aplicacion -- que es un manifiesto de
+    # Sprockets, o sea comentarios. Lo que no se carga entonces es Turbo,
+    # Stimulus y el JavaScript del tema.
+    #
+    # No da error en ninguna parte: la pagina se ve entera y **nada se mueve**.
+    # En amenti eran el selector de «cambiar de usuario», que no cambiaba de
+    # usuario, y la × de los avisos, que no aparecia -- la destapa un controlador
+    # de Stimulus, a proposito, para no pintar un boton muerto sin JavaScript.
+    # Dos sintomas sin relacion aparente y una sola causa, tres capas mas abajo.
+    #
+    # El fichero **no se toca ni se tira**: se aparta a `legacy/`, donde sigue
+    # estando entero y ya no es `application`. Convertirlo es otra cosa y es
+    # suya: es jQuery de 2013.
+    def write_javascript_shadowing
+      moved = Dir[File.join(target, "app", "assets", "javascripts", "*.js")].select do |file|
+        File.exist?(File.join(target, "app", "javascript", File.basename(file)))
+      end
+      return if moved.empty?
+
+      legacy = File.join(target, "app", "assets", "javascripts", "legacy")
+      FileUtils.mkdir_p(legacy)
+      moved.each { |file| FileUtils.mv(file, File.join(legacy, File.basename(file))) }
+
+      say "  #{moved.length} javascript a legacy/ (tapaban el de Rails 8): " \
+          "#{moved.map { |file| File.basename(file) }.join(", ")}"
     end
 
     # Los selectores de la hoja de la aplicacion que nombran clases del tema
